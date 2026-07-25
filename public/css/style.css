@@ -134,6 +134,13 @@
 [data-theme="matrix"] .brand-text { text-shadow: 0 0 8px rgba(0, 255, 65, 0.4); }
 [data-theme="matrix"] .channel-badge { background: #00ff41; color: #000; }
 [data-theme="matrix"] .message-avatar, [data-theme="matrix"] .message-avatar-img { border: 1px solid rgba(0, 255, 65, 0.3); }
+/* Matrix lacked a ::selection override, so it fell through to the global
+   rule (white text on the accent). Matrix's accent #00ff41 is light enough
+   that white-on-green is near-invisible — a fully-selected field (e.g. the
+   edit-message box, which mobile browsers auto-select on focus) reads as a
+   blank solid-green block. Match Fallout's terminal convention: keep the
+   neon highlight but use dark, high-contrast text so the text stays legible. */
+[data-theme="matrix"] ::selection { background: #00ff41; color: #001a06; }
 /* Terminal-style button override: all accent-background elements become
    dark-bg + green-text + green-border for consistent legibility */
 [data-theme="matrix"] .btn-primary,
