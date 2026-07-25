@@ -3795,9 +3795,14 @@ _confirmAdminResetPassword(userId, username) {
     this.socket.emit('admin-reset-user-password', { userId }, (resp) => {
       close();
       if (!resp || resp.error) {
-        const msg = resp?.code === 'mfa_required'
-          ? (t('modals.admin_reset_pw.errors.mfa_required') || resp.error)
-          : (resp?.error || t('modals.admin_reset_pw.errors.generic') || 'Failed to reset password');
+        // The 2FA gate (#5300) is intended behavior, not a failure. Showing it
+        // as a red error toast made people think the feature was broken (#5451),
+        // so explain it calmly in its own info modal instead.
+        if (resp?.code === 'mfa_required') {
+          this._showAdminResetMfaRequired(username);
+          return;
+        }
+        const msg = resp?.error || t('modals.admin_reset_pw.errors.generic') || 'Failed to reset password';
         if (this._showToast) this._showToast(msg, 'error', 8000);
         else alert(msg);
         return;
@@ -3805,6 +3810,42 @@ _confirmAdminResetPassword(userId, username) {
       this._showAdminResetPwReveal(resp.username, resp.tempPassword);
     });
   });
+},
+
+// Shown when an admin tries to reset the password of a user who has not yet
+// enabled 2FA. This is a deliberate security requirement (#5300), not a bug,
+// so it gets a plain informational modal that says exactly why and what to do
+// next, rather than a red error toast that reads like something broke (#5451).
+_showAdminResetMfaRequired(username) {
+  const safeName = this._escapeHtml(username);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay admin-reset-mfa-overlay';
+  overlay.style.display = 'flex';
+  overlay.style.zIndex = '100003';
+  overlay.innerHTML = `
+    <div class="modal admin-reset-mfa-modal">
+      <div class="modal-header">
+        <h4>🔐 ${t('modals.admin_reset_pw.mfa_required_title') || 'Two-factor authentication required'}</h4>
+        <button class="modal-close-btn admin-reset-mfa-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>${(t('modals.admin_reset_pw.mfa_blocked_prompt') || "This isn't a bug. Before you can reset <b>{username}</b>'s password, that user needs to turn on two-factor authentication (2FA) on their own account first, under Settings → Account.").replace('{username}', safeName)}</p>
+        <div style="background:rgba(52,152,219,0.12);border:1px solid rgba(52,152,219,0.4);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:0.85rem;">
+          <strong>💡 ${t('modals.admin_reset_pw.mfa_blocked_why_title') || 'Why this is required'}</strong>
+          <p style="margin:6px 0 0 0;">${t('modals.admin_reset_pw.mfa_blocked_why_body') || 'An admin reset hands out a temporary password. If the user has no 2FA, that temp password alone would be enough for anyone who sees it (including a rogue admin) to take over the account. Requiring 2FA means the temp password is useless without their authenticator device.'}</p>
+        </div>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-top:8px;">${(t('modals.admin_reset_pw.mfa_blocked_action') || 'Ask {username} to enable 2FA, then run the reset again.').replace('{username}', safeName)}</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-sm btn-accent admin-reset-mfa-ok" type="button">${t('modals.common.got_it') || 'Got it'}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.admin-reset-mfa-close').addEventListener('click', close);
+  overlay.querySelector('.admin-reset-mfa-ok').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 },
 
 _showAdminResetPwReveal(username, tempPassword) {
