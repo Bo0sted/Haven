@@ -1087,7 +1087,33 @@
       "loading": "Loading...",
       "confirm": "Confirm",
       "dismiss": "Dismiss",
-      "ok": "OK"
+      "ok": "OK",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copy_failed": "Copy failed",
+      "got_it": "Got it"
+    },
+    "admin_reset_pw": {
+      "title": "Reset Password",
+      "confirm_prompt": "Generate a one-time temporary password for <b>{username}</b>?",
+      "dm_warning_title": "Encrypted DM history will be lost",
+      "dm_warning_body": "The user's E2E wrap key is derived from their password. Once they finish the forced change-password flow with a new password, their encrypted DM history becomes permanently unreadable on their side. The user can avoid this by signing in with their <em>original</em> password (which we keep on file as an escape hatch) instead of the temp one, which silently cancels this reset.",
+      "mfa_required_title": "Two-factor authentication required",
+      "mfa_required_body": "The target user must have 2FA enabled before an admin can reset their password. Otherwise the temp password alone would be enough to take over the account. If they have not enabled 2FA, this will fail with a clear error.",
+      "mfa_blocked_prompt": "This isn't a bug. Before you can reset <b>{username}</b>'s password, that user needs to turn on two-factor authentication (2FA) on their own account first, under Settings → Account.",
+      "mfa_blocked_why_title": "Why this is required",
+      "mfa_blocked_why_body": "An admin reset hands out a temporary password. If the user has no 2FA, that temp password alone would be enough for anyone who sees it (including a rogue admin) to take over the account. Requiring 2FA means the temp password is useless without their authenticator device.",
+      "mfa_blocked_action": "Ask {username} to enable 2FA, then run the reset again.",
+      "transmit_hint": "You will be shown the temp password once. Deliver it to the user out-of-band (in person, on a phone call, etc.). It is never shown again.",
+      "confirm_btn": "Generate Temp Password",
+      "working": "Working...",
+      "reveal_title": "Temp Password Generated",
+      "reveal_prompt": "One-time temp password for <b>{username}</b>:",
+      "reveal_warning_title": "Save this now",
+      "reveal_warning_body": "This password is never shown again. Deliver it to the user out-of-band. The user will be forced to change it on next login (or sign in with their original password to cancel the reset and keep their DM history).",
+      "errors": {
+        "generic": "Failed to reset password"
+      }
     },
     "recovery_notice": {
       "title": "Account Recovery Codes",

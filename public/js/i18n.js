@@ -10,6 +10,7 @@
 
 const I18n = (() => {
   let _translations = {};
+  let _fallback = null;   // English base map for per-key fallback (#5451)
   let _locale = 'en';
   let _ready = null;  // shared init promise — ensures init() is only run once
 
@@ -53,6 +54,16 @@ const I18n = (() => {
       _locale = locale;
       document.documentElement.lang = locale;
       localStorage.setItem('haven_locale', locale);
+      // Keep an English base so a key missing from a non-English locale falls
+      // back to readable English instead of a raw dotted key (#5451).
+      if (locale === DEFAULT) {
+        _fallback = _translations;
+      } else if (!_fallback) {
+        try {
+          const fb = await fetch(`/locales/${DEFAULT}.json`);
+          if (fb.ok) _fallback = await fb.json();
+        } catch { /* no fallback available — t() shows raw keys as before */ }
+      }
     } catch (err) {
       console.warn(`[i18n] Failed to load locale "${locale}":`, err.message);
       if (locale !== DEFAULT) {
@@ -65,13 +76,24 @@ const I18n = (() => {
   // ── Translate a dot-notation key with optional interpolation ─────────
   // Example: t('toasts.channel_created', { name: 'general', code: 'ABC' })
   //          → 'Channel "#general" created!\nCode: ABC'
-  function t(key, params = {}) {
-    const val = key.split('.').reduce(
+  function _lookup(tree, key) {
+    return key.split('.').reduce(
       (obj, k) => (obj != null && Object.prototype.hasOwnProperty.call(obj, k) ? obj[k] : null),
-      _translations
+      tree
     );
+  }
+
+  function t(key, params = {}) {
+    let val = _lookup(_translations, key);
+    // Fall back to English for keys the active locale is missing, so the UI
+    // shows real text instead of a raw dotted key like "modals.foo.title"
+    // (#5451). The raw key is only returned when English lacks it too — a
+    // genuine gap worth surfacing.
+    if ((val === null || val === undefined) && _fallback && _fallback !== _translations) {
+      val = _lookup(_fallback, key);
+    }
     if (val === null || val === undefined) {
-      // Key not found — return the raw key so missing translations are visible
+      // Key not found anywhere — return the raw key so the gap is visible.
       return key;
     }
     let str = String(val);
