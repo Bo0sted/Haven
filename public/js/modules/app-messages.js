@@ -1496,10 +1496,13 @@ _fetchLinkPreviews(containerEl) {
     } else if (this._linkPreviewInflight.has(url)) {
       dataPromise = this._linkPreviewInflight.get(url);
     } else {
-      const p = fetch(`/api/link-preview?url=${encodeURIComponent(url)}`, {
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      })
-        .then(r => r.ok ? r.json() : null)
+      // Route through the scheduler instead of firing a raw fetch. A channel
+      // full of links (e.g. freshly loaded imported history) used to emit one
+      // request per link all at once, blow past the server's 60/min limit, and
+      // 429 the rest — which returned null and rendered no card, so embeds
+      // "sometimes showed, sometimes didn't". The scheduler caps concurrency
+      // and retries 429s with backoff so every preview eventually resolves.
+      const p = this._scheduleLinkPreview(url)
         .then(data => {
           if (data) this._linkPreviewCache.set(url, { data, ts: Date.now() });
           // Light cap so the cache can't grow unbounded over a long session.
@@ -1598,6 +1601,60 @@ _fetchLinkPreviews(containerEl) {
       })
       .catch(() => {});
   });
+},
+
+// ── Link-preview fetch scheduler ──────────────────────────────────────
+// Caps how many /api/link-preview requests are in flight at once and retries
+// 429s with backoff, so a screen full of links resolves reliably instead of
+// stampeding the server's per-IP limit and dropping the overflow. Returns a
+// Promise that resolves to the preview data (or null on hard failure).
+_scheduleLinkPreview(url) {
+  if (!this._lpQueue) this._lpQueue = [];
+  if (this._lpActive == null) this._lpActive = 0;
+  return new Promise(resolve => {
+    this._lpQueue.push({ url, resolve, attempt: 0 });
+    this._pumpLinkPreviewQueue();
+  });
+},
+
+_pumpLinkPreviewQueue() {
+  const MAX_CONCURRENT = 3;
+  while (this._lpActive < MAX_CONCURRENT && this._lpQueue.length) {
+    this._runLinkPreviewTask(this._lpQueue.shift());
+  }
+},
+
+_runLinkPreviewTask(task) {
+  const MAX_ATTEMPTS = 4;
+  this._lpActive++;
+  const done = (data) => {
+    this._lpActive--;
+    task.resolve(data);
+    this._pumpLinkPreviewQueue();
+  };
+  fetch(`/api/link-preview?url=${encodeURIComponent(task.url)}`, {
+    headers: { 'Authorization': `Bearer ${this.token}` }
+  })
+    .then(r => {
+      // Rate limited — free the slot and re-queue after a backoff so the rest
+      // of the batch can proceed. Honour Retry-After when the server sends it,
+      // otherwise exponential backoff, both with jitter to avoid a thundering
+      // herd when several messages retry at once.
+      if (r.status === 429 && task.attempt < MAX_ATTEMPTS) {
+        const ra = parseFloat(r.headers.get('retry-after'));
+        const waitMs = (Number.isFinite(ra) && ra > 0
+          ? ra * 1000
+          : Math.min(1200 * Math.pow(2, task.attempt), 8000)) + Math.random() * 400;
+        task.attempt++;
+        this._lpActive--;
+        setTimeout(() => { this._lpQueue.push(task); this._pumpLinkPreviewQueue(); }, waitMs);
+        this._pumpLinkPreviewQueue();
+        return;
+      }
+      if (r.ok) r.json().then(done, () => done(null));
+      else done(null);
+    })
+    .catch(() => done(null));
 },
 
 // ── Shared embed chrome (size toggle + per-message collapse) ──────────

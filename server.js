@@ -2474,6 +2474,10 @@ app.get('/api/link-preview', async (req, res) => {
 
   // Cache miss — now apply the per-IP rate limit.
   if (!previewLimiterCheck(req)) {
+    // Tell the client roughly when a slot frees so it can pace its retries
+    // instead of hammering (or, worse, silently dropping the embed). The
+    // client-side scheduler honours this header. (#5337 follow-up)
+    res.set('Retry-After', '3');
     return res.status(429).json({ error: 'Rate limited — try again shortly' });
   }
 
