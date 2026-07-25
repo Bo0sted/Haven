@@ -14753,6 +14753,10 @@ ul.chat-list { list-style-type: disc; }
 [data-fontsize="small"] .inline-code,
 [data-fontsize="small"] code                  { font-size: 10.5px; }
 [data-fontsize="small"] .compact-time         { font-size: 8px; }
+/* Channel ID tag, header action icons, and voice-channel user list (#5450) */
+[data-fontsize="small"] .channel-code-tag     { font-size: 9px; }
+[data-fontsize="small"] .header-actions-box .icon-btn { font-size: 11px; }
+[data-fontsize="small"] .channel-voice-user   { font-size: 11px; }
 /* .message-compact .message-content intentionally not overridden — inherits same size
    as full messages so all message text stays uniform across grouped and root messages. */
 
@@ -14784,6 +14788,10 @@ ul.chat-list { list-style-type: disc; }
 [data-fontsize="large"] code                  { font-size: 16px; }
 [data-fontsize="large"] .message-input-area   { min-height: 48px; }
 [data-fontsize="large"] .compact-time         { font-size: 11px; }
+/* Channel ID tag, header action icons, and voice-channel user list (#5450) */
+[data-fontsize="large"] .channel-code-tag     { font-size: 14px; }
+[data-fontsize="large"] .header-actions-box .icon-btn { font-size: 16px; }
+[data-fontsize="large"] .channel-voice-user   { font-size: 16px; }
 
 
 /* X-Large — 22 px base (very large, high visibility) */
@@ -14812,6 +14820,10 @@ ul.chat-list { list-style-type: disc; }
 [data-fontsize="x-large"] .inline-code,
 [data-fontsize="x-large"] code                  { font-size: 19px; }
 [data-fontsize="x-large"] .compact-time         { font-size: 12.5px; }
+/* Channel ID tag, header action icons, and voice-channel user list (#5450) */
+[data-fontsize="x-large"] .channel-code-tag     { font-size: 16px; }
+[data-fontsize="x-large"] .header-actions-box .icon-btn { font-size: 19px; }
+[data-fontsize="x-large"] .channel-voice-user   { font-size: 19px; }
 
 
 /* ── Font Size: Settings / Sub-menus ─────────────────────── */
