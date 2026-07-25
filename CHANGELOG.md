@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.37.1] — 2026-07-25
+
+### Fixed
+- **Link-preview embeds no longer show up inconsistently.** Opening a channel full of links — most noticeably a freshly loaded screen of imported Discord history — fired one `/api/link-preview` request per link all at once, blew past the server's 60/min per-IP limit, and 429'd the overflow. A rejected request returned `null` and rendered no card, so embeds "sometimes popped up with all the images, sometimes with none." Fetches now go through a client-side scheduler that caps concurrency (3 at a time) and retries 429s with backoff, honouring a new `Retry-After` header the server sends on the rate-limited response, so every preview resolves instead of being silently dropped.
+- **Matrix theme: the edit-message box rendered as a blank solid-green block.** Matrix was the one built-in theme with no `::selection` override, so selected text fell through to the global rule (white text on the accent colour). Matrix's accent `#00ff41` is light enough that white-on-green is nearly invisible, and because mobile browsers auto-select a field's contents when it's focused, opening the editor on a message turned the whole textarea into an unreadable green rectangle. Matrix now uses dark, high-contrast selection text (matching the Fallout terminal theme's convention), so the editor — and any selected text — stays legible.
+
+---
+
 ## [3.37.0] — 2026-07-23
 
 ### Added
