@@ -199,7 +199,7 @@ Or manually: `npm install && node server.js`
 | **Security** | Bcrypt passwords, JWT auth, HTTPS/SSL, rate limiting, CSP headers, input validation |
 | **E2E Encryption** | ECDH P-256 + AES-256-GCM encrypted DMs — private keys never leave the browser |
 | **Discord Import** | Import your entire Discord server history — channels, threads, forums, reactions, pins, avatars — directly from Haven's UI or via file upload |
-| **Game** | Shippy Container — Drew's shipment got hung up. Server-wide leaderboard. |
+| **Games** | Shippy Container (server-wide leaderboard), a library of classic Flash games, and a built-in **Game Boy / GBC / GBA emulator** with per-user battery saves that sync to your server |
 | **Translations** | 7 languages out of the box (English, French, German, Spanish, Polish, Russian, Chinese). Community-contributed. |
 
 
@@ -467,6 +467,40 @@ Voice is peer-to-peer — audio goes directly between users, not through the ser
 - **Talking indicators** — usernames glow green when speaking (300 ms hysteresis for smooth animation).
 - **Screen sharing** — click **🖥️ Share Screen** to broadcast your display. Multiple users can share simultaneously in a tiled grid.
 
+---
+
+## Retro Games — Game Boy / GBC / GBA Emulator
+
+> **Bring your own cartridges.** Haven has a built-in emulator for Game Boy, Game Boy Color, and Game Boy Advance — right inside the Activities panel. Admins upload ROMs, everyone plays, and your battery saves follow you to any device.
+> 
+> **Disclaimer:** For legal/copyright reasons, Haven DOES NOT bundle or ship any copyrighted material, including the game cartridges that run on this emulator, nor does it bundle the emulator itself — Haven merely provides an interface to a third-party emulator (EmulatorJS). Emulators are perfectly legal: courts have held that an emulator containing none of a console's original code is lawful software (*Sony Computer Entertainment, Inc. v. Connectix Corp.*, 203 F.3d 596 (9th Cir. 2000)). Game cartridges, however, remain copyrighted material, and Haven strictly forbids using this feature to store or distribute them. Users are expected to provide their own legally obtained cartridges, and Haven bears no responsibility for how users choose to obtain them.
+
+Open **Activities → GBA** to see the library. Emulation runs entirely in your browser (powered by EmulatorJS — Gambatte for GB/GBC, mGBA for GBA), so your server never has to run an emulator. It only stores the ROMs and your saves.
+
+<img width="1074" height="572" alt="image" src="https://github.com/user-attachments/assets/750ccae7-9658-445b-846e-aebeb18d9b80" />
+
+- **Admin-managed library** — admins upload `.gb` / `.gbc` / `.gba` files (up to 32 MB), everyone else browses and plays.
+- **Server-synced battery saves** — save from the in-game menu and your progress is pushed to your server, then pulled back the next time you play — on any device, any browser.
+- **Saves manager** — a per-user modal to export (`.sav`), import, and delete your saves. Saves whose ROM has left the library are flagged so you can clean them up.
+- **Never lose a save** — if the server is unreachable mid-session, a bar offers a one-click backup download and retries on its own; any unsynced save is also pushed one last time when you close the tab.
+
+<img width="1649" height="1170" alt="image" src="https://github.com/user-attachments/assets/e9cb7553-14b5-4e59-bb1b-a7b7b0601261" />
+
+<img width="1083" height="350" alt="image" src="https://github.com/user-attachments/assets/745d2f5e-0abd-4c4c-9b65-4ac7fdab34d3" />
+
+> **Note:** only **battery saves** (saving from the in-game menu) sync to your server. EmulatorJS **save states** ("memory saves") stay in your browser and are not uploaded.
+
+### Self-hosting notes
+
+ROMs are never shipped with Haven — you supply your own. If you run Docker, make sure the ROM volumes are mounted so uploads survive updates (the current `docker-compose.yml` and `docker run` command already include them):
+
+```yaml
+volumes:
+  - haven_gba_roms:/app/public/games/gba_roms
+  - haven_flash_roms:/app/public/games/flash_roms
+```
+
+The emulator loads client-side from `cdn.emulatorjs.org`. If you front Haven with your own strict CSP at a reverse proxy, allow that origin or games won't load.
 ---
 
 ## Admin Guide
