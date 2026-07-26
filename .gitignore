@@ -23,7 +23,11 @@ Desktop.ini
 .vs/
 
 # Flash game ROMs (optional download  not shipped with Haven)
-public/games/roms/*.swf
+public/games/flash_roms/*.swf
+
+# GBA ROMs (user-supplied, never shipped or committed)
+public/games/gba_roms/*
+!public/games/gba_roms/.gitkeep
 
 
 # Firebase service account keys (never commit these)

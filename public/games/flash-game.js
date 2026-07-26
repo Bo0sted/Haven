@@ -45,7 +45,7 @@ function initRuffle() {
     player.load(swfUrl).then(() => {
       applyVolume(parseInt(volSlider.value));
     }).catch((err) => {
-      container.innerHTML = `<div class="error-msg">Failed to load SWF: ${err.message}<br><br>Make sure the .swf file exists in <code>/games/roms/</code></div>`;
+      container.innerHTML = `<div class="error-msg">Failed to load SWF: ${err.message}<br><br>Make sure the .swf file exists in <code>/games/flash_roms/</code></div>`;
     });
 
     setTimeout(() => {

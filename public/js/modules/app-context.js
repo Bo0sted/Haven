@@ -723,22 +723,58 @@ async _openActivitiesModal() {
   const grid = document.getElementById('activities-grid');
   if (!modal || !grid) return;
 
-  grid.innerHTML = '';
-
-  // Check flash ROM installation status
-  let flashStatus = {};
+  // Check flash ROM installation status (once per open — reused across tab switches)
+  this._flashStatus = {};
   try {
     const res = await fetch('/api/flash-rom-status');
     if (res.ok) {
       const data = await res.json();
-      for (const rom of data.roms) flashStatus[rom.file] = rom.installed;
+      for (const rom of data.roms) this._flashStatus[rom.file] = rom.installed;
       this._flashAllInstalled = data.allInstalled;
     }
   } catch {}
 
-  // If any flash games are not installed, show a download banner at top
-  const hasFlashGames = this._gamesRegistry.some(g => g.type === 'flash');
-  if (hasFlashGames && !this._flashAllInstalled) {
+  // List uploaded GBA ROMs (dynamic — admins upload, everyone plays; the
+  // emulator itself loads client-side from the EmulatorJS CDN)
+  this._gbaRoms = [];
+  try {
+    const res = await fetch('/api/gba-roms');
+    if (res.ok) this._gbaRoms = (await res.json()).roms || [];
+  } catch {}
+
+  // Wire tab switching (onclick is reassigned each open, so listeners never stack)
+  this._activitiesTab = this._activitiesTab || 'flash';
+  document.querySelectorAll('#activities-tabs .activities-tab').forEach(btn => {
+    btn.onclick = () => { this._activitiesTab = btn.dataset.tab; this._renderActivities(); };
+  });
+
+  this._renderActivities();
+  modal.style.display = 'flex';
+},
+
+// Which tab a registry game belongs under: GBA → gba, browser links → web, everything else → flash
+_gameTab(game) {
+  if (game.type === 'gba') return 'gba';
+  if (game.type === 'browser') return 'web';
+  return 'flash';
+},
+
+_renderActivities() {
+  const grid = document.getElementById('activities-grid');
+  if (!grid) return;
+  const tab = this._activitiesTab || 'flash';
+
+  document.querySelectorAll('#activities-tabs .activities-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+
+  grid.innerHTML = '';
+
+  // GBA tab: user-uploaded ROM library (admins upload, everyone plays)
+  if (tab === 'gba') { this._renderGbaTab(grid); return; }
+
+  // Flash tab: offer a one-click download when any ROMs are missing
+  if (tab === 'flash' && !this._flashAllInstalled) {
     const banner = document.createElement('div');
     banner.className = 'flash-install-banner';
     banner.innerHTML = `
@@ -765,7 +801,6 @@ async _openActivitiesModal() {
         const errors = data.results.filter(r => r.status === 'error');
         this._showToast(t('context.flash_install_result', { installed, already, errors: errors.length }), installed > 0 ? 'success' : 'error');
         this._flashAllInstalled = errors.length === 0;
-        // Refresh modal
         this._openActivitiesModal();
       } catch (err) {
         this._showToast(err.message, 'error');
@@ -775,11 +810,20 @@ async _openActivitiesModal() {
     });
   }
 
-  for (const game of this._gamesRegistry) {
+  const games = this._gamesRegistry.filter(g => this._gameTab(g) === tab);
+  if (!games.length) {
+    const empty = document.createElement('div');
+    empty.className = 'activities-empty';
+    empty.textContent = t('context.no_games_here');
+    grid.appendChild(empty);
+    return;
+  }
+
+  for (const game of games) {
     // For flash games, check if ROM is installed
     const isFlash = game.type === 'flash';
-    const romFile = isFlash ? game.path.match(/swf=\/games\/roms\/(.+?)&/)?.[1] : null;
-    const romInstalled = !isFlash || (romFile && flashStatus[decodeURIComponent(romFile)] !== false);
+    const romFile = isFlash ? game.path.match(/swf=\/games\/flash_roms\/(.+?)&/)?.[1] : null;
+    const romInstalled = !isFlash || (romFile && this._flashStatus[decodeURIComponent(romFile)] !== false);
 
     const card = document.createElement('div');
     card.className = 'activity-card' + (!romInstalled ? ' activity-card-disabled' : '');
@@ -797,7 +841,228 @@ async _openActivitiesModal() {
     }
     grid.appendChild(card);
   }
+},
+
+// GBA tab — admin-only upload bar + a launchable card per uploaded ROM.
+_renderGbaTab(grid) {
+  const isAdmin = !!this.user?.isAdmin;
+  // Toolbar (mirrors the Flash download banner's placement/style): a Saves
+  // button for everyone; admins also get the ROM upload control.
+  const bar = document.createElement('div');
+  bar.className = 'gba-upload-banner';
+  bar.innerHTML = `
+    <span>${isAdmin ? '🎮 ' + this._escapeHtml(t('context.gba_upload_hint')) : ''}</span>
+    <span class="gba-toolbar-actions">
+      <button class="btn-sm" id="gba-saves-btn">💾 ${t('context.gba_saves_btn')}</button>
+      ${isAdmin ? `<button class="btn-sm btn-accent" id="gba-upload-btn">${t('context.gba_upload_btn')}</button>` : ''}
+    </span>
+    <input type="file" id="gba-rom-input" accept=".gb,.gbc,.gba" hidden>
+  `;
+  grid.appendChild(bar);
+  bar.querySelector('#gba-saves-btn').addEventListener('click', () => this._openGbaSavesModal());
+  if (isAdmin) {
+    const input = bar.querySelector('#gba-rom-input');
+    const btn = bar.querySelector('#gba-upload-btn');
+    btn.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => this._uploadGbaRom(input.files[0], btn));
+  }
+
+  if (!this._gbaRoms.length) {
+    const empty = document.createElement('div');
+    empty.className = 'activities-empty';
+    empty.textContent = t('context.no_games_here');
+    grid.appendChild(empty);
+    return;
+  }
+
+  for (const rom of this._gbaRoms) {
+    // System label from the extension (GB / GBC / GBA) — language-neutral
+    const ext = rom.file.split('.').pop().toLowerCase();
+    const sys = ext === 'gba' ? 'GBA' : ext === 'gbc' ? 'GBC' : 'GB';
+    const card = document.createElement('div');
+    card.className = 'activity-card';
+    card.innerHTML = `
+      <div class="activity-card-icon">🎮</div>
+      <div class="activity-card-name">${this._escapeHtml(rom.title)}</div>
+      <div class="activity-card-desc">${sys}</div>
+    `;
+    card.addEventListener('click', () => {
+      this._closeActivitiesModal();
+      this._launchGame({
+        id: 'gba-' + rom.file, name: rom.title, icon: '🎮', type: 'gba',
+        path: `/games/gba.html?rom=${encodeURIComponent('/games/gba_roms/' + rom.file)}&title=${encodeURIComponent(rom.title)}`
+      });
+    });
+    grid.appendChild(card);
+  }
+},
+
+// Upload a ROM (admin only), then re-open the modal to refresh the list.
+async _uploadGbaRom(file, btn) {
+  if (!file) return;
+  btn.disabled = true;
+  btn.textContent = t('context.gba_uploading');
+  try {
+    const fd = new FormData();
+    fd.append('rom', file);
+    const res = await fetch('/api/upload-gba-rom', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + this.token }, body: fd
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Upload failed');
+    }
+    const data = await res.json();
+    this._showToast(t('context.gba_upload_ok', { file: data.title }), 'success');
+    this._openActivitiesModal();
+  } catch (err) {
+    this._showToast(err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = t('context.gba_upload_btn');
+  }
+},
+
+// ── GBA saves modal (per-user battery saves) ────────────
+async _openGbaSavesModal() {
+  const modal = document.getElementById('gba-saves-modal');
+  const body = document.getElementById('gba-saves-body');
+  const footer = document.getElementById('gba-saves-footer');
+  if (!modal || !body) return;
   modal.style.display = 'flex';
+  body.innerHTML = `<p class="muted-text" style="padding:12px">${t('context.gba_saves_loading')}</p>`;
+
+  let saves = [];
+  try {
+    const res = await fetch('/api/game-saves', { headers: { Authorization: 'Bearer ' + this.token } });
+    if (res.ok) saves = (await res.json()).saves || [];
+  } catch {}
+
+  // "exists?" = the ROM this save belongs to is still in the shared library.
+  const romFiles = new Set((this._gbaRoms || []).map(r => r.file));
+  this._renderGbaSaves(body, saves, romFiles);
+  this._renderGbaImport(footer);
+},
+
+_renderGbaSaves(body, saves, romFiles) {
+  if (!saves.length) {
+    body.innerHTML = `<p class="muted-text" style="padding:12px">${t('context.gba_saves_empty')}</p>`;
+    return;
+  }
+  const rows = saves.map(s => {
+    const exists = romFiles.has(s.rom_file);
+    const when = new Date((s.updated_at || '').replace(' ', 'T') + 'Z').toLocaleString();
+    const kb = (s.size / 1024).toFixed(1) + ' KB';
+    const name = this._escapeHtml(s.rom_file);
+    return `<tr>
+      <td>${name}</td>
+      <td title="${exists ? '' : t('context.gba_save_orphaned')}">${exists ? '✅' : '⚠️'}</td>
+      <td>${when}</td>
+      <td>${kb}</td>
+      <td class="gba-save-actions">
+        <button class="btn-sm" data-act="export" data-key="${s.save_key}" data-name="${name}">${t('context.gba_save_export')}</button>
+        <button class="btn-sm btn-danger" data-act="delete" data-key="${s.save_key}" data-name="${name}">${t('context.gba_save_delete')}</button>
+      </td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `<table class="gba-saves-table">
+    <thead><tr>
+      <th>${t('context.gba_save_col_file')}</th>
+      <th>${t('context.gba_save_col_exists')}</th>
+      <th>${t('context.gba_save_col_modified')}</th>
+      <th>${t('context.gba_save_col_size')}</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  body.querySelectorAll('button[data-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.act === 'export') this._exportSave(btn.dataset.key, btn.dataset.name);
+      else this._deleteSave(btn.dataset.key, btn.dataset.name);
+    });
+  });
+},
+
+// Import controls: pick a target ROM (to derive its save_key) + a .sav file.
+_renderGbaImport(footer) {
+  if (!footer) return;
+  const roms = this._gbaRoms || [];
+  if (!roms.length) { footer.innerHTML = ''; return; }
+  footer.innerHTML = `<div class="gba-import-row">
+    <span>${t('context.gba_import_label')}</span>
+    <select id="gba-import-rom">${roms.map(r => `<option value="${this._escapeHtml(r.file)}">${this._escapeHtml(r.title)}</option>`).join('')}</select>
+    <input type="file" id="gba-import-file" accept=".sav,.srm" hidden>
+    <button class="btn-sm" id="gba-import-pick">${t('context.gba_import_choose')}</button>
+    <span id="gba-import-name" class="muted-text"></span>
+    <button class="btn-sm btn-accent" id="gba-import-go" disabled>${t('context.gba_import_btn')}</button>
+  </div>`;
+  const fileInput = footer.querySelector('#gba-import-file');
+  footer.querySelector('#gba-import-pick').onclick = () => fileInput.click();
+  fileInput.onchange = () => {
+    footer.querySelector('#gba-import-name').textContent = fileInput.files[0]?.name || '';
+    footer.querySelector('#gba-import-go').disabled = !fileInput.files[0];
+  };
+  footer.querySelector('#gba-import-go').onclick = (e) =>
+    this._importSave(footer.querySelector('#gba-import-rom').value, fileInput.files[0], e.currentTarget);
+},
+
+async _exportSave(saveKey, name) {
+  try {
+    const res = await fetch(`/api/game-saves/${saveKey}`, { headers: { Authorization: 'Bearer ' + this.token } });
+    if (!res.ok) throw new Error('Export failed');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = (name || 'save').replace(/\.[^.]+$/, '') + '.sav';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) { this._showToast(e.message, 'error'); }
+},
+
+async _deleteSave(saveKey, name) {
+  const ok = await this._showConfirmModal(
+    '⚠️ ' + t('context.gba_save_delete_confirm', { file: name }), '',
+    { danger: true, confirmLabel: t('context.gba_save_delete') });
+  if (!ok) return;
+  try {
+    const res = await fetch(`/api/game-saves/${saveKey}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.token } });
+    if (!res.ok) throw new Error('Delete failed');
+    this._showToast(t('context.gba_save_deleted'), 'success');
+    this._openGbaSavesModal();
+  } catch (e) { this._showToast(e.message, 'error'); }
+},
+
+// Import a .sav: hash the chosen ROM's bytes to derive its save_key (same
+// scheme as gba-game.js), then upsert. Closes the offline-download loop.
+async _importSave(romFile, file, btn) {
+  if (!file) return;
+  btn.disabled = true;
+  try {
+    const romBytes = new Uint8Array(await (await fetch('/games/gba_roms/' + encodeURIComponent(romFile))).arrayBuffer());
+    const saveKey = await this._computeSaveKey(romFile, romBytes);
+    if (!saveKey) throw new Error(t('context.gba_import_nohash'));
+    const fd = new FormData();
+    fd.append('save_key', saveKey);
+    fd.append('rom_file', romFile);
+    fd.append('data', new Blob([new Uint8Array(await file.arrayBuffer())]), 'save.sav');
+    const res = await fetch('/api/game-saves', { method: 'POST', headers: { Authorization: 'Bearer ' + this.token }, body: fd });
+    if (!res.ok) throw new Error('Import failed');
+    this._showToast(t('context.gba_import_ok'), 'success');
+    this._openGbaSavesModal();
+  } catch (e) { this._showToast(e.message, 'error'); btn.disabled = false; }
+},
+
+// SHA-256(filename + rom bytes) — must match gba-game.js's key derivation.
+async _computeSaveKey(fileName, bytes) {
+  if (!window.crypto?.subtle) return null;
+  const name = new TextEncoder().encode(fileName);
+  const buf = new Uint8Array(name.length + bytes.length);
+  buf.set(name, 0); buf.set(bytes, name.length);
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+},
+
+_closeGbaSavesModal() {
+  const modal = document.getElementById('gba-saves-modal');
+  if (modal) modal.style.display = 'none';
 },
 
 _closeActivitiesModal() {

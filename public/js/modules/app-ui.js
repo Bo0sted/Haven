@@ -1816,11 +1816,11 @@ _setupUI() {
   // Registry of available games — add new games here
   this._gamesRegistry = [
     { id: 'flappy', name: 'Shippy Container', icon: '🚢', path: '/games/flappy.html', description: 'Dodge containers, chase high scores!' },
-    { id: 'flight', name: 'Flight', icon: '✈️', path: '/games/flash.html?swf=/games/roms/flight-759879f9.swf&title=Flight', description: 'Throw a paper plane as far as you can!', type: 'flash' },
-    { id: 'learn-to-fly-3', name: 'Learn to Fly 3', icon: '🐧', path: '/games/flash.html?swf=/games/roms/learn-to-fly-3.swf&title=Learn%20to%20Fly%203', description: 'Help a penguin learn to fly!', type: 'flash' },
-    { id: 'bubble-tanks-3', name: 'Bubble Tanks 3', icon: '🫧', path: '/games/flash.html?swf=/games/roms/Bubble%20Tanks%203.swf&title=Bubble%20Tanks%203', description: 'Bubble-based arena shooter', type: 'flash' },
-    { id: 'tanks', name: 'Tanks', icon: '🪖', path: '/games/flash.html?swf=/games/roms/tanks.swf&title=Tanks', description: 'Classic Armor Games tank combat', type: 'flash' },
-    { id: 'super-smash-flash-2', name: 'Super Smash Flash 2', icon: '⚔️', path: '/games/flash.html?swf=/games/roms/SuperSmash.swf&title=Super%20Smash%20Flash%202', description: 'Fan-made Smash Bros platformer fighter', type: 'flash' },
+    { id: 'flight', name: 'Flight', icon: '✈️', path: '/games/flash.html?swf=/games/flash_roms/flight-759879f9.swf&title=Flight', description: 'Throw a paper plane as far as you can!', type: 'flash' },
+    { id: 'learn-to-fly-3', name: 'Learn to Fly 3', icon: '🐧', path: '/games/flash.html?swf=/games/flash_roms/learn-to-fly-3.swf&title=Learn%20to%20Fly%203', description: 'Help a penguin learn to fly!', type: 'flash' },
+    { id: 'bubble-tanks-3', name: 'Bubble Tanks 3', icon: '🫧', path: '/games/flash.html?swf=/games/flash_roms/Bubble%20Tanks%203.swf&title=Bubble%20Tanks%203', description: 'Bubble-based arena shooter', type: 'flash' },
+    { id: 'tanks', name: 'Tanks', icon: '🪖', path: '/games/flash.html?swf=/games/flash_roms/tanks.swf&title=Tanks', description: 'Classic Armor Games tank combat', type: 'flash' },
+    { id: 'super-smash-flash-2', name: 'Super Smash Flash 2', icon: '⚔️', path: '/games/flash.html?swf=/games/flash_roms/SuperSmash.swf&title=Super%20Smash%20Flash%202', description: 'Fan-made Smash Bros platformer fighter', type: 'flash' },
     { id: 'io-games', name: '.io Games', icon: '🌐', path: '/games/io-games.html', description: 'Browse popular .io multiplayer games', type: 'browser' },
   ];
 
@@ -1858,6 +1858,12 @@ _setupUI() {
   document.getElementById('close-activities-btn')?.addEventListener('click', () => this._closeActivitiesModal());
   document.getElementById('activities-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'activities-modal') this._closeActivitiesModal();
+  });
+
+  // Close GBA saves modal
+  document.getElementById('close-gba-saves-btn')?.addEventListener('click', () => this._closeGbaSavesModal());
+  document.getElementById('gba-saves-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'gba-saves-modal') this._closeGbaSavesModal();
   });
 
   // Game iframe controls

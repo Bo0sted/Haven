@@ -305,6 +305,7 @@ module.exports = function register(socket, ctx) {
       db.prepare('DELETE FROM fcm_tokens WHERE user_id = ?').run(uid);
       db.prepare('UPDATE pinned_messages SET pinned_by = ? WHERE pinned_by = ?').run(socket.user.id, uid);
       db.prepare('DELETE FROM high_scores WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM game_saves WHERE user_id = ?').run(uid);
       db.prepare('DELETE FROM eula_acceptances WHERE user_id = ?').run(uid);
       db.prepare('DELETE FROM user_preferences WHERE user_id = ?').run(uid);
       updateIfTableExists('user_connections', 'DELETE FROM user_connections WHERE user_id = ?', uid);
@@ -413,6 +414,7 @@ module.exports = function register(socket, ctx) {
       _runIfTable('user_roles', 'DELETE FROM user_roles WHERE user_id = ?', uid);
       _runIfTable('read_positions', 'DELETE FROM read_positions WHERE user_id = ?', uid);
       _runIfTable('high_scores', 'DELETE FROM high_scores WHERE user_id = ?', uid);
+      _runIfTable('game_saves', 'DELETE FROM game_saves WHERE user_id = ?', uid);
       _runIfTable('eula_acceptances', 'DELETE FROM eula_acceptances WHERE user_id = ?', uid);
       _runIfTable('user_preferences', 'DELETE FROM user_preferences WHERE user_id = ?', uid);
       // Linked Steam/Spotify accounts carry encrypted OAuth tokens. The FK

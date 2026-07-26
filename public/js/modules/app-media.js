@@ -2805,13 +2805,20 @@ _setupModalExpand() {
         expandBtn.title = isMax ? 'Restore size' : 'Expand';
       });
 
-      // When a settings-style header is present, slot the expand button
-      // directly next to its close button so the two stay aligned on
-      // every viewport size. Otherwise drop both controls into a floating
-      // group at the top-right of the modal.
+      // When a settings-style header is present, wrap the expand toggle and
+      // the existing close button into a single control group. That way the
+      // pair stays together at the header's trailing edge regardless of how
+      // the host header right-aligns (settings uses .settings-tab-bar's
+      // margin-left:auto, activities uses justify-content:space-between) —
+      // no per-header CSS overrides needed. Otherwise drop both controls
+      // into a floating group at the top-right of the modal.
       if (settingsClose) {
         expandBtn.classList.add('modal-expand-btn-inline');
-        settingsClose.parentElement.insertBefore(expandBtn, settingsClose);
+        const group = document.createElement('div');
+        group.className = 'modal-header-controls';
+        settingsClose.parentElement.insertBefore(group, settingsClose);
+        group.appendChild(expandBtn);
+        group.appendChild(settingsClose);
       } else {
         const group = document.createElement('div');
         group.className = 'modal-controls';

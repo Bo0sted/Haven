@@ -6078,6 +6078,14 @@ details.sound-section:not([open]) .sound-section-label::before {
   border-radius: var(--radius-sm);
   font-size: 16px;
 }
+/* The injected expand toggle + the header's close button are wrapped in
+   this group so the pair stays together as one trailing flex child —
+   right-aligned by whatever the host header already uses (settings-tab-bar
+   auto-margin, or activities' space-between). */
+.modal-header-controls {
+  display: inline-flex;
+  align-items: center;
+}
 
 .modal h3 {
   font-size: 20px;
@@ -9841,7 +9849,8 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 /* ── Activities / Games Launcher ──────────────────────── */
 .modal-activities {
-  max-width: 520px;
+  width: min(92vw, 720px);   /* override base .modal's width: min(90%, 400px) */
+  max-width: 720px;
   max-height: 80vh;
   overflow-y: auto;
   padding: 0;
@@ -9907,7 +9916,8 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   cursor: not-allowed;
   pointer-events: none;
 }
-.flash-install-banner {
+.flash-install-banner,
+.gba-upload-banner {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -9920,7 +9930,70 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   font-size: 13px;
   color: var(--text-secondary);
 }
-.flash-install-banner .btn-sm { pointer-events: auto; flex-shrink: 0; }
+.flash-install-banner .btn-sm,
+.gba-upload-banner .btn-sm { pointer-events: auto; flex-shrink: 0; }
+
+/* ── Activities tabs (Flash / GBA / Web) ──────────────── */
+.activities-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 24px 0;
+}
+.activities-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.activities-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+.activities-tab.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.activities-tab .tab-icon { font-size: 15px; line-height: 1; }
+.activities-tab img.tab-icon { width: 18px; height: 18px; object-fit: contain; display: block; }
+.activities-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.gba-toolbar-actions { display: inline-flex; gap: 8px; flex-shrink: 0; }
+
+/* ── GBA saves modal ──────────────────────────────────── */
+.gba-saves-body { padding: 12px 24px; overflow-y: auto; max-height: 55vh; }
+.gba-saves-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gba-saves-table th, .gba-saves-table td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+  color: var(--text-secondary); white-space: nowrap;
+}
+.gba-saves-table th { color: var(--text-muted); font-weight: 600; }
+.gba-saves-table td:first-child { white-space: normal; word-break: break-all; color: var(--text-primary); }
+.gba-save-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.gba-saves-footer { padding: 0 24px 16px; }
+.gba-import-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-secondary);
+}
+.gba-import-row select {
+  background: var(--bg-secondary); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-md); padding: 5px 8px; font-size: 13px;
+}
 
 /* ── Iframe Game Overlay ──────────────────────────────── */
 .game-iframe-overlay {
@@ -9962,6 +10035,9 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 [data-theme="win95"] .activities-header h3 { color: #fff; font-size: 12px; font-weight: 700; margin: 0; background: none; font-family: "MS Sans Serif","Microsoft Sans Serif",Tahoma,Arial,sans-serif; }
 [data-theme="win95"] .activity-card { background: #bfbfbf; border: 3px outset #fff; border-radius: 0; }
 [data-theme="win95"] .activity-card:hover { border: 3px inset #808080; transform: none; box-shadow: none; }
+[data-theme="win95"] .activities-tab { background: #bfbfbf; border: 3px outset #fff; border-radius: 0; color: #000; }
+[data-theme="win95"] .activities-tab:hover { color: #000; }
+[data-theme="win95"] .activities-tab.active { background: #dfdfdf; border: 3px inset #808080; color: #000; }
 [data-theme="win95"] .game-iframe-header { background: linear-gradient(90deg, #000080, #1084d0); border-bottom: 2px solid #808080; }
 [data-theme="win95"] .game-iframe-title { color: #fff; font-family: "MS Sans Serif","Microsoft Sans Serif",Tahoma,Arial,sans-serif; font-size: 12px; }
 

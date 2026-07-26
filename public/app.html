@@ -3427,9 +3427,31 @@
         <h3>🎮 <span data-i18n="modals.activities.title">Activities</span></h3>
         <button class="settings-close-btn" id="close-activities-btn">&times;</button>
       </div>
+      <!-- Activity tab icon credits:
+           Flash - "Adobe Flash Player" icon from Iconscout, free license (attribution):
+                   https://iconscout.com/free-icon/adobe-flash-player-2132662
+           GBA   - Game Boy Advance photo by Evan Amos, public domain (CC0) via Wikimedia Commons:
+                   https://commons.wikimedia.org/wiki/File:Nintendo-Game-Boy-Advance-Purple-FL.png -->
+      <div class="activities-tabs" id="activities-tabs">
+        <button class="activities-tab active" data-tab="flash"><img class="tab-icon" src="/games/icon-flash.webp" alt=""><span>Flash</span></button>
+        <button class="activities-tab" data-tab="gba"><img class="tab-icon" src="/games/icon-gba.png" alt=""><span>GBA</span></button>
+        <button class="activities-tab" data-tab="web"><span class="tab-icon">🌐</span><span>Web</span></button>
+      </div>
       <div class="activities-grid" id="activities-grid">
         <!-- Populated dynamically by JS from GAMES_REGISTRY -->
       </div>
+    </div>
+  </div>
+
+  <!-- GBA Saves Modal (per-user battery saves; opened from the GBA tab) -->
+  <div class="modal-overlay" id="gba-saves-modal" style="display:none">
+    <div class="modal modal-activities">
+      <div class="activities-header">
+        <h3>💾 <span data-i18n="context.gba_saves_title">Game Saves</span></h3>
+        <button class="settings-close-btn" id="close-gba-saves-btn">&times;</button>
+      </div>
+      <div id="gba-saves-body" class="gba-saves-body"></div>
+      <div id="gba-saves-footer" class="gba-saves-footer"></div>
     </div>
   </div>
 

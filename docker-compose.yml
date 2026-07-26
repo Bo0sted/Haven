@@ -16,8 +16,14 @@ services:
       - "${REDIRECT_PORT:-3001}:${REDIRECT_PORT:-3001}"  # HTTP → HTTPS redirect
     volumes:
       - haven_data:/data
-      # ── Or use a local folder instead (good for NAS / Synology): ──
+      # ── ROM library — persists admin-uploaded GBA ROMs + downloaded Flash
+      #    games (they live under /app/public/games, not /data): ──
+      - haven_flash_roms:/app/public/games/flash_roms
+      - haven_gba_roms:/app/public/games/gba_roms
+      # ── Or use local folders instead (good for NAS / Synology): ──
       # - ./haven-data:/data
+      # - ./haven-roms/flash:/app/public/games/flash_roms
+      # - ./haven-roms/gba:/app/public/games/gba_roms
     environment:
       - PORT=${PORT:-3000}
       - HOST=0.0.0.0
@@ -33,3 +39,5 @@ services:
 
 volumes:
   haven_data:
+  haven_flash_roms:
+  haven_gba_roms:

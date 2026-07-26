@@ -192,13 +192,13 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'", "blob:", "https://www.youtube.com", "https://w.soundcloud.com", "https://unpkg.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],  // inline styles + Google Fonts
+      scriptSrc: ["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'", "blob:", "https://www.youtube.com", "https://w.soundcloud.com", "https://unpkg.com", "https://cdn.emulatorjs.org"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.emulatorjs.org"],  // inline styles + Google Fonts + EmulatorJS UI CSS
       imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],  // link preview OG images + GIPHY (http: for local/self-hosted services)
-      connectSrc: ["'self'", "ws:", "wss:", "https:"],  // Socket.IO + cross-origin health checks
+      connectSrc: ["'self'", "ws:", "wss:", "https:", "blob:"],  // Socket.IO + cross-origin health checks + EmulatorJS wasm/core blob fetches
       mediaSrc: ["'self'", "blob:", "data:", "https:", "http:"],  // WebRTC audio + notification sounds + link preview video embeds
       fontSrc: ["'self'", "https://fonts.gstatic.com"],  // Google Fonts CDN
-      workerSrc: ["'self'", "blob:", "https://unpkg.com"],  // service worker + Ruffle WebAssembly workers
+      workerSrc: ["'self'", "blob:", "https://unpkg.com", "https://cdn.emulatorjs.org"],  // service worker + Ruffle / EmulatorJS WebAssembly workers
       objectSrc: ["'none'"],
       frameSrc: ["'self'", "https://open.spotify.com", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://w.soundcloud.com"],  // Listen Together embeds + game iframes
       baseUri: ["'self'"],
@@ -1337,7 +1337,10 @@ app.post('/api/upload-file', uploadLimiter, (req, res) => {
 });
 
 // ── Flash ROM status & download ──────────────────────────
-const ROMS_DIR = path.join(__dirname, 'public', 'games', 'roms');
+// NOTE: the manifest URLs below point at a frozen upstream commit where the
+// path is still `public/games/roms/` — leave those as-is. Only the local
+// destination dir was renamed to `flash_roms` (GBA ROMs live in `gba_roms`).
+const FLASH_ROMS_DIR = path.join(__dirname, 'public', 'games', 'flash_roms');
 const FLASH_ROM_MANIFEST = [
   { file: 'flight-759879f9.swf',    url: 'https://raw.githubusercontent.com/ancsemi/Haven/ccf21d874c5502eefccc7a46fe525a793e0bc603/public/games/roms/flight-759879f9.swf',    size: 8570000 },
   { file: 'learn-to-fly-3.swf',     url: 'https://raw.githubusercontent.com/ancsemi/Haven/ccf21d874c5502eefccc7a46fe525a793e0bc603/public/games/roms/learn-to-fly-3.swf',     size: 17340000 },
@@ -1349,7 +1352,7 @@ const FLASH_ROM_MANIFEST = [
 app.get('/api/flash-rom-status', (req, res) => {
   const status = FLASH_ROM_MANIFEST.map(rom => ({
     file: rom.file,
-    installed: fs.existsSync(path.join(ROMS_DIR, rom.file))
+    installed: fs.existsSync(path.join(FLASH_ROMS_DIR, rom.file))
   }));
   const allInstalled = status.every(r => r.installed);
   res.json({ allInstalled, roms: status });
@@ -1365,11 +1368,11 @@ app.post('/api/install-flash-roms', async (req, res) => {
   const adminRow = getDb().prepare('SELECT is_admin FROM users WHERE id = ?').get(user.id);
   if (!adminRow || !adminRow.is_admin) return res.status(403).json({ error: 'Only admins can install flash games' });
 
-  if (!fs.existsSync(ROMS_DIR)) fs.mkdirSync(ROMS_DIR, { recursive: true });
+  if (!fs.existsSync(FLASH_ROMS_DIR)) fs.mkdirSync(FLASH_ROMS_DIR, { recursive: true });
 
   const results = [];
   for (const rom of FLASH_ROM_MANIFEST) {
-    const dest = path.join(ROMS_DIR, rom.file);
+    const dest = path.join(FLASH_ROMS_DIR, rom.file);
     if (fs.existsSync(dest)) { results.push({ file: rom.file, status: 'already-installed' }); continue; }
     try {
       const resp = await fetch(rom.url);
@@ -1382,6 +1385,172 @@ app.post('/api/install-flash-roms', async (req, res) => {
     }
   }
   res.json({ results });
+});
+
+// ── GBA ROM library (user-uploaded, admin-managed) ───────
+// Mirrors the Flash pattern, but the library is a live directory listing
+// rather than a fixed manifest: admins upload ROMs, everyone plays them. The
+// EmulatorJS emulator itself loads client-side from its CDN (see
+// public/games/gba-game.js), so only the ROMs ever live on the server.
+const GBA_ROMS_DIR = path.join(__dirname, 'public', 'games', 'gba_roms');
+const GBA_ROM_MAX_BYTES = 32 * 1024 * 1024;    // 32 MB — physical GBA cartridge ceiling
+const GBA_ROM_EXTS = ['.gb', '.gbc', '.gba'];  // Game Boy, Game Boy Color, Game Boy Advance
+
+// List uploaded ROMs (open — anyone can see/play, like /api/flash-rom-status)
+app.get('/api/gba-roms', (req, res) => {
+  let roms = [];
+  try {
+    if (fs.existsSync(GBA_ROMS_DIR)) {
+      roms = fs.readdirSync(GBA_ROMS_DIR)
+        .filter(f => GBA_ROM_EXTS.includes(path.extname(f).toLowerCase()))
+        .map(f => ({ file: f, title: path.basename(f, path.extname(f)) }));
+    }
+  } catch {}
+  res.json({ roms });
+});
+
+// Admin-only ROM upload (.gb/.gbc/.gba, 32 MB cap) — same auth gate as Flash installs
+const gbaRomUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      if (!fs.existsSync(GBA_ROMS_DIR)) fs.mkdirSync(GBA_ROMS_DIR, { recursive: true });
+      cb(null, GBA_ROMS_DIR);
+    },
+    // Keep a sanitized original name so the ROM list can use it as the title.
+    // Never overwrite an existing ROM: on a name clash, increment a numeric
+    // suffix (pokemon.gba -> pokemon1.gba -> pokemon2.gba). Each distinct
+    // filename is its own game — including for save syncing, whose key is
+    // derived from the filename (see the game_saves table / gba-game.js).
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const base = path.basename(file.originalname, ext)
+        .replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'rom';
+      let name = base + ext, n = 1;
+      try { while (fs.existsSync(path.join(GBA_ROMS_DIR, name))) name = base + (n++) + ext; } catch {}
+      cb(null, name);
+    }
+  }),
+  limits: { fileSize: GBA_ROM_MAX_BYTES },
+  fileFilter: (req, file, cb) => {
+    if (GBA_ROM_EXTS.includes(path.extname(file.originalname).toLowerCase())) cb(null, true);
+    else cb(new Error('Only Game Boy ROMs allowed (.gb, .gbc, .gba)'));
+  }
+});
+
+app.post('/api/upload-gba-rom', uploadLimiter, (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!verifyAdminFromDb(user)) return res.status(403).json({ error: 'Only admins can upload GBA ROMs' });
+
+  gbaRomUpload.single('rom')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    res.json({ file: req.file.filename, title: path.basename(req.file.filename, path.extname(req.file.filename)) });
+  });
+});
+
+// ── GBA battery-save sync (per-user .sav BLOBs) ──────────
+// Saves are per-user even though the ROM library is shared. The client keys
+// each save by save_key = SHA-256(filename + rom bytes) (see gba-game.js), so
+// two library copies of a game keep independent saves. Payloads are tiny, so
+// we accept multipart/form-data: it lets navigator.sendBeacon() flush a final
+// save on tab-close, and because a beacon can't set an Authorization header
+// the token may instead ride in a `token` body field.
+const GBA_SAVE_MAX_BYTES = 512 * 1024;   // battery saves are <=128 KB; margin blocks save-states
+const SAVE_KEY_RE = /^[a-f0-9]{64}$/;    // SHA-256 hex
+
+// Dedicated limiter: saves are legitimate frequent writes during play, so the
+// 10/min upload cap would wrongly 429 an active player. Tiny payloads, so a
+// higher ceiling is safe.
+const saveLimitStore = new Map();
+function saveLimiter(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress;
+  const now = Date.now();
+  if (!saveLimitStore.has(ip)) saveLimitStore.set(ip, []);
+  const stamps = saveLimitStore.get(ip).filter(t => now - t < 60 * 1000);
+  saveLimitStore.set(ip, stamps);
+  if (stamps.length >= 60) return res.status(429).json({ error: 'Save rate limit — try again shortly' });
+  stamps.push(now);
+  next();
+}
+setInterval(() => { const now = Date.now(); for (const [ip, t] of saveLimitStore) { const f = t.filter(x => now - x < 60000); if (!f.length) saveLimitStore.delete(ip); else saveLimitStore.set(ip, f); } }, 5 * 60 * 1000);
+
+const gbaSaveUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: GBA_SAVE_MAX_BYTES } });
+
+// Upsert a save (push during play + final beacon on close). Last-write-wins
+// per (user, save_key). Auth from header (fetch) or body token (beacon).
+app.post('/api/game-saves', saveLimiter, (req, res) => {
+  gbaSaveUpload.single('data')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    const token = req.headers.authorization?.split(' ')[1] || req.body?.token;
+    const user = token ? verifyToken(token) : null;
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const saveKey = (req.body.save_key || '').trim();
+    const romFile = (req.body.rom_file || '').toString().slice(0, 120);
+    if (!SAVE_KEY_RE.test(saveKey)) return res.status(400).json({ error: 'Invalid save_key' });
+    if (!req.file || !req.file.buffer?.length) return res.status(400).json({ error: 'No save data' });
+    const { getDb } = require('./src/database');
+    try {
+      getDb().prepare(`
+        INSERT INTO game_saves (user_id, save_key, rom_file, data, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, save_key)
+        DO UPDATE SET data = excluded.data, rom_file = excluded.rom_file, updated_at = CURRENT_TIMESTAMP
+      `).run(user.id, saveKey, romFile, req.file.buffer);
+      res.json({ ok: true });
+    } catch { res.status(500).json({ error: 'Failed to store save' }); }
+  });
+});
+
+// List the caller's saves (metadata only) for the Saves modal.
+app.get('/api/game-saves', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const { getDb } = require('./src/database');
+  let saves = [];
+  try {
+    saves = getDb().prepare(
+      'SELECT save_key, rom_file, LENGTH(data) AS size, updated_at FROM game_saves WHERE user_id = ? ORDER BY updated_at DESC'
+    ).all(user.id);
+  } catch {}
+  res.json({ saves });
+});
+
+// Fetch one save's raw bytes — used to inject at boot and to export.
+// The `X-Haven-Save: present|absent` header is a signal only this route emits:
+// it lets the client tell a real "no save" (deleted) apart from an infra 404 /
+// auth error / network drop, so it can safely wipe a stale local copy on the
+// deleted case only. `no-store` keeps that decision on live state, never a
+// cached response. See the wipe logic in public/games/gba-game.js.
+app.get('/api/game-saves/:save_key', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const saveKey = (req.params.save_key || '').trim();
+  if (!SAVE_KEY_RE.test(saveKey)) return res.status(400).json({ error: 'Invalid save_key' });
+  const { getDb } = require('./src/database');
+  const row = getDb().prepare('SELECT data FROM game_saves WHERE user_id = ? AND save_key = ?').get(user.id, saveKey);
+  res.set('Cache-Control', 'no-store');
+  if (!row) { res.set('X-Haven-Save', 'absent'); return res.status(200).end(); }
+  res.set('X-Haven-Save', 'present');
+  res.set('Content-Type', 'application/octet-stream');
+  res.send(row.data);
+});
+
+// Delete one of the caller's saves (from the Saves modal).
+app.delete('/api/game-saves/:save_key', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const saveKey = (req.params.save_key || '').trim();
+  if (!SAVE_KEY_RE.test(saveKey)) return res.status(400).json({ error: 'Invalid save_key' });
+  const { getDb } = require('./src/database');
+  try {
+    getDb().prepare('DELETE FROM game_saves WHERE user_id = ? AND save_key = ?').run(user.id, saveKey);
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Failed to delete save' }); }
 });
 
 // (duplicate avatar handler removed — handled above at /api/upload-avatar)

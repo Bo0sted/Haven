@@ -320,6 +320,25 @@ function initDatabase() {
     );
   `);
 
+  // ── Migration: game_saves table (GBA battery-save sync) ──
+  // Per-user battery saves (.sav) for the GBA/GB/GBC emulator. Stored as a
+  // BLOB rather than on disk: the files are tiny, ON DELETE CASCADE cleans
+  // them up with the user (like high_scores), they ride along in the DB
+  // backup, and writes are transactional so a crash can't corrupt a save.
+  // save_key = SHA-256(filename + rom bytes), so two library copies of the
+  // same game (different filenames) keep independent saves. rom_file is the
+  // human-readable name for the Saves modal / debugging only — never the key.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS game_saves (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      save_key   TEXT    NOT NULL,
+      rom_file   TEXT    NOT NULL,
+      data       BLOB    NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, save_key)
+    );
+  `);
+
   // ── Migration: user_nicknames table (#5394) ──────────────
   // Personal, private nicknames — only visible to the user who set them.
   // owner_id = the user who assigned the nickname; target_id = the user being renamed.

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GBA Game — Haven</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117;
+      color: #e6e6e6;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .gba-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    .gba-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+      flex: 1;
+    }
+    .volume-control { display: flex; align-items: center; gap: 8px; }
+    .volume-control label { font-size: 13px; color: #8b949e; }
+    .volume-control input[type="range"] { width: 100px; accent-color: #7c5cfc; }
+    .volume-pct { font-size: 12px; color: #8b949e; min-width: 32px; text-align: right; }
+    #game-container {
+      flex: 1;
+      min-height: 0;            /* let the flex item shrink; stops height feedback loop */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      position: relative;
+      overflow: hidden;         /* clip the emulator canvas to the bounded box */
+    }
+    /* Absolute inset gives EmulatorJS a DEFINITE box to measure; a plain
+       height:100% here resolves as auto inside the flex parent and the
+       canvas grows unbounded (black screen). */
+    #game { position: absolute; inset: 0; }
+    .loading-msg {
+      position: absolute;
+      text-align: center;
+      color: #8b949e;
+      font-size: 14px;
+    }
+    .loading-msg .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #30363d;
+      border-top-color: #7c5cfc;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: #f85149; text-align: center; padding: 20px; }
+    /* Persistent offline notice + backup-download button (see gba-game.js).
+       In-flow at the top (between header and game) so it never overlays the
+       canvas or hides behind the EmulatorJS menu bar. */
+    #offline-bar {
+      flex-shrink: 0;
+      display: none; align-items: center; justify-content: center; gap: 12px;
+      padding: 8px 16px; font-size: 13px;
+      background: #5a1e1e; color: #ffd7d7; border-bottom: 1px solid #f85149;
+    }
+    #offline-bar button {
+      background: #f85149; color: #fff; border: none; border-radius: 4px;
+      padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    /* Transient green status toast (save loaded / synced). Auto-dismisses;
+       floats so it never shifts the game layout. Shown by gba-game.js. */
+    #game-toast {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 200; display: none;
+      padding: 8px 16px; font-size: 13px; border-radius: 6px;
+      background: #1e5a2e; color: #d7ffd7; border: 1px solid #3fb950;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    /* Shared loader modal (WebGL warning + save-type notice); shown by gba-game.js */
+    .game-modal {
+      position: fixed; inset: 0; z-index: 100; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+    }
+    #webgl-warning { z-index: 101; }   /* on top if both are visible */
+    .game-modal .box {
+      max-width: 380px; margin: 20px; padding: 24px; text-align: center;
+      background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    }
+    .game-modal h3 { font-size: 16px; margin-bottom: 10px; }
+    .game-modal p { font-size: 13px; color: #8b949e; line-height: 1.5; margin-bottom: 18px; }
+    .game-modal .dsa {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      font-size: 12px; color: #8b949e; margin-bottom: 16px; cursor: pointer;
+    }
+    .game-modal button {
+      background: #7c5cfc; color: #fff; border: none; border-radius: 6px;
+      padding: 8px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="gba-header">
+    <h2 id="game-title">Loading...</h2>
+    <div class="volume-control">
+      <label>🔊</label>
+      <input type="range" id="volume-slider" min="0" max="100" value="80">
+      <span class="volume-pct" id="volume-pct">80%</span>
+    </div>
+  </div>
+  <div id="game-container">
+    <div class="loading-msg" id="loading-msg">
+      <div class="spinner"></div>
+      <div>Loading EmulatorJS…</div>
+    </div>
+    <div id="game"></div>
+  </div>
+
+  <!-- WebGL required: EmulatorJS renders through WebGL, so hardened browsers
+       that disable it (e.g. LibreWolf) can't display games. Shown by JS only. -->
+  <div id="webgl-warning" class="game-modal">
+    <div class="box">
+      <h3>⚠️ WebGL is disabled</h3>
+      <p>This browser has WebGL turned off, so the emulator may fail to display the game. Enable WebGL / hardware acceleration in your browser settings and reload.</p>
+      <button id="webgl-warning-ok">OK</button>
+    </div>
+  </div>
+
+  <!-- Save-type notice (dismissible): only in-game battery saves sync to the
+       server; EmulatorJS "memory saves" (save states) stay browser-local. -->
+  <div id="save-info" class="game-modal">
+    <div class="box">
+      <h3>💾 About saving</h3>
+      <p>Please note: “memory saves” (save states) via EmulatorJS are not saved to your server profile. Only “battery saves” — saving from the in-game menu — sync to your server profile.</p>
+      <label class="dsa"><input type="checkbox" id="save-info-dsa"> Don't show again</label>
+      <button id="save-info-ok">OK</button>
+    </div>
+  </div>
+
+  <script src="/games/gba-game.js"></script>
+</body>
+</html>

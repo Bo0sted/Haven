@@ -84,7 +84,7 @@ Your entire Discord history, now on a server you own. No one can delete it, no o
 **Option A — Pre-built image** (fastest, easiest updates):
 ```bash
 docker pull ghcr.io/ancsemi/haven:latest
-docker run -d -p 3000:3000 -v haven_data:/data ghcr.io/ancsemi/haven:latest
+docker run -d -p 3000:3000 -v haven_data:/data -v haven_flash_roms:/app/public/games/flash_roms -v haven_gba_roms:/app/public/games/gba_roms ghcr.io/ancsemi/haven:latest
 ```
 
 Or with Docker Compose (recommended):
