@@ -471,6 +471,7 @@ _setupNotifications() {
   // then rather than showing controls that have no effect.
   const shareActivityToggle = document.getElementById('share-activity');
   const shareGameToggle     = document.getElementById('share-game-activity');
+  const shareGbaToggle      = document.getElementById('share-gba-activity');
   const shareMusicToggle    = document.getElementById('share-music-activity');
   const activitySubOptions  = document.getElementById('activity-suboptions');
 
@@ -481,6 +482,7 @@ _setupNotifications() {
     if (shareActivityToggle) shareActivityToggle.checked = master;
     // Absent sub-preference means "on" — matches the server's read of it.
     if (shareGameToggle)  shareGameToggle.checked  = prefs.share_game_activity  !== 'false';
+    if (shareGbaToggle)   shareGbaToggle.checked   = prefs.share_gba_activity   !== 'false';
     if (shareMusicToggle) shareMusicToggle.checked = prefs.share_music_activity !== 'false';
     if (activitySubOptions) activitySubOptions.style.display = master ? '' : 'none';
   };
@@ -498,6 +500,7 @@ _setupNotifications() {
   };
   bindActivityToggle(shareActivityToggle, 'share_activity');
   bindActivityToggle(shareGameToggle,     'share_game_activity');
+  bindActivityToggle(shareGbaToggle,      'share_gba_activity');
   bindActivityToggle(shareMusicToggle,    'share_music_activity');
 
   // Ask for the linked-account list whenever settings are wired up; the
@@ -1095,6 +1098,38 @@ _launchGame(game) {
 
   // Request leaderboard for this game
   this.socket.emit('get-high-scores', { game: game.id });
+
+  // Rich presence: only Haven's own GB/GBC/GBA player feeds the "Playing"
+  // status. Flash is intentionally left out — that's the Flash maintainer's to
+  // add. Gated server-side by the user's share_gba_activity preference.
+  if (game.type === 'gba') {
+    this._gbaPresenceActive = true;
+    this.socket.emit('gba-launch', { title: game.name });
+    this._watchGbaPresence();
+  }
+},
+
+// Clear the "Playing" status once the game is no longer open. The game can run
+// in a pop-out window or an inline iframe; a popped-out window closing fires no
+// event we can hook, so poll its .closed flag (and the iframe overlay) and stop
+// reporting when neither is open. Cheap: it only runs while a ROM is launched.
+_watchGbaPresence() {
+  clearInterval(this._gbaPresenceTimer);
+  this._gbaPresenceTimer = setInterval(() => {
+    const overlay = document.getElementById('game-iframe-overlay');
+    const iframeOpen = !!overlay && overlay.style.display !== 'none';
+    const popoutOpen = !!this._gameWindow && !this._gameWindow.closed;
+    if (!iframeOpen && !popoutOpen) this._clearGbaPresence();
+  }, 2000);
+},
+
+_clearGbaPresence() {
+  clearInterval(this._gbaPresenceTimer);
+  this._gbaPresenceTimer = null;
+  if (this._gbaPresenceActive) {
+    this._gbaPresenceActive = false;
+    this.socket?.emit('gba-close');
+  }
 },
 
 _closeGameIframe() {
@@ -1104,17 +1139,28 @@ _closeGameIframe() {
   if (iframe) iframe.src = 'about:blank';
   this._currentGame = null;
   this._gameIframe = null;
+  // Closing the inline player ends GBA presence right away rather than waiting
+  // for the watcher's next tick. No-ops for Flash (presence was never set).
+  this._clearGbaPresence();
 },
 
 _popoutGame() {
   if (!this._currentGame) return;
+  const game = this._currentGame;
   const tok = localStorage.getItem('haven_token') || '';
-  const url = this._currentGame.path + '#token=' + encodeURIComponent(tok);
+  const url = game.path + '#token=' + encodeURIComponent(tok);
   const win = window.open(url, '_blank', 'width=740,height=860');
   // Only close the inline iframe if the popup actually opened
   if (win && !win.closed) {
     this._gameWindow = win;
+    // _closeGameIframe ends GBA presence, but the game is merely moving to the
+    // pop-out, not stopping — restore it and watch the new window instead.
     this._closeGameIframe();
+    if (game.type === 'gba') {
+      this._gbaPresenceActive = true;
+      this.socket.emit('gba-launch', { title: game.name });
+      this._watchGbaPresence();
+    }
   } else {
     this._showToast?.('Popup blocked — check your browser settings', 'error');
   }

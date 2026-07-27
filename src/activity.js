@@ -173,7 +173,7 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
     try {
       rows = db.prepare(
         `SELECT key, value FROM user_preferences
-         WHERE user_id = ? AND key IN ('share_activity','share_game_activity','share_music_activity')`
+         WHERE user_id = ? AND key IN ('share_activity','share_game_activity','share_gba_activity','share_music_activity')`
       ).all(userId);
     } catch { /* table missing on a very old DB */ }
     const map = {};
@@ -187,6 +187,7 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
       // everyone in that channel anyway.
       master: map.share_activity !== 'false',
       games:  map.share_game_activity !== 'false',
+      gba:    map.share_gba_activity !== 'false',
       music:  map.share_music_activity !== 'false',
     };
   }
@@ -220,7 +221,12 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
     const prefs = prefsFor(userId);
     if (!prefs.master) return null;
 
-    const playing   = prefs.games ? entry.playing   || null : null;
+    // Both the Steam poller and Haven's own GBA player feed the `playing` slot,
+    // but each answers to its own sub-toggle: Steam → games, Haven GBA → gba.
+    const rawPlaying = entry.playing || null;
+    const playing = rawPlaying
+      ? ((rawPlaying.source === 'haven-gba' ? prefs.gba : prefs.games) ? rawPlaying : null)
+      : null;
     const listening = prefs.music ? entry.listening || null : null;
     if (!playing && !listening) return null;
 
@@ -295,6 +301,35 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
       if (entry && entry.listening && entry.listening.source === 'haven') {
         setSlot(id, 'listening', null);
       }
+    }
+  }
+
+  // ── Source 1b: Haven's own GB/GBC/GBA player ────────────
+  /**
+   * Called when a user launches/closes a ROM in Haven's built-in emulator. It's
+   * the `playing`-slot counterpart of setHavenMusic: a first-party, in-app
+   * source that owns its slot while active, so the Steam poller yields to it
+   * (see pollSteam) exactly as Spotify yields to Haven music. Only the player
+   * themselves is "playing", so this takes a single user rather than a channel.
+   */
+  function setHavenGba(userId, game) {
+    const next = game && game.title
+      ? {
+          type: 'playing',
+          name: clean(game.title, 120),
+          details: '',
+          image: null,
+          source: 'haven-gba',
+          startedAt: Date.now(),
+        }
+      : null;
+    setSlot(userId, 'playing', next);
+  }
+
+  function clearHavenGba(userId) {
+    const entry = activity.get(userId);
+    if (entry && entry.playing && entry.playing.source === 'haven-gba') {
+      setSlot(userId, 'playing', null);
     }
   }
 
@@ -401,6 +436,11 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
         const userId = bySteamId.get(String(p.steamid));
         if (!userId) continue;
         seen.add(userId);
+
+        // Haven's own GBA player wins its own slot — don't let Steam clobber a
+        // ROM the user is actively playing in-app (mirrors the Spotify guard).
+        const cur = activity.get(userId);
+        if (cur?.playing && cur.playing.source === 'haven-gba') continue;
 
         if (p.gameextrainfo) {
           setSlot(userId, 'playing', {
@@ -674,6 +714,8 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
     // write
     setHavenMusic,
     clearHavenMusic,
+    setHavenGba,
+    clearHavenGba,
     clearUser,
     saveConnection,
     removeConnection,

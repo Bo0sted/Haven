@@ -468,7 +468,7 @@ module.exports = function register(socket, ctx) {
       // Rich presence. share_activity is the master switch and defaults to
       // OFF (absent row = not sharing); the two sub-toggles default ON but
       // only matter once the master is enabled.
-      'share_activity', 'share_game_activity', 'share_music_activity',
+      'share_activity', 'share_game_activity', 'share_gba_activity', 'share_music_activity',
     ];
     if (!allowedKeys.includes(key) || !value || value.length > 50) return;
 
@@ -483,7 +483,7 @@ module.exports = function register(socket, ctx) {
     // sees (or stops seeing) the badge without waiting for the next organic update.
     // Activity toggles need the same treatment: flipping sharing off must take
     // effect for other viewers immediately, not on the next poll tick.
-    const ACTIVITY_KEYS = ['share_activity', 'share_game_activity', 'share_music_activity'];
+    const ACTIVITY_KEYS = ['share_activity', 'share_game_activity', 'share_gba_activity', 'share_music_activity'];
     if ((key === 'hide_score_badge' || ACTIVITY_KEYS.includes(key)) && socket.currentChannel) {
       emitOnlineUsers(socket.currentChannel);
     }
@@ -502,6 +502,23 @@ module.exports = function register(socket, ctx) {
         lastfm: activity.isLastfmConfigured(),
       },
     });
+  });
+
+  // ── Rich presence: Haven's own GB/GBC/GBA player ────────
+  // The client reports launching/closing a ROM in the built-in emulator; the
+  // activity engine gates visibility behind the user's share_gba_activity
+  // preference, so we don't repeat that check here (mirrors music-share, which
+  // also just forwards into the engine). No account to link — like Haven music.
+  socket.on('gba-launch', (data) => {
+    if (!activity) return;
+    const title = typeof data?.title === 'string' ? data.title.trim() : '';
+    if (!title) return;
+    activity.setHavenGba(socket.user.id, { title });
+  });
+
+  socket.on('gba-close', () => {
+    if (!activity) return;
+    activity.clearHavenGba(socket.user.id);
   });
 
   /**

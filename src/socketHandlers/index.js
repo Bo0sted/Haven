@@ -1622,6 +1622,18 @@ function setupSocketHandlers(io, db, opts = {}) {
         emitOnlineUsers(code);
       }
 
+      // End any Haven GBA "playing" presence when the user's last socket goes
+      // away, so it doesn't freeze on the ROM they were in. Mirrors the way
+      // voice-leave clears Haven music; clearHavenGba no-ops unless the current
+      // entry is actually GBA-sourced, and we only clear once no tab remains.
+      if (state.activity) {
+        let anotherSocket = false;
+        for (const [, s] of io.of('/').sockets) {
+          if (s.user && s.user.id === socket.user.id && s.id !== socket.id) { anotherSocket = true; break; }
+        }
+        if (!anotherSocket) state.activity.clearHavenGba(socket.user.id);
+      }
+
       for (const code of Array.from(voiceUsers.keys())) {
         const room = voiceUsers.get(code);
         if (!room) continue;
