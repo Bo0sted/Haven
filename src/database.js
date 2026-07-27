@@ -361,6 +361,8 @@ function initDatabase() {
   insertSetting.run('registration_captcha_enabled', 'false'); // opt-in Cloudflare Turnstile CAPTCHA on registration
   insertSetting.run('turnstile_site_key', '');          // Turnstile public site key (safe to expose to the page)
   insertSetting.run('turnstile_secret_key', '');        // Turnstile secret key (server-side verification only, never sent to clients)
+  insertSetting.run('registration_rate_limit_enabled', 'false'); // opt-in global cap on new accounts per hour
+  insertSetting.run('registration_rate_limit_per_hour', '20');   // the cap value when enabled
   insertSetting.run('max_upload_mb', '25');             // max file upload size in MB
   insertSetting.run('max_poll_options', '10');            // max poll answer options (2–25)
   insertSetting.run('max_message_chars', '2000');         // max characters per message (200–100000)

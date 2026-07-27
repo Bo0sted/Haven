@@ -110,6 +110,17 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
+// ── Global registration velocity limiter (opt-in) ───────
+// Caps how many new accounts can be created server-wide per rolling hour, to
+// blunt a bot wave even when it is spread across many IPs (the per-IP limiter
+// above can't). In-memory, so it resets on restart — same as the others here.
+const _regTimestamps = [];
+function _regCountLastHour() {
+  const cutoff = Date.now() - 3600 * 1000;
+  while (_regTimestamps.length && _regTimestamps[0] < cutoff) _regTimestamps.shift();
+  return _regTimestamps.length;
+}
+
 // ── Input Sanitization ──────────────────────────────────
 function sanitizeString(str, maxLen = 200) {
   if (typeof str !== 'string') return '';
@@ -434,6 +445,17 @@ router.post('/register', authLimiter, async (req, res) => {
       }
     }
 
+    // Global registration rate limit (opt-in). Caps new accounts per rolling
+    // hour server-wide to blunt a bot wave spread across many IPs.
+    const rlEnabledRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_rate_limit_enabled'").get();
+    if (rlEnabledRow && rlEnabledRow.value === 'true') {
+      const rlRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_rate_limit_per_hour'").get();
+      const limit = Math.max(1, parseInt(rlRow && rlRow.value, 10) || 20);
+      if (_regCountLastHour() >= limit) {
+        return res.status(429).json({ error: 'This server is temporarily limiting new sign-ups. Please try again later.' });
+      }
+    }
+
     const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(username);
     if (existing) {
       return res.status(400).json({ error: 'Registration could not be completed' });
@@ -457,6 +479,7 @@ router.post('/register', authLimiter, async (req, res) => {
     const result = db.prepare(
       'INSERT INTO users (username, password_hash, is_admin, avatar) VALUES (?, ?, ?, ?)'
     ).run(username, hash, isAdmin, avatarPath);
+    _regTimestamps.push(Date.now()); // feed the opt-in global registration rate limit
 
     // Auto-assign roles flagged as auto_assign to new users
     try {

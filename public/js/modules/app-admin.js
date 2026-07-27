@@ -448,6 +448,10 @@ _applyServerSettings() {
   if (capSite) capSite.value = this.serverSettings.turnstile_site_key || '';
   const capSecret = document.getElementById('turnstile-secret-key');
   if (capSecret) capSecret.value = this.serverSettings.turnstile_secret_key || '';
+  const rlToggle = document.getElementById('registration-rate-limit-enabled');
+  if (rlToggle) rlToggle.checked = this.serverSettings.registration_rate_limit_enabled === 'true';
+  const rlNum = document.getElementById('registration-rate-limit-per-hour');
+  if (rlNum) rlNum.value = this.serverSettings.registration_rate_limit_per_hour || '20';
 
   // (#5345) Default join channels — re-render when settings or channel list refresh
   if (typeof this._renderDefaultJoinChannels === 'function') {
@@ -704,6 +708,8 @@ _snapshotAdminSettings() {
     registration_captcha_enabled: this.serverSettings.registration_captcha_enabled || 'false',
     turnstile_site_key: this.serverSettings.turnstile_site_key || '',
     turnstile_secret_key: this.serverSettings.turnstile_secret_key || '',
+    registration_rate_limit_enabled: this.serverSettings.registration_rate_limit_enabled || 'false',
+    registration_rate_limit_per_hour: this.serverSettings.registration_rate_limit_per_hour || '20',
     default_theme: this.serverSettings.default_theme || '',
     default_locale: this.serverSettings.default_locale || '',
     published_themes: this.serverSettings.published_themes || '[]',
@@ -849,6 +855,16 @@ _saveAdminSettings() {
   const tsSecret = (document.getElementById('turnstile-secret-key')?.value || '').trim();
   if (tsSecret !== (snap.turnstile_secret_key || '')) {
     this.socket.emit('update-server-setting', { key: 'turnstile_secret_key', value: tsSecret });
+    changed = true;
+  }
+  const rlEnabled = document.getElementById('registration-rate-limit-enabled')?.checked ? 'true' : 'false';
+  if (rlEnabled !== (snap.registration_rate_limit_enabled || 'false')) {
+    this.socket.emit('update-server-setting', { key: 'registration_rate_limit_enabled', value: rlEnabled });
+    changed = true;
+  }
+  const rlPerHour = (document.getElementById('registration-rate-limit-per-hour')?.value || '20').trim();
+  if (rlPerHour !== (snap.registration_rate_limit_per_hour || '20')) {
+    this.socket.emit('update-server-setting', { key: 'registration_rate_limit_per_hour', value: rlPerHour });
     changed = true;
   }
 
@@ -1475,7 +1491,6 @@ _openBulkCleanup() {
 
   const previewBox = $('#bc-preview');
   const confirmBtn = $('.bc-confirm-btn');
-  let lastMatchCount = 0;
 
   const buildFilter = () => {
     const filter = {};
@@ -1488,10 +1503,25 @@ _openBulkCleanup() {
     return filter;
   };
 
-  // Any filter change invalidates a prior preview so the admin can't confirm
-  // a count that no longer matches the current filters.
+  const selectedIds = () =>
+    [...overlay.querySelectorAll('.bc-user-check:checked')].map(el => parseInt(el.dataset.id, 10)).filter(Number.isInteger);
+
+  const refreshConfirm = () => {
+    const n = selectedIds().length;
+    confirmBtn.disabled = n === 0;
+    confirmBtn.textContent = n === 0
+      ? t('modals.bulk_cleanup.remove_btn')
+      : t('modals.bulk_cleanup.remove_n_btn').replace('{n}', n);
+  };
+
+  // Any filter change invalidates a prior preview so the admin can't act on a
+  // stale list.
   ['#bc-join-enabled', '#bc-join-hours', '#bc-zero-msgs', '#bc-new-only'].forEach(sel => {
-    $(sel).addEventListener('change', () => { confirmBtn.disabled = true; previewBox.style.display = 'none'; });
+    $(sel).addEventListener('change', () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = t('modals.bulk_cleanup.remove_btn');
+      previewBox.style.display = 'none';
+    });
   });
 
   $('.bc-preview-btn').addEventListener('click', () => {
@@ -1502,45 +1532,58 @@ _openBulkCleanup() {
       return;
     }
     this.socket.emit('bulk-remove-users', { filter, dryRun: true }, (res) => {
+      previewBox.style.display = 'block';
       if (!res || res.error) {
-        previewBox.style.display = 'block';
         previewBox.innerHTML = `<span style="color:var(--danger)">${this._escapeHtml(res && res.error ? res.error : 'Preview failed')}</span>`;
         return;
       }
-      lastMatchCount = res.total;
-      previewBox.style.display = 'block';
+      const users = res.users || [];
       if (res.total === 0) {
         previewBox.innerHTML = t('modals.bulk_cleanup.no_match');
         confirmBtn.disabled = true;
+        confirmBtn.textContent = t('modals.bulk_cleanup.remove_btn');
         return;
       }
-      const sample = (res.sample || []).map(s =>
-        `<li>${this._escapeHtml(s.username)} <span style="color:var(--text-muted)">${this._escapeHtml((s.createdAt || '').slice(0, 10))}</span></li>`).join('');
+      const rows = users.map(u => {
+        const date = this._escapeHtml((u.createdAt || '').slice(0, 10));
+        const msgs = t('modals.bulk_cleanup.msgs').replace('{n}', u.msgCount || 0);
+        const flag = (u.msgCount > 0)
+          ? ` <span style="color:var(--warning,#e0a800)" title="${this._escapeHtml(t('modals.bulk_cleanup.has_activity'))}">&#9873;</span>` : '';
+        return `<label style="display:flex;align-items:center;gap:8px;padding:2px 0;">
+            <input type="checkbox" class="bc-user-check" data-id="${u.id}" checked>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._escapeHtml(u.username)}${flag}</span>
+            <span style="color:var(--text-muted);font-size:0.8em;white-space:nowrap;">${date} &middot; ${msgs}</span>
+          </label>`;
+      }).join('');
       previewBox.innerHTML =
-        `<strong>${t('modals.bulk_cleanup.match_count').replace('{n}', res.total)}</strong>` +
-        `${res.capped ? ` <span style="color:var(--text-muted)">(${t('modals.bulk_cleanup.capped')})</span>` : ''}` +
-        `<ul style="margin:6px 0 0 0;padding-left:18px;max-height:140px;overflow:auto;">${sample}</ul>` +
-        `${res.total > (res.sample || []).length ? `<div style="color:var(--text-muted);margin-top:4px">${t('modals.bulk_cleanup.and_more')}</div>` : ''}`;
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = t('modals.bulk_cleanup.remove_n_btn').replace('{n}', res.total);
+        `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">` +
+          `<strong>${t('modals.bulk_cleanup.match_count').replace('{n}', res.total)}${res.capped ? ` <span style="color:var(--text-muted);font-weight:normal">(${t('modals.bulk_cleanup.capped')})</span>` : ''}</strong>` +
+          `<span><button type="button" class="btn-sm bc-check-all">${t('modals.bulk_cleanup.select_all')}</button> <button type="button" class="btn-sm bc-check-none">${t('modals.bulk_cleanup.select_none')}</button></span>` +
+        `</div>` +
+        `<div style="color:var(--text-muted);font-size:0.8em;margin-bottom:4px;">${t('modals.bulk_cleanup.vet_hint')}</div>` +
+        `<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px 8px;">${rows}</div>`;
+      previewBox.querySelector('.bc-check-all').addEventListener('click', () => { previewBox.querySelectorAll('.bc-user-check').forEach(c => { c.checked = true; }); refreshConfirm(); });
+      previewBox.querySelector('.bc-check-none').addEventListener('click', () => { previewBox.querySelectorAll('.bc-user-check').forEach(c => { c.checked = false; }); refreshConfirm(); });
+      previewBox.querySelectorAll('.bc-user-check').forEach(c => c.addEventListener('change', refreshConfirm));
+      refreshConfirm();
     });
   });
 
   confirmBtn.addEventListener('click', () => {
-    if (!lastMatchCount) return;
-    const filter = buildFilter();
-    if (!confirm(t('modals.bulk_cleanup.confirm').replace('{n}', lastMatchCount))) return;
+    const ids = selectedIds();
+    if (ids.length === 0) return;
+    if (!confirm(t('modals.bulk_cleanup.confirm').replace('{n}', ids.length))) return;
     confirmBtn.disabled = true;
     confirmBtn.textContent = t('modals.bulk_cleanup.working');
     this.socket.emit('bulk-remove-users', {
-      filter,
+      userIds: ids,
       scrubMessages: $('#bc-scrub-msgs').checked,
       banIp: $('#bc-ban-ip').checked
     }, (res) => {
       if (!res || res.error) {
         if (this._showToast) this._showToast(res && res.error ? res.error : t('modals.bulk_cleanup.failed'), 'error', 6000);
         confirmBtn.disabled = false;
-        confirmBtn.textContent = t('modals.bulk_cleanup.remove_btn');
+        refreshConfirm();
         return;
       }
       close();

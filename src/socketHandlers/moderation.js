@@ -366,135 +366,142 @@ module.exports = function register(socket, ctx) {
   });
 
   // ── Bulk remove users (bot-wave cleanup) ────────────────
-  // Admin-only. Filters accounts by join recency / zero activity / New flag,
-  // then either previews the match (dryRun) or bans + deletes the whole set in
-  // one pass. ALWAYS excludes admins, the acting admin, and anyone holding an
-  // assigned role, and requires at least one narrowing filter so it can never
-  // sweep the entire user table.
+  // Admin-only, two-phase. A PREVIEW (no userIds) filters accounts by join
+  // recency / zero activity / New flag and returns the candidate list with
+  // per-account message counts, so the admin can uncheck any real users the
+  // filter caught. A COMMIT (userIds present) bans + deletes exactly the
+  // accounts the admin kept checked. Both phases ALWAYS exclude admins, the
+  // acting admin, and anyone holding an assigned role; preview requires at
+  // least one filter so it can never sweep the whole table.
   socket.on('bulk-remove-users', (data, callback) => {
     const cb = typeof callback === 'function' ? callback : () => {};
     if (!socket.user.isAdmin) return cb({ error: 'Only admins can bulk-remove users' });
     if (!data || typeof data !== 'object') return cb({ error: 'Bad request' });
 
+    // ── COMMIT: an explicit, admin-vetted list of user IDs ──
+    if (Array.isArray(data.userIds)) {
+      const requested = [...new Set(data.userIds.filter(x => Number.isInteger(x)))].slice(0, 10000);
+      if (requested.length === 0) return cb({ ok: true, removed: 0, total: 0 });
+      const reason = (typeof data.reason === 'string' && data.reason.trim()) ? data.reason.trim().slice(0, 200) : 'Bulk cleanup';
+
+      // Re-apply the hard exclusions server-side — never trust the client to
+      // have kept staff or the acting admin out of the list. "Staff" means a
+      // deliberately-granted (non-auto-assign) role; the default role every
+      // account gets on registration is auto_assign and must NOT protect a bot.
+      const ph = requested.map(() => '?').join(',');
+      let targets;
+      try {
+        targets = db.prepare(
+          `SELECT u.id, u.username, u.display_name FROM users u
+           WHERE u.id IN (${ph}) AND u.is_admin = 0 AND u.id != ?
+             AND NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+                             WHERE ur.user_id = u.id AND r.auto_assign = 0)`
+        ).all(...requested, socket.user.id);
+      } catch (err) {
+        console.error('bulk-remove-users select error:', err);
+        return cb({ error: 'Failed to look up selected accounts' });
+      }
+      if (targets.length === 0) return cb({ ok: true, removed: 0, total: requested.length });
+      const ids = targets.map(t => t.id);
+
+      // Optional IP ban (off by default): a botnet spreads across many
+      // addresses and some may be shared (CGNAT), so this needs ban_ip.
+      let ipBanned = 0;
+      if (data.banIp && (socket.user.isAdmin || userHasPermission(socket.user.id, 'ban_ip'))) {
+        try {
+          const ipStmt = db.prepare('INSERT OR REPLACE INTO ip_bans (ip, banned_by, reason) VALUES (?, ?, ?)');
+          const banIps = db.transaction((idList) => {
+            const seen = new Set();
+            for (const uid of idList) {
+              for (const r of db.prepare('SELECT ip FROM user_ips WHERE user_id = ? ORDER BY last_seen DESC LIMIT 3').all(uid)) {
+                if (!r.ip || seen.has(r.ip)) continue;
+                seen.add(r.ip);
+                ipStmt.run(r.ip, socket.user.id, `[Bulk cleanup] ${reason}`.slice(0, 200));
+                ipBanned++;
+              }
+            }
+          });
+          banIps(ids);
+          if (ipBanned > 0) _invalidateIpCache();
+        } catch (err) { console.error('bulk-remove-users IP ban error:', err); }
+      }
+
+      // Kick live sockets and drop them from in-memory presence/voice maps.
+      const idSet = new Set(ids);
+      for (const [, s] of io.sockets.sockets) {
+        if (s.user && idSet.has(s.user.id)) { s.emit('banned', { reason: 'Your account was removed by an admin.' }); s.disconnect(true); }
+      }
+      for (const [code, users] of channelUsers) {
+        let changed = false;
+        for (const uid of ids) if (users.delete(uid)) changed = true;
+        if (changed) emitOnlineUsers(code);
+      }
+      for (const [code, users] of voiceUsers) {
+        let changed = false;
+        for (const uid of ids) if (users.delete(uid)) changed = true;
+        if (changed) broadcastVoiceUsers(code);
+      }
+
+      let removed = 0;
+      try {
+        const purgeAll = db.transaction((list) => {
+          for (const t of list) { purgeUserCascade(t.id, { username: t.username, display_name: t.display_name }, socket.user.id, !!data.scrubMessages, reason); removed++; }
+        });
+        purgeAll(targets);
+      } catch (err) {
+        console.error('bulk-remove-users purge error:', err);
+        return cb({ error: `Failed partway — removed ${removed} of ${targets.length}` });
+      }
+
+      _audit({ actor: socket.user, action: 'user_bulk_remove', target_type: 'user', target_id: null, target_name: null,
+        details: { removed, requested: requested.length, ipBanned, scrubMessages: !!data.scrubMessages, reason } });
+      for (const [, s] of io.sockets.sockets) { if (s.user && s.user.isAdmin) s.emit('users-bulk-removed', { removed, ids }); }
+      console.log(`🧹 Admin ${socket.user.username} bulk-removed ${removed} user(s)${ipBanned ? ` and ${ipBanned} IP(s)` : ''}`);
+      return cb({ ok: true, removed, total: requested.length, ipBanned });
+    }
+
+    // ── PREVIEW: filter → candidate list for the checkbox review ──
     const f = (data.filter && typeof data.filter === 'object') ? data.filter : {};
     const joinedWithinHours = Number.isFinite(f.joinedWithinHours) && f.joinedWithinHours > 0
       ? Math.min(Math.floor(f.joinedWithinHours), 24 * 3650) : null;
     const zeroMessages = f.zeroMessages === true;
     const newOnly = f.newOnly === true;   // 'New' badge == joined within 7 days
-
     if (!joinedWithinHours && !zeroMessages && !newOnly) {
       return cb({ error: 'Pick at least one filter — refusing to select every account.' });
     }
 
-    // Hard exclusions keep staff safe no matter what filters are set.
+    // Hard exclusions keep staff safe no matter what filters are set. A
+    // deliberately-granted (non-auto-assign) role marks staff; the default role
+    // every account receives on registration is auto_assign and must not shield
+    // a bot from cleanup.
     const where = [
       'u.is_admin = 0',
       'u.id != @actorId',
-      'NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id)'
+      'NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.auto_assign = 0)'
     ];
     const params = { actorId: socket.user.id };
     if (joinedWithinHours) { where.push("u.created_at >= datetime('now', @joinWindow)"); params.joinWindow = `-${joinedWithinHours} hours`; }
     if (newOnly)           where.push("u.created_at >= datetime('now', '-7 days')");
     if (zeroMessages)      where.push('NOT EXISTS (SELECT 1 FROM messages m WHERE m.user_id = u.id)');
+    const whereSql = where.join(' AND ');
 
-    let matches;
+    const PREVIEW_CAP = 2000;
+    let rows, total;
     try {
-      matches = db.prepare(
-        `SELECT u.id, u.username, u.display_name, u.created_at
-         FROM users u WHERE ${where.join(' AND ')} ORDER BY u.created_at DESC`
+      total = db.prepare(`SELECT COUNT(*) AS c FROM users u WHERE ${whereSql}`).get(params).c;
+      rows = db.prepare(
+        `SELECT u.id, u.username, u.display_name, u.created_at,
+                (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS msg_count
+         FROM users u WHERE ${whereSql} ORDER BY u.created_at DESC LIMIT ${PREVIEW_CAP}`
       ).all(params);
     } catch (err) {
-      console.error('bulk-remove-users query error:', err);
+      console.error('bulk-remove-users preview error:', err);
       return cb({ error: 'Failed to compute matches' });
     }
-
-    const MAX = 10000;
-    const total = matches.length;
-
-    // Dry run: return count + a small sample so the admin confirms exactly
-    // what is about to be wiped before anything is deleted.
-    if (data.dryRun) {
-      return cb({
-        ok: true, total, capped: total > MAX,
-        sample: matches.slice(0, 25).map(m => ({ id: m.id, username: m.display_name || m.username, createdAt: m.created_at }))
-      });
-    }
-
-    if (total === 0) return cb({ ok: true, removed: 0, total: 0 });
-
-    const toRemove = matches.slice(0, MAX);
-    const ids = toRemove.map(m => m.id);
-    const reason = (typeof data.reason === 'string' && data.reason.trim()) ? data.reason.trim().slice(0, 200) : 'Bulk cleanup';
-
-    // Optionally block the accounts' recent IPs from re-registering. Off by
-    // default: a botnet spreads across many addresses and some may be shared
-    // (CGNAT), so this is opt-in and needs ban_ip.
-    let ipBanned = 0;
-    if (data.banIp && (socket.user.isAdmin || userHasPermission(socket.user.id, 'ban_ip'))) {
-      try {
-        const ipStmt = db.prepare('INSERT OR REPLACE INTO ip_bans (ip, banned_by, reason) VALUES (?, ?, ?)');
-        const banIps = db.transaction((idList) => {
-          const seen = new Set();
-          for (const uid of idList) {
-            for (const r of db.prepare('SELECT ip FROM user_ips WHERE user_id = ? ORDER BY last_seen DESC LIMIT 3').all(uid)) {
-              if (!r.ip || seen.has(r.ip)) continue;
-              seen.add(r.ip);
-              ipStmt.run(r.ip, socket.user.id, `[Bulk cleanup] ${reason}`.slice(0, 200));
-              ipBanned++;
-            }
-          }
-        });
-        banIps(ids);
-        if (ipBanned > 0) _invalidateIpCache();
-      } catch (err) {
-        console.error('bulk-remove-users IP ban error:', err);
-      }
-    }
-
-    // Kick any live sockets for these accounts, then drop them from the
-    // in-memory presence/voice maps so rosters update immediately.
-    const idSet = new Set(ids);
-    for (const [, s] of io.sockets.sockets) {
-      if (s.user && idSet.has(s.user.id)) {
-        s.emit('banned', { reason: 'Your account was removed by an admin.' });
-        s.disconnect(true);
-      }
-    }
-    for (const [code, users] of channelUsers) {
-      let changed = false;
-      for (const uid of ids) if (users.delete(uid)) changed = true;
-      if (changed) emitOnlineUsers(code);
-    }
-    for (const [code, users] of voiceUsers) {
-      let changed = false;
-      for (const uid of ids) if (users.delete(uid)) changed = true;
-      if (changed) broadcastVoiceUsers(code);
-    }
-
-    let removed = 0;
-    try {
-      const purgeAll = db.transaction((rows) => {
-        for (const row of rows) {
-          purgeUserCascade(row.id, { username: row.username, display_name: row.display_name }, socket.user.id, !!data.scrubMessages, reason);
-          removed++;
-        }
-      });
-      purgeAll(toRemove);
-    } catch (err) {
-      console.error('bulk-remove-users purge error:', err);
-      return cb({ error: `Failed partway — removed ${removed} of ${total}` });
-    }
-
-    _audit({ actor: socket.user, action: 'user_bulk_remove',
-      target_type: 'user', target_id: null, target_name: null,
-      details: { removed, total, filter: { joinedWithinHours, zeroMessages, newOnly }, ipBanned, scrubMessages: !!data.scrubMessages, reason } });
-
-    for (const [, s] of io.sockets.sockets) {
-      if (s.user && s.user.isAdmin) s.emit('users-bulk-removed', { removed, ids });
-    }
-
-    console.log(`🧹 Admin ${socket.user.username} bulk-removed ${removed} user(s)${ipBanned ? ` and ${ipBanned} IP(s)` : ''}`);
-    return cb({ ok: true, removed, total, capped: total > MAX, ipBanned });
+    return cb({
+      ok: true, total, capped: total > PREVIEW_CAP,
+      users: rows.map(r => ({ id: r.id, username: r.display_name || r.username, createdAt: r.created_at, msgCount: r.msg_count }))
+    });
   });
 
   // ── Self-delete account ─────────────────────────────────

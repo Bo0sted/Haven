@@ -47,12 +47,15 @@ module.exports = function register(socket, ctx) {
       'admin_password_reset_enabled', // (#5300) admin password reset feature gate
       'guests_enabled', 'guest_channels', // (#5381) Join-as-Guest toggle + per-channel whitelist (CSV of channel ids)
       'stun_urls', 'turn_url', 'turn_username', 'turn_password', // (#5399) voice connectivity (STUN/TURN)
-      'registration_captcha_enabled', 'turnstile_site_key', 'turnstile_secret_key' // opt-in Cloudflare Turnstile on registration
+      'registration_captcha_enabled', 'turnstile_site_key', 'turnstile_secret_key', // opt-in Cloudflare Turnstile on registration
+      'registration_rate_limit_enabled', 'registration_rate_limit_per_hour' // opt-in global new-account velocity cap
     ];
     if (!allowedKeys.includes(key)) return;
 
     if (key === 'registration_captcha_enabled' && !['true', 'false'].includes(value)) return;
     if ((key === 'turnstile_site_key' || key === 'turnstile_secret_key') && value.length > 200) return;
+    if (key === 'registration_rate_limit_enabled' && !['true', 'false'].includes(value)) return;
+    if (key === 'registration_rate_limit_per_hour') { const n = parseInt(value); if (isNaN(n) || n < 1 || n > 100000) return; }
 
     if (key === 'member_visibility' && !['all', 'online', 'none'].includes(value)) return;
     if (key === 'cleanup_enabled' && !['true', 'false'].includes(value)) return;
