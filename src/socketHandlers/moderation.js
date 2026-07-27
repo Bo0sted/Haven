@@ -21,6 +21,48 @@ module.exports = function register(socket, ctx) {
     if (_tableExists[table]) db.prepare(sql).run(...params);
   }
 
+  // ── Full account-purge cascade ──────────────────────────
+  // Deletes a user and cleans up / reassigns all of their rows. Caller MUST
+  // wrap this in a db.transaction. Shared by the single delete-user handler
+  // and the bulk-remove-users cleanup tool so both stay in lockstep.
+  // `targetUser` needs { username, display_name }.
+  function purgeUserCascade(uid, targetUser, actorId, scrubMessages, reason) {
+    db.prepare('DELETE FROM reactions WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM mutes WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM bans WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM channel_members WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM read_positions WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM fcm_tokens WHERE user_id = ?').run(uid);
+    db.prepare('UPDATE pinned_messages SET pinned_by = ? WHERE pinned_by = ?').run(actorId, uid);
+    db.prepare('DELETE FROM high_scores WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM eula_acceptances WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM user_preferences WHERE user_id = ?').run(uid);
+    updateIfTableExists('user_connections', 'DELETE FROM user_connections WHERE user_id = ?', uid);
+    try { ctx.state?.activity?.clearUser(uid); } catch { /* presence is best-effort */ }
+    db.prepare('UPDATE channels SET created_by = NULL WHERE created_by = ?').run(uid);
+    updateIfTableExists('uploads', 'UPDATE uploads SET uploaded_by = NULL WHERE uploaded_by = ?', uid);
+    updateIfTableExists('channel_emojis', 'UPDATE channel_emojis SET uploaded_by = NULL WHERE uploaded_by = ?', uid);
+    db.prepare('UPDATE bans SET banned_by = ? WHERE banned_by = ?').run(actorId, uid);
+    db.prepare('UPDATE mutes SET muted_by = ? WHERE muted_by = ?').run(actorId, uid);
+    db.prepare('UPDATE user_roles SET granted_by = NULL WHERE granted_by = ?').run(uid);
+    updateIfTableExists('webhook_configs', 'UPDATE webhook_configs SET created_by = NULL WHERE created_by = ?', uid);
+    db.prepare('UPDATE whitelist SET added_by = NULL WHERE added_by = ?').run(uid);
+    db.prepare('UPDATE deleted_users SET deleted_by = NULL WHERE deleted_by = ?').run(uid);
+    if (scrubMessages) {
+      db.prepare('DELETE FROM pinned_messages WHERE message_id IN (SELECT id FROM messages WHERE user_id = ? AND is_archived = 0)').run(uid);
+      db.prepare('DELETE FROM messages WHERE user_id = ? AND is_archived = 0').run(uid);
+      db.prepare('UPDATE messages SET user_id = NULL WHERE user_id = ?').run(uid);
+    } else {
+      db.prepare('UPDATE messages SET user_id = NULL WHERE user_id = ?').run(uid);
+    }
+    db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+    db.prepare('INSERT INTO deleted_users (username, display_name, reason, deleted_by) VALUES (?, ?, ?, ?)').run(
+      targetUser.username, targetUser.display_name, reason || '', actorId
+    );
+  }
+
   // ── Kick user ───────────────────────────────────────────
   socket.on('kick-user', (data) => {
     if (!data || typeof data !== 'object') return;
@@ -295,40 +337,7 @@ module.exports = function register(socket, ctx) {
     }
 
     const purge = db.transaction((uid) => {
-      db.prepare('DELETE FROM reactions WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM mutes WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM bans WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM channel_members WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM read_positions WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM fcm_tokens WHERE user_id = ?').run(uid);
-      db.prepare('UPDATE pinned_messages SET pinned_by = ? WHERE pinned_by = ?').run(socket.user.id, uid);
-      db.prepare('DELETE FROM high_scores WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM eula_acceptances WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM user_preferences WHERE user_id = ?').run(uid);
-      updateIfTableExists('user_connections', 'DELETE FROM user_connections WHERE user_id = ?', uid);
-      try { ctx.state?.activity?.clearUser(uid); } catch { /* presence is best-effort */ }
-      db.prepare('UPDATE channels SET created_by = NULL WHERE created_by = ?').run(uid);
-      updateIfTableExists('uploads', 'UPDATE uploads SET uploaded_by = NULL WHERE uploaded_by = ?', uid);
-      updateIfTableExists('channel_emojis', 'UPDATE channel_emojis SET uploaded_by = NULL WHERE uploaded_by = ?', uid);
-      db.prepare('UPDATE bans SET banned_by = ? WHERE banned_by = ?').run(socket.user.id, uid);
-      db.prepare('UPDATE mutes SET muted_by = ? WHERE muted_by = ?').run(socket.user.id, uid);
-      db.prepare('UPDATE user_roles SET granted_by = NULL WHERE granted_by = ?').run(uid);
-      updateIfTableExists('webhook_configs', 'UPDATE webhook_configs SET created_by = NULL WHERE created_by = ?', uid);
-      db.prepare('UPDATE whitelist SET added_by = NULL WHERE added_by = ?').run(uid);
-      db.prepare('UPDATE deleted_users SET deleted_by = NULL WHERE deleted_by = ?').run(uid);
-      if (data.scrubMessages) {
-        db.prepare('DELETE FROM pinned_messages WHERE message_id IN (SELECT id FROM messages WHERE user_id = ? AND is_archived = 0)').run(uid);
-        db.prepare('DELETE FROM messages WHERE user_id = ? AND is_archived = 0').run(uid);
-        db.prepare('UPDATE messages SET user_id = NULL WHERE user_id = ?').run(uid);
-      } else {
-        db.prepare('UPDATE messages SET user_id = NULL WHERE user_id = ?').run(uid);
-      }
-      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
-      db.prepare('INSERT INTO deleted_users (username, display_name, reason, deleted_by) VALUES (?, ?, ?, ?)').run(
-        targetUser.username, targetUser.display_name, reason, socket.user.id
-      );
+      purgeUserCascade(uid, targetUser, socket.user.id, data.scrubMessages, reason);
     });
 
     try {
@@ -354,6 +363,138 @@ module.exports = function register(socket, ctx) {
     socket.emit('ban-list', bans);
 
     console.log(`🗑️  Admin deleted user "${targetUser.displayName}" (id: ${data.userId})`);
+  });
+
+  // ── Bulk remove users (bot-wave cleanup) ────────────────
+  // Admin-only. Filters accounts by join recency / zero activity / New flag,
+  // then either previews the match (dryRun) or bans + deletes the whole set in
+  // one pass. ALWAYS excludes admins, the acting admin, and anyone holding an
+  // assigned role, and requires at least one narrowing filter so it can never
+  // sweep the entire user table.
+  socket.on('bulk-remove-users', (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    if (!socket.user.isAdmin) return cb({ error: 'Only admins can bulk-remove users' });
+    if (!data || typeof data !== 'object') return cb({ error: 'Bad request' });
+
+    const f = (data.filter && typeof data.filter === 'object') ? data.filter : {};
+    const joinedWithinHours = Number.isFinite(f.joinedWithinHours) && f.joinedWithinHours > 0
+      ? Math.min(Math.floor(f.joinedWithinHours), 24 * 3650) : null;
+    const zeroMessages = f.zeroMessages === true;
+    const newOnly = f.newOnly === true;   // 'New' badge == joined within 7 days
+
+    if (!joinedWithinHours && !zeroMessages && !newOnly) {
+      return cb({ error: 'Pick at least one filter — refusing to select every account.' });
+    }
+
+    // Hard exclusions keep staff safe no matter what filters are set.
+    const where = [
+      'u.is_admin = 0',
+      'u.id != @actorId',
+      'NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id)'
+    ];
+    const params = { actorId: socket.user.id };
+    if (joinedWithinHours) { where.push("u.created_at >= datetime('now', @joinWindow)"); params.joinWindow = `-${joinedWithinHours} hours`; }
+    if (newOnly)           where.push("u.created_at >= datetime('now', '-7 days')");
+    if (zeroMessages)      where.push('NOT EXISTS (SELECT 1 FROM messages m WHERE m.user_id = u.id)');
+
+    let matches;
+    try {
+      matches = db.prepare(
+        `SELECT u.id, u.username, u.display_name, u.created_at
+         FROM users u WHERE ${where.join(' AND ')} ORDER BY u.created_at DESC`
+      ).all(params);
+    } catch (err) {
+      console.error('bulk-remove-users query error:', err);
+      return cb({ error: 'Failed to compute matches' });
+    }
+
+    const MAX = 10000;
+    const total = matches.length;
+
+    // Dry run: return count + a small sample so the admin confirms exactly
+    // what is about to be wiped before anything is deleted.
+    if (data.dryRun) {
+      return cb({
+        ok: true, total, capped: total > MAX,
+        sample: matches.slice(0, 25).map(m => ({ id: m.id, username: m.display_name || m.username, createdAt: m.created_at }))
+      });
+    }
+
+    if (total === 0) return cb({ ok: true, removed: 0, total: 0 });
+
+    const toRemove = matches.slice(0, MAX);
+    const ids = toRemove.map(m => m.id);
+    const reason = (typeof data.reason === 'string' && data.reason.trim()) ? data.reason.trim().slice(0, 200) : 'Bulk cleanup';
+
+    // Optionally block the accounts' recent IPs from re-registering. Off by
+    // default: a botnet spreads across many addresses and some may be shared
+    // (CGNAT), so this is opt-in and needs ban_ip.
+    let ipBanned = 0;
+    if (data.banIp && (socket.user.isAdmin || userHasPermission(socket.user.id, 'ban_ip'))) {
+      try {
+        const ipStmt = db.prepare('INSERT OR REPLACE INTO ip_bans (ip, banned_by, reason) VALUES (?, ?, ?)');
+        const banIps = db.transaction((idList) => {
+          const seen = new Set();
+          for (const uid of idList) {
+            for (const r of db.prepare('SELECT ip FROM user_ips WHERE user_id = ? ORDER BY last_seen DESC LIMIT 3').all(uid)) {
+              if (!r.ip || seen.has(r.ip)) continue;
+              seen.add(r.ip);
+              ipStmt.run(r.ip, socket.user.id, `[Bulk cleanup] ${reason}`.slice(0, 200));
+              ipBanned++;
+            }
+          }
+        });
+        banIps(ids);
+        if (ipBanned > 0) _invalidateIpCache();
+      } catch (err) {
+        console.error('bulk-remove-users IP ban error:', err);
+      }
+    }
+
+    // Kick any live sockets for these accounts, then drop them from the
+    // in-memory presence/voice maps so rosters update immediately.
+    const idSet = new Set(ids);
+    for (const [, s] of io.sockets.sockets) {
+      if (s.user && idSet.has(s.user.id)) {
+        s.emit('banned', { reason: 'Your account was removed by an admin.' });
+        s.disconnect(true);
+      }
+    }
+    for (const [code, users] of channelUsers) {
+      let changed = false;
+      for (const uid of ids) if (users.delete(uid)) changed = true;
+      if (changed) emitOnlineUsers(code);
+    }
+    for (const [code, users] of voiceUsers) {
+      let changed = false;
+      for (const uid of ids) if (users.delete(uid)) changed = true;
+      if (changed) broadcastVoiceUsers(code);
+    }
+
+    let removed = 0;
+    try {
+      const purgeAll = db.transaction((rows) => {
+        for (const row of rows) {
+          purgeUserCascade(row.id, { username: row.username, display_name: row.display_name }, socket.user.id, !!data.scrubMessages, reason);
+          removed++;
+        }
+      });
+      purgeAll(toRemove);
+    } catch (err) {
+      console.error('bulk-remove-users purge error:', err);
+      return cb({ error: `Failed partway — removed ${removed} of ${total}` });
+    }
+
+    _audit({ actor: socket.user, action: 'user_bulk_remove',
+      target_type: 'user', target_id: null, target_name: null,
+      details: { removed, total, filter: { joinedWithinHours, zeroMessages, newOnly }, ipBanned, scrubMessages: !!data.scrubMessages, reason } });
+
+    for (const [, s] of io.sockets.sockets) {
+      if (s.user && s.user.isAdmin) s.emit('users-bulk-removed', { removed, ids });
+    }
+
+    console.log(`🧹 Admin ${socket.user.username} bulk-removed ${removed} user(s)${ipBanned ? ` and ${ipBanned} IP(s)` : ''}`);
+    return cb({ ok: true, removed, total, capped: total > MAX, ipBanned });
   });
 
   // ── Self-delete account ─────────────────────────────────

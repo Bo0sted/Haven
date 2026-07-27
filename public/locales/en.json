@@ -855,6 +855,7 @@
       "members_hidden": "Hidden",
       "view_bans_btn": "View Bans",
       "view_deleted_btn": "View Deleted Users",
+      "bulk_cleanup_btn": "Cleanup",
       "view_all_members_btn": "View All Members",
       "update_banner_label": "Update banner (admins only)",
       "whitelist_title": "Whitelist",
@@ -1114,6 +1115,29 @@
       "errors": {
         "generic": "Failed to reset password"
       }
+    },
+    "bulk_cleanup": {
+      "title": "Bulk account cleanup",
+      "intro": "Filter recently-created or inactive accounts and remove the whole batch at once. Admins, you, and anyone with an assigned role are always excluded. Preview first to see exactly who matches.",
+      "joined_within": "Joined within the last",
+      "hours": "hours",
+      "zero_messages": "Only accounts that have never sent a message",
+      "new_only": "Only accounts flagged \"New\" (joined in the last 7 days)",
+      "scrub_messages": "Also delete any messages they posted",
+      "ban_ip": "Also ban their recent IP addresses",
+      "ban_ip_hint": "Can catch shared/CGNAT addresses; use with care.",
+      "preview_btn": "Preview",
+      "remove_btn": "Ban + Delete",
+      "remove_n_btn": "Ban + Delete {n}",
+      "need_filter": "Pick at least one filter first.",
+      "no_match": "No accounts match those filters.",
+      "match_count": "{n} account(s) match.",
+      "capped": "first 10000 will be removed",
+      "and_more": "...and more",
+      "confirm": "Permanently ban and delete {n} account(s)? This cannot be undone.",
+      "working": "Working...",
+      "failed": "Cleanup failed.",
+      "done": "Removed {n} account(s)."
     },
     "recovery_notice": {
       "title": "Account Recovery Codes",
