@@ -442,6 +442,13 @@ _applyServerSettings() {
   const tokenToggle = document.getElementById('registration-token-enabled');
   if (tokenToggle) tokenToggle.checked = this.serverSettings.registration_token_enabled === 'true';
 
+  const capToggle = document.getElementById('registration-captcha-enabled');
+  if (capToggle) capToggle.checked = this.serverSettings.registration_captcha_enabled === 'true';
+  const capSite = document.getElementById('turnstile-site-key');
+  if (capSite) capSite.value = this.serverSettings.turnstile_site_key || '';
+  const capSecret = document.getElementById('turnstile-secret-key');
+  if (capSecret) capSecret.value = this.serverSettings.turnstile_secret_key || '';
+
   // (#5345) Default join channels — re-render when settings or channel list refresh
   if (typeof this._renderDefaultJoinChannels === 'function') {
     try { this._renderDefaultJoinChannels(); } catch { /* non-critical */ }
@@ -694,6 +701,9 @@ _snapshotAdminSettings() {
     max_message_chars: this.serverSettings.max_message_chars || '2000',
     update_banner_admin_only: this.serverSettings.update_banner_admin_only || 'false',
     admin_password_reset_enabled: this.serverSettings.admin_password_reset_enabled || 'false',
+    registration_captcha_enabled: this.serverSettings.registration_captcha_enabled || 'false',
+    turnstile_site_key: this.serverSettings.turnstile_site_key || '',
+    turnstile_secret_key: this.serverSettings.turnstile_secret_key || '',
     default_theme: this.serverSettings.default_theme || '',
     default_locale: this.serverSettings.default_locale || '',
     published_themes: this.serverSettings.published_themes || '[]',
@@ -823,6 +833,22 @@ _saveAdminSettings() {
   const adminPwReset = document.getElementById('admin-password-reset-enabled')?.checked ? 'true' : 'false';
   if (adminPwReset !== (snap.admin_password_reset_enabled || 'false')) {
     this.socket.emit('update-server-setting', { key: 'admin_password_reset_enabled', value: adminPwReset });
+    changed = true;
+  }
+
+  const regCaptcha = document.getElementById('registration-captcha-enabled')?.checked ? 'true' : 'false';
+  if (regCaptcha !== (snap.registration_captcha_enabled || 'false')) {
+    this.socket.emit('update-server-setting', { key: 'registration_captcha_enabled', value: regCaptcha });
+    changed = true;
+  }
+  const tsSite = (document.getElementById('turnstile-site-key')?.value || '').trim();
+  if (tsSite !== (snap.turnstile_site_key || '')) {
+    this.socket.emit('update-server-setting', { key: 'turnstile_site_key', value: tsSite });
+    changed = true;
+  }
+  const tsSecret = (document.getElementById('turnstile-secret-key')?.value || '').trim();
+  if (tsSecret !== (snap.turnstile_secret_key || '')) {
+    this.socket.emit('update-server-setting', { key: 'turnstile_secret_key', value: tsSecret });
     changed = true;
   }
 

@@ -116,6 +116,28 @@ function sanitizeString(str, maxLen = 200) {
   return str.trim().slice(0, maxLen);
 }
 
+// ── Cloudflare Turnstile verification (opt-in CAPTCHA) ───
+// Verifies a registration challenge token server-side against Cloudflare so a
+// forged or missing token can't pass. Returns true only on a confirmed pass;
+// any error (network, timeout, bad response) returns false = challenge failed.
+async function verifyTurnstile(secret, token, remoteIp) {
+  try {
+    const body = new URLSearchParams({ secret, response: token });
+    if (remoteIp) body.append('remoteip', remoteIp);
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return !!(data && data.success === true);
+  } catch {
+    return false;
+  }
+}
+
 // ── SSO Avatar Download ─────────────────────────────────
 // Downloads a profile picture from a remote Haven server and saves it locally.
 // Returns the local /uploads/ path, or throws on failure.
@@ -207,9 +229,16 @@ router.get('/registration-info', (req, res) => {
     const tokenEnabledRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token_enabled'").get();
     const tokenRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token'").get();
     const requiresToken = !!(tokenEnabledRow && tokenEnabledRow.value === 'true' && tokenRow && tokenRow.value);
-    res.json({ requiresToken });
+    // Opt-in Turnstile CAPTCHA. Only the public site key is exposed (safe by
+    // design); the secret key never leaves the server. Gated on a site key
+    // being present so the page never tries to render a keyless widget.
+    const capEnabledRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_captcha_enabled'").get();
+    const siteKeyRow = db.prepare("SELECT value FROM server_settings WHERE key = 'turnstile_site_key'").get();
+    const turnstileSiteKey = (siteKeyRow && typeof siteKeyRow.value === 'string') ? siteKeyRow.value.trim() : '';
+    const captchaEnabled = !!(capEnabledRow && capEnabledRow.value === 'true' && turnstileSiteKey);
+    res.json({ requiresToken, captchaEnabled, turnstileSiteKey: captchaEnabled ? turnstileSiteKey : '' });
   } catch (err) {
-    res.json({ requiresToken: false });
+    res.json({ requiresToken: false, captchaEnabled: false, turnstileSiteKey: '' });
   }
 });
 
@@ -386,6 +415,22 @@ router.post('/register', authLimiter, async (req, res) => {
       const onList = db.prepare('SELECT 1 FROM whitelist WHERE username = ?').get(username);
       if (!onList) {
         return res.status(403).json({ error: 'Registration is restricted. Your username is not on the whitelist.' });
+      }
+    }
+
+    // Cloudflare Turnstile CAPTCHA (opt-in). When enabled with a secret key,
+    // the registrant must pass the challenge, verified server-side so a forged
+    // or absent token can't slip through. A blank secret disables enforcement
+    // (misconfiguration), rather than locking everyone out.
+    const capEnabledRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_captcha_enabled'").get();
+    if (capEnabledRow && capEnabledRow.value === 'true') {
+      const secretRow = db.prepare("SELECT value FROM server_settings WHERE key = 'turnstile_secret_key'").get();
+      const secret = secretRow && typeof secretRow.value === 'string' ? secretRow.value.trim() : '';
+      if (secret) {
+        const capToken = typeof req.body.captchaToken === 'string' ? req.body.captchaToken : '';
+        if (!capToken) return res.status(400).json({ error: 'Please complete the CAPTCHA.' });
+        const passed = await verifyTurnstile(secret, capToken, req.ip);
+        if (!passed) return res.status(403).json({ error: 'CAPTCHA verification failed. Please try again.' });
       }
     }
 

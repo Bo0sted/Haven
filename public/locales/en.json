@@ -64,6 +64,7 @@
       "connection_error": "Connection error — is the server running?",
       "passwords_no_match": "Passwords do not match",
       "password_too_short": "Password must be at least 8 characters",
+      "captcha_incomplete": "Please complete the CAPTCHA.",
       "must_be_18": "You must confirm that you are 18 years of age or older",
       "must_accept_tos": "You must accept the Terms of Service & Release of Liability Agreement",
       "enter_admin_credentials": "Enter your admin username and password above first",

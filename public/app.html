@@ -2091,6 +2091,22 @@
               <button class="btn-sm" id="clear-registration-token-btn">Clear</button>
             </div>
           </div>
+          <!-- Opt-in Cloudflare Turnstile CAPTCHA on registration -->
+          <div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--border);">
+            <label class="toggle-row">
+              <span>🛡️ Require CAPTCHA on registration</span>
+              <input type="checkbox" id="registration-captcha-enabled">
+            </label>
+            <small class="settings-hint">Adds a Cloudflare Turnstile challenge to the sign-up form to block automated mass registration. It's free: create a widget at the Cloudflare Turnstile dashboard and paste both keys below. Leave off if you don't need it.</small>
+            <div class="form-group" style="margin-top:8px;">
+              <label for="turnstile-site-key" style="font-size:0.85rem;">Turnstile site key</label>
+              <input type="text" id="turnstile-site-key" class="settings-text-input" autocomplete="off" placeholder="0x4AAAAAAA..." maxlength="200">
+            </div>
+            <div class="form-group" style="margin-top:6px;">
+              <label for="turnstile-secret-key" style="font-size:0.85rem;">Turnstile secret key</label>
+              <input type="password" id="turnstile-secret-key" class="settings-text-input" autocomplete="off" placeholder="Kept private on the server" maxlength="200">
+            </div>
+          </div>
         </div>
         <div class="admin-settings" id="section-invite" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🌐 <span data-i18n="settings.admin.invite_title">Server Invite Code</span></h5>

@@ -16,7 +16,7 @@ module.exports = function register(socket, ctx) {
   socket.on('get-server-settings', () => {
     const rows = db.prepare('SELECT key, value FROM server_settings').all();
     const settings = {};
-    const sensitiveKeys = ['giphy_api_key', 'server_code', 'registration_token', 'turn_password'];
+    const sensitiveKeys = ['giphy_api_key', 'server_code', 'registration_token', 'turn_password', 'turnstile_secret_key'];
     rows.forEach(r => {
       if (sensitiveKeys.includes(r.key) && !socket.user.isAdmin) return;
       settings[r.key] = r.value;
@@ -46,9 +46,13 @@ module.exports = function register(socket, ctx) {
       'default_join_channels', 'registration_token_enabled', // (#5344, #5345), registration_token has its own generate/clear handlers
       'admin_password_reset_enabled', // (#5300) admin password reset feature gate
       'guests_enabled', 'guest_channels', // (#5381) Join-as-Guest toggle + per-channel whitelist (CSV of channel ids)
-      'stun_urls', 'turn_url', 'turn_username', 'turn_password' // (#5399) voice connectivity (STUN/TURN)
+      'stun_urls', 'turn_url', 'turn_username', 'turn_password', // (#5399) voice connectivity (STUN/TURN)
+      'registration_captcha_enabled', 'turnstile_site_key', 'turnstile_secret_key' // opt-in Cloudflare Turnstile on registration
     ];
     if (!allowedKeys.includes(key)) return;
+
+    if (key === 'registration_captcha_enabled' && !['true', 'false'].includes(value)) return;
+    if ((key === 'turnstile_site_key' || key === 'turnstile_secret_key') && value.length > 200) return;
 
     if (key === 'member_visibility' && !['all', 'online', 'none'].includes(value)) return;
     if (key === 'cleanup_enabled' && !['true', 'false'].includes(value)) return;
