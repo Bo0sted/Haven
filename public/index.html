@@ -91,6 +91,10 @@
                  placeholder="Paste the token your admin shared">
           <small>Required by this server — ask the admin if you don't have one.</small>
         </div>
+        <!-- Opt-in Cloudflare Turnstile CAPTCHA — shown by auth.js only when the server enables it -->
+        <div class="form-group" id="reg-captcha-group" style="display:none">
+          <div id="reg-captcha"></div>
+        </div>
         <button type="submit" class="btn-primary" data-i18n="auth.register.submit">Create Account</button>
       </form>
 
@@ -126,6 +130,10 @@
           <div class="form-group">
             <label for="sso-confirm" data-i18n="auth.sso.confirm_label">Confirm Password</label>
             <input type="password" id="sso-confirm" autocomplete="new-password" required>
+          </div>
+          <!-- Opt-in Turnstile CAPTCHA — shown by auth.js only when the server enables it -->
+          <div class="form-group" id="sso-captcha-group" style="display:none">
+            <div id="sso-captcha"></div>
           </div>
           <button type="button" class="btn-primary" id="sso-register-btn" data-i18n="auth.sso.register">Create Account</button>
           <p style="text-align:center;margin-top:8px">

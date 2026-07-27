@@ -192,7 +192,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'", "blob:", "https://www.youtube.com", "https://w.soundcloud.com", "https://unpkg.com", "https://cdn.emulatorjs.org"],
+      scriptSrc: ["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'", "blob:", "https://www.youtube.com", "https://w.soundcloud.com", "https://unpkg.com", "https://cdn.emulatorjs.org", "https://challenges.cloudflare.com"],  // cdn.emulatorjs.org: GB/GBC/GBA emulator; last host: opt-in Turnstile CAPTCHA on registration
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.emulatorjs.org"],  // inline styles + Google Fonts + EmulatorJS UI CSS
       imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],  // link preview OG images + GIPHY (http: for local/self-hosted services)
       connectSrc: ["'self'", "ws:", "wss:", "https:", "blob:"],  // Socket.IO + cross-origin health checks + EmulatorJS wasm/core blob fetches
@@ -200,7 +200,7 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],  // Google Fonts CDN
       workerSrc: ["'self'", "blob:", "https://unpkg.com", "https://cdn.emulatorjs.org"],  // service worker + Ruffle / EmulatorJS WebAssembly workers
       objectSrc: ["'none'"],
-      frameSrc: ["'self'", "https://open.spotify.com", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://w.soundcloud.com"],  // Listen Together embeds + game iframes
+      frameSrc: ["'self'", "https://open.spotify.com", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://w.soundcloud.com", "https://challenges.cloudflare.com"],  // Listen Together embeds + game iframes + Turnstile widget
       baseUri: ["'self'"],
       formAction: ["'self'"],
       frameAncestors: ["'self'"],               // allow mobile app iframe, block third-party clickjacking

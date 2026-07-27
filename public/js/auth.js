@@ -713,6 +713,9 @@
         profilePicUrl = ssoServerUrl + profilePicUrl;
       }
 
+      const ssoCaptchaToken = _captchaTokenFor('sso');
+      if (ssoCaptchaToken === '') return showError(t('auth.errors.captcha_incomplete'));
+
       try {
         const res = await fetch('/api/auth/register', {
           method: 'POST',
@@ -726,12 +729,13 @@
             // (#5344) Reuse the same token field the standard form uses;
             // when the server requires a token the user will have already
             // typed it in the visible field.
-            registrationToken: (document.getElementById('reg-token')?.value || '').trim()
+            registrationToken: (document.getElementById('reg-token')?.value || '').trim(),
+            captchaToken: ssoCaptchaToken || ''
           })
         });
 
         const data = await res.json();
-        if (!res.ok) return showError(data.error || t('auth.errors.registration_failed'));
+        if (!res.ok) { _resetCaptcha('sso'); return showError(data.error || t('auth.errors.registration_failed')); }
 
         // Derive E2E wrapping key from password
         const e2eWrap = await deriveE2EWrappingKey(password);
@@ -745,6 +749,60 @@
         showError(t('auth.errors.connection_error'));
       }
     });
+  }
+
+  // ── Opt-in Turnstile CAPTCHA on registration ──────────
+  // Rendered only when the server reports it enabled. Two widgets: one for the
+  // standard register form, one for the SSO register step (both hit the same
+  // /register endpoint, which enforces the challenge server-side).
+  let _captchaSiteKey = '';
+  let _turnstileMain = null;
+  let _turnstileSso = null;
+
+  function _loadTurnstileScript() {
+    return new Promise((resolve, reject) => {
+      if (window.turnstile) return resolve();
+      let s = document.getElementById('cf-turnstile-script');
+      if (s) { s.addEventListener('load', () => resolve()); s.addEventListener('error', () => reject(new Error('load failed'))); return; }
+      s = document.createElement('script');
+      s.id = 'cf-turnstile-script';
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      s.async = true; s.defer = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('load failed'));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function _initRegistrationCaptcha(siteKey) {
+    _captchaSiteKey = siteKey;
+    try { await _loadTurnstileScript(); } catch { return; }
+    if (!window.turnstile) return;
+    const mainBox = document.getElementById('reg-captcha');
+    if (mainBox && _turnstileMain === null) {
+      const g = document.getElementById('reg-captcha-group'); if (g) g.style.display = '';
+      _turnstileMain = window.turnstile.render(mainBox, { sitekey: siteKey, theme: 'auto' });
+    }
+    const ssoBox = document.getElementById('sso-captcha');
+    if (ssoBox && _turnstileSso === null) {
+      const g = document.getElementById('sso-captcha-group'); if (g) g.style.display = '';
+      _turnstileSso = window.turnstile.render(ssoBox, { sitekey: siteKey, theme: 'auto' });
+    }
+  }
+
+  // null  = captcha not active (skip it);
+  // ''    = active but the user hasn't solved it yet (block submit);
+  // token = solved (send it).
+  function _captchaTokenFor(which) {
+    if (!_captchaSiteKey || !window.turnstile) return null;
+    const id = which === 'sso' ? _turnstileSso : _turnstileMain;
+    if (id === null || id === undefined) return null;
+    return window.turnstile.getResponse(id) || '';
+  }
+  function _resetCaptcha(which) {
+    if (!window.turnstile) return;
+    const id = which === 'sso' ? _turnstileSso : _turnstileMain;
+    if (id !== null && id !== undefined) { try { window.turnstile.reset(id); } catch { /* noop */ } }
   }
 
   // ── Register ──────────────────────────────────────────
@@ -761,6 +819,9 @@
         const inp = document.getElementById('reg-token');
         if (grp) grp.style.display = '';
         if (inp) inp.required = true;
+      }
+      if (info && info.captchaEnabled && info.turnstileSiteKey) {
+        _initRegistrationCaptcha(info.turnstileSiteKey);
       }
     } catch { /* ignore */ }
   })();
@@ -780,15 +841,18 @@
     if (password !== confirm) return showError(t('auth.errors.passwords_no_match'));
     if (password.length < 8) return showError(t('auth.errors.password_too_short'));
 
+    const captchaToken = _captchaTokenFor('main');
+    if (captchaToken === '') return showError(t('auth.errors.captcha_incomplete'));
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, eulaVersion: '2.0', ageVerified: true, registrationToken })
+        body: JSON.stringify({ username, password, eulaVersion: '2.0', ageVerified: true, registrationToken, captchaToken: captchaToken || '' })
       });
 
       const data = await res.json();
-      if (!res.ok) return showError(data.error || t('auth.errors.registration_failed'));
+      if (!res.ok) { _resetCaptcha('main'); return showError(data.error || t('auth.errors.registration_failed')); }
 
       // Derive E2E wrapping key from password (client-side only, never sent to server)
       const e2eWrap = await deriveE2EWrappingKey(password);

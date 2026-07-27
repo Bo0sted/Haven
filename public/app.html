@@ -2095,6 +2095,34 @@
               <button class="btn-sm" id="clear-registration-token-btn">Clear</button>
             </div>
           </div>
+          <!-- Opt-in Cloudflare Turnstile CAPTCHA on registration -->
+          <div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--border);">
+            <label class="toggle-row">
+              <span>🛡️ Require CAPTCHA on registration</span>
+              <input type="checkbox" id="registration-captcha-enabled">
+            </label>
+            <small class="settings-hint">Adds a Cloudflare Turnstile challenge to the sign-up form to block automated mass registration. It's free: create a widget at the Cloudflare Turnstile dashboard and paste both keys below. Leave off if you don't need it.</small>
+            <div class="form-group" style="margin-top:8px;">
+              <label for="turnstile-site-key" style="font-size:0.85rem;">Turnstile site key</label>
+              <input type="text" id="turnstile-site-key" class="settings-text-input" autocomplete="off" placeholder="0x4AAAAAAA..." maxlength="200">
+            </div>
+            <div class="form-group" style="margin-top:6px;">
+              <label for="turnstile-secret-key" style="font-size:0.85rem;">Turnstile secret key</label>
+              <input type="password" id="turnstile-secret-key" class="settings-text-input" autocomplete="off" placeholder="Kept private on the server" maxlength="200">
+            </div>
+          </div>
+          <!-- Opt-in global registration rate limit -->
+          <div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--border);">
+            <label class="toggle-row">
+              <span>⏱️ Limit new sign-ups per hour</span>
+              <input type="checkbox" id="registration-rate-limit-enabled">
+            </label>
+            <small class="settings-hint">Caps how many new accounts can be created across the whole server each hour, to slow a bot flood even when it comes from many different addresses. Sign-ups above the cap are asked to try again later, so set it comfortably above your normal rate.</small>
+            <div class="form-group" style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <label for="registration-rate-limit-per-hour" style="font-size:0.85rem;">Max new accounts per hour</label>
+              <input type="number" id="registration-rate-limit-per-hour" class="settings-number-input" min="1" max="100000" value="20" style="width:90px">
+            </div>
+          </div>
         </div>
         <div class="admin-settings" id="section-invite" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🌐 <span data-i18n="settings.admin.invite_title">Server Invite Code</span></h5>
@@ -2931,6 +2959,7 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn-sm btn-accent" id="aml-view-bans-btn" style="display:none">📋 <span data-i18n="settings.admin.view_bans_btn">View Bans</span></button>
           <button class="btn-sm btn-accent" id="aml-view-deleted-btn" style="display:none">🗑️ <span data-i18n="settings.admin.view_deleted_btn">View Deleted Users</span></button>
+          <button class="btn-sm btn-danger-fill" id="aml-bulk-cleanup-btn" style="display:none">🧹 <span data-i18n="settings.admin.bulk_cleanup_btn">Cleanup</span></button>
         </div>
         <button class="btn-sm" id="close-all-members-btn" data-i18n="modals.common.close">Close</button>
       </div>

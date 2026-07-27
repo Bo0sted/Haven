@@ -509,6 +509,15 @@ function setupSocketHandlers(io, db, opts = {}) {
     if (!room) return [];
     const removed = [];
     for (const [userId, entry] of room) {
+      // Don't prune a user who is inside their post-disconnect grace window
+      // (#5444). Their old socket is gone, but a reconnect + voice-rejoin is
+      // expected within a few seconds and will rebind the entry. Pruning here
+      // races that rebind: it fires a spurious voice-user-left (leave sound),
+      // the rejoin then fires a join sound, and the user briefly vanishes from
+      // the roster — exactly the "kicked from voice on a brief blip / double
+      // join-leave notifications" report. The 4s grace timer (see the
+      // disconnect handler) already evicts them if they never actually return.
+      if (pendingVoiceLeave.has(`${userId}:${code}`)) continue;
       const sock = io.sockets.sockets.get(entry.socketId);
       if (!sock || !sock.connected) {
         room.delete(userId);

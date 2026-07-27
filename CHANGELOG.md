@@ -11,6 +11,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.37.2] — 2026-07-25
+
+### Fixed
+- **`:emoji` autocomplete menu could stop working until a page refresh.** The `#emoji-dropdown` is a single shared node that gets re-parented next to whichever input is active (#5296). Opening the suggestions inside an inline message-edit box parked the node in that message; saving or cancelling the edit ran `innerHTML = originalHtml` and deleted it, so every later `:emoji` threw on the missing element and autocomplete died everywhere (including the main composer) until a full refresh. The node holds no state, so it is now recreated on demand when it has gone missing. Thanks to @Bo0sted (#5454).
+- **Admin password reset window rendered raw translation keys.** The reset modals were written as `t('key') || 'English fallback'`, but `t()` returns the raw key string for a missing key, so the fallback never fired and the whole window showed labels like `modals.admin_reset_pw.title` instead of real sentences (#5451). The missing text has been added to the locale file, and `t()` now falls back to English for any key a non-English locale is missing, so a gap shows readable English instead of a raw key across every language.
+
+### Changed
+- **Admin password reset now explains the 2FA requirement clearly.** Resetting another user's password requires that user to have two-factor authentication enabled first, so the temporary password alone cannot be used to take over their account. That requirement is intended, but it used to surface as a red error that looked like a malfunction. It now shows a calm informational popup that states it is a security requirement, explains why it exists, and tells you the user must enable 2FA before the reset will run (#5451).
+- **Channel ID, header icons, and the voice-channel user list now scale with Font Size.** These sidebar and header elements were fixed-size and ignored Settings → Layout & Density → Font Size, so raising the size left them small. They now scale across the Small/Large/Extra Large tiers with the rest of the UI (#5450).
+
+### Documentation
+- **Refined the remote-access guide.** The README now explains the risks of port forwarding and adds a safer alternative using Tailscale, with a locked-down ACL so friends can only reach Haven and nothing else on your machine. Thanks to @Bo0sted (#5452).
+
+---
+
 ## [3.37.1] — 2026-07-25
 
 ### Fixed

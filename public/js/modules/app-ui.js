@@ -3707,6 +3707,9 @@ _setupUI() {
     this.socket.emit('get-deleted-users');
     document.getElementById('deleted-users-modal').style.display = 'flex';
   });
+  document.getElementById('aml-bulk-cleanup-btn')?.addEventListener('click', () => {
+    if (this._openBulkCleanup) this._openBulkCleanup();
+  });
 
   // ── Cleanup controls (admin) — saved via admin Save button ──
   const cleanupAge = document.getElementById('cleanup-max-age');
