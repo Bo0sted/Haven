@@ -48,9 +48,18 @@ module.exports = function register(socket, ctx) {
       'guests_enabled', 'guest_channels', // (#5381) Join-as-Guest toggle + per-channel whitelist (CSV of channel ids)
       'stun_urls', 'turn_url', 'turn_username', 'turn_password', // (#5399) voice connectivity (STUN/TURN)
       'registration_captcha_enabled', 'turnstile_site_key', 'turnstile_secret_key', // opt-in Cloudflare Turnstile on registration
-      'registration_rate_limit_enabled', 'registration_rate_limit_per_hour' // opt-in global new-account velocity cap
+      'registration_rate_limit_enabled', 'registration_rate_limit_per_hour', // opt-in global new-account velocity cap
+      'channel_creator_role' // (#5461) role auto-granted to a non-admin who creates a channel
     ];
     if (!allowedKeys.includes(key)) return;
+
+    // (#5461) '' / 'default' = the highest-level channel-scoped role (the
+    // pre-5461 hardcoded behavior); 'none' = don't auto-assign anything;
+    // otherwise a numeric id of an existing role.
+    if (key === 'channel_creator_role' && value !== '' && value !== 'default' && value !== 'none') {
+      const rid = parseInt(value, 10);
+      if (isNaN(rid) || !db.prepare('SELECT 1 FROM roles WHERE id = ?').get(rid)) return;
+    }
 
     if (key === 'registration_captcha_enabled' && !['true', 'false'].includes(value)) return;
     if ((key === 'turnstile_site_key' || key === 'turnstile_secret_key') && value.length > 200) return;

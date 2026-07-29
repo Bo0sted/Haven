@@ -82,6 +82,43 @@ module.exports = function register(socket, ctx) {
   });
 
   // ── Create channel (permission-based) ─────────────────
+  // (#5461) Assign the configured "channel creator role" to a non-admin who
+  // just created a channel, scoped to that channel. The role is configurable
+  // in Admin → Roles: '' / 'default' keeps the pre-5461 behavior (the
+  // highest-level channel-scoped role), 'none' disables the auto-grant, and a
+  // numeric id assigns that specific role. Admins already have full power
+  // everywhere, so they are never auto-assigned anything. Applies to both
+  // top-level channels and sub-channels for consistency.
+  function assignChannelCreatorRole(userId, channelId) {
+    try {
+      const creator = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(userId);
+      if (creator && creator.is_admin) return;
+
+      const row = db.prepare("SELECT value FROM server_settings WHERE key = 'channel_creator_role'").get();
+      const setting = row && typeof row.value === 'string' ? row.value.trim() : '';
+      if (setting === 'none') return; // admin disabled the auto-grant
+
+      let roleId = null;
+      if (setting === '' || setting === 'default') {
+        const def = db.prepare(
+          "SELECT id FROM roles WHERE scope = 'channel' ORDER BY level DESC LIMIT 1"
+        ).get();
+        roleId = def ? def.id : null;
+      } else {
+        const rid = parseInt(setting, 10);
+        const exists = isNaN(rid) ? null : db.prepare('SELECT id FROM roles WHERE id = ?').get(rid);
+        roleId = exists ? exists.id : null;
+      }
+      if (!roleId) return;
+
+      db.prepare(
+        'INSERT OR IGNORE INTO user_roles (user_id, role_id, channel_id, granted_by) VALUES (?, ?, ?, NULL)'
+      ).run(userId, roleId, channelId);
+    } catch (e) {
+      console.warn('assignChannelCreatorRole failed:', e && e.message);
+    }
+  }
+
   socket.on('create-channel', (data) => {
     if (!data || typeof data !== 'object') return;
     if (!userHasPermission(socket.user.id, 'create_channel')) {
@@ -147,16 +184,7 @@ module.exports = function register(socket, ctx) {
         }
       }
 
-      if (!socket.user.isAdmin) {
-        const channelModRole = db.prepare(
-          "SELECT id FROM roles WHERE scope = 'channel' ORDER BY level DESC LIMIT 1"
-        ).get();
-        if (channelModRole) {
-          db.prepare(
-            'INSERT OR IGNORE INTO user_roles (user_id, role_id, channel_id, granted_by) VALUES (?, ?, ?, NULL)'
-          ).run(socket.user.id, channelModRole.id, result.lastInsertRowid);
-        }
-      }
+      assignChannelCreatorRole(socket.user.id, result.lastInsertRowid);
 
       const channel = {
         id: result.lastInsertRowid,
@@ -715,6 +743,10 @@ module.exports = function register(socket, ctx) {
       const membersToAdd = isPrivate ? [{ user_id: socket.user.id }] : parentMembers;
       const insertMember = db.prepare('INSERT OR IGNORE INTO channel_members (channel_id, user_id) VALUES (?, ?)');
       membersToAdd.forEach(m => insertMember.run(result.lastInsertRowid, m.user_id));
+
+      // (#5461) Give a non-admin sub-channel creator the configured creator
+      // role too, scoped to the new sub-channel (top-level create already does).
+      assignChannelCreatorRole(socket.user.id, result.lastInsertRowid);
 
       // (#5328) Inherit role-channel-access from the parent channel so that
       // roles configured to grant/revoke access on the parent automatically
