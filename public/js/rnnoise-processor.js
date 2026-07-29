@@ -1,10 +1,16 @@
 /**
  * RNNoise AudioWorklet Processor
  * Processes mic audio through RNNoise WASM for real-time noise suppression.
- * 
+ *
  * RNNoise operates on 480-sample frames (10ms at 48kHz).
  * AudioWorklet's process() delivers 128-sample blocks.
  * We buffer input samples and process whenever we accumulate a full frame.
+ *
+ * WASM payload (#5458): the main thread posts raw ArrayBuffer bytes
+ * (`wasm-bytes`), NOT a WebAssembly.Module. Module objects fail structured
+ * clone into AudioWorkletGlobalScope (port fires messageerror, never
+ * message), which left this processor permanently in the pass-through
+ * branch. Bytes clone/transfer fine; we compile here.
  */
 class RNNoiseProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -20,16 +26,48 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
     this._outputReady = 0; // samples available in _outputBuf
 
     this.port.onmessage = (e) => {
-      if (e.data.type === 'wasm-module') {
-        this._initWasm(e.data.module);
-      } else if (e.data.type === 'destroy') {
+      const data = e && e.data;
+      if (!data || !data.type) return;
+      if (data.type === 'wasm-bytes') {
+        this._initWasm(data.bytes);
+      } else if (data.type === 'wasm-module') {
+        // Legacy path (broken on Chromium/Electron — Module does not clone).
+        // Kept only so a mixed-version deploy still surfaces an error instead
+        // of hanging forever in pass-through.
+        this._initWasm(data.module);
+      } else if (data.type === 'destroy') {
         this._cleanup();
       }
     };
+
+    // Without this, a failed structured clone is completely silent (#5458).
+    this.port.onmessageerror = () => {
+      this.port.postMessage({
+        type: 'error',
+        message: 'messageerror: WASM payload failed structured clone into the worklet'
+      });
+    };
   }
 
-  async _initWasm(wasmModule) {
+  async _initWasm(payload) {
     try {
+      if (payload == null) throw new Error('empty WASM payload');
+
+      // Accept raw bytes (preferred) or a precompiled Module (legacy).
+      let wasmModule = null;
+      if (payload instanceof WebAssembly.Module) {
+        wasmModule = payload;
+      } else {
+        let bytes = payload;
+        if (ArrayBuffer.isView(payload)) {
+          bytes = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength);
+        }
+        if (!(bytes instanceof ArrayBuffer)) {
+          throw new Error('WASM payload is neither ArrayBuffer nor WebAssembly.Module');
+        }
+        wasmModule = await WebAssembly.compile(bytes);
+      }
+
       // The Jitsi RNNoise WASM exports its own memory ('c') and needs two imports:
       //   a.a = _emscripten_resize_heap (grow memory)
       //   a.b = _emscripten_memcpy_big (fast memcpy via TypedArray.copyWithin)
@@ -91,9 +129,12 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
       this._wasmOutputPtr = this._malloc(480 * 4);
 
       this._ready = true;
-      this.port.postMessage({ type: 'ready' });
+      this.port.postMessage({ type: 'ready', sampleRate });
     } catch (err) {
-      this.port.postMessage({ type: 'error', message: err.message });
+      this.port.postMessage({
+        type: 'error',
+        message: (err && err.message) ? err.message : String(err)
+      });
     }
   }
 

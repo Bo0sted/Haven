@@ -70,7 +70,8 @@ class VoiceManager {
 
     // RNNoise noise suppression state
     this._rnnoiseNode = null;        // AudioWorkletNode for RNNoise
-    this._rnnoiseReady = false;      // true once WASM is loaded in the worklet
+    this._rnnoiseReady = false;      // true ONLY once the worklet posts {type:'ready'}
+    this._rnnoiseWasmBytes = null;   // ArrayBuffer of rnnoise.wasm (posted into worklet)
     this._rnnoiseSource = null;      // MediaStreamSource feeding the chain
     // Noise mode: 'off' | 'gate' | 'suppress'
     const savedMode = localStorage.getItem('haven_noise_mode');
@@ -289,16 +290,22 @@ class VoiceManager {
   reassertSessionIfLive() {
     if (this.inVoice && this.currentChannel) return false; // flags already agree
     const live = this.liveVoicePeerCount();
-    if (live === 0) return false;                          // genuinely not in voice
-    let code = this.currentChannel;
+    const micLive = !!(this.localStream &&
+      this.localStream.getTracks().some(t => t.readyState === 'live'));
+    // Peers OR a still-live local mic count as "session alive". After a
+    // maximize-triggered socket blip the peer map can briefly report 0
+    // connected while the mic track and remote audio elements are still up.
+    if (live === 0 && !micLive) return false;              // genuinely not in voice
+    let code = this.currentChannel || this._softLeftChannel;
     if (!code) {
       try { code = localStorage.getItem('haven_voice_channel'); } catch { /* ignore */ }
     }
-    if (!code) return false; // live peers but no idea which channel — leave it alone
-    console.warn('[Voice] Local state said not-in-voice but', live,
-      'peer connection(s) are still connected — restoring session state for', code);
+    if (!code) return false; // live media but no idea which channel — leave it alone
+    console.warn('[Voice] Local state said not-in-voice but media is live',
+      `(peers=${live}, micLive=${micLive}) — restoring session state for`, code);
     this.currentChannel = code;
     this.inVoice = true;
+    this._softLeftChannel = null;
     try { localStorage.setItem('haven_voice_channel', code); } catch { /* ignore */ }
     // Our socket may have been rebound while we thought we were out; rejoin so
     // the server roster and our peers agree with us again. Throttled so a
@@ -323,7 +330,10 @@ class VoiceManager {
       if (sharerId === this.localUserId) continue;
       this._screenDelivered.delete(sharerId);
       if (this._deliverScreenFromReceivers(sharerId)) restored++;
-      else this.requestScreenStream(sharerId);
+      else {
+        this.requestScreenStream(sharerId);
+        this._watchForScreenStream(sharerId);
+      }
     }
     return restored;
   }
@@ -380,6 +390,29 @@ class VoiceManager {
       // [VoiceDiag] fast-path in src/socketHandlers/voice.js.
       if (data.skipRenegotiate) {
         console.log('[Voice] voice-existing-users with skipRenegotiate — keeping existing peers');
+        // Still re-arm screen recovery. A blip that kept the peer
+        // connection "connected" can still drop the screen video track
+        // (transceiver goes muted / track ends) without tearing voice
+        // down. Without this, streams that were visible at startup
+        // vanish until the sharer fully restreams.
+        this._rearmScreenWatchdogs();
+        return;
+      }
+      // Safety net: even without the skipRenegotiate flag, never tear down
+      // a healthy session. Resize/maximize used to trigger voice-rejoin →
+      // voice-existing-users without skip, and _createPeer() destroyed every
+      // live peer (killing the stream tile while audio sometimes limped on
+      // a half-closed path). Only build peers we don't already have.
+      if (this.inVoice && this.peers.size > 0) {
+        const missing = (data.users || []).filter(u => u && !this.peers.has(u.id));
+        console.warn('[Voice] voice-existing-users during live session — keeping peers, adding missing only', {
+          existing: this.peers.size,
+          missing: missing.length
+        });
+        for (const user of missing) {
+          await this._createPeer(user.id, user.username, true);
+        }
+        this._rearmScreenWatchdogs();
         return;
       }
       for (const user of data.users) {
@@ -725,29 +758,52 @@ class VoiceManager {
     // Server asks us to renegotiate our screen share with a late joiner
     this.socket.on('renegotiate-screen', async (data) => {
       if (!this.screenStream || !this.isScreenSharing) return;
-      const peer = this.peers.get(data.targetUserId);
-      if (!peer) return;
-      const conn = peer.connection;
+      const targetUserId = data && data.targetUserId;
+      if (targetUserId == null) return;
 
-      // Add screen share tracks if they aren't already on this peer.
-      // Match by track identity — the previous "any video sender" check
-      // wrongly considered a webcam sender as proof that the screen tracks
-      // were already attached, leaving late joiners with audio but no
-      // screen video when the sharer also had their webcam on.
-      // (#5347 v3.15.5)
-      const senders = conn.getSenders();
-      const screenTracks = this.screenStream.getTracks().filter(t => t.readyState === 'live');
-      const missing = screenTracks.filter(track => !senders.some(s => s.track === track));
-      if (missing.length) {
-        missing.forEach(track => conn.addTrack(track, this.screenStream));
-        const res = this.screenResolution;
-        const maxBitrate = this._screenBitrates[res] || this._screenBitrates[0];
-        this._applyScreenBitrate(conn, maxBitrate);
-      }
+      // Peer may not exist yet (joiner's offer still in flight). Retry a
+      // few times instead of silently dropping the request — that silent
+      // drop is a common "stream visible at join, then gone forever"
+      // path: server fires renegotiate-screen at T+2s, joiner's peer
+      // isn't registered yet, and nothing ever re-asks.
+      const tryRenegotiate = async (attemptsLeft) => {
+        if (!this.screenStream || !this.isScreenSharing) return;
+        const peer = this.peers.get(targetUserId);
+        if (!peer) {
+          if (attemptsLeft > 0) {
+            setTimeout(() => { tryRenegotiate(attemptsLeft - 1); }, 750);
+          } else {
+            console.warn('[Voice] renegotiate-screen: no peer for', targetUserId, 'after retries');
+          }
+          return;
+        }
+        const conn = peer.connection;
+        if (!conn || conn.connectionState === 'closed') {
+          if (attemptsLeft > 0) setTimeout(() => { tryRenegotiate(attemptsLeft - 1); }, 750);
+          return;
+        }
 
-      // Renegotiate to include the video tracks (or refresh an existing
-      // screen-share m-section that the receiver lost frames on)
-      await this._renegotiate(data.targetUserId, conn);
+        // Add screen share tracks if they aren't already on this peer.
+        // Match by track identity — the previous "any video sender" check
+        // wrongly considered a webcam sender as proof that the screen tracks
+        // were already attached, leaving late joiners with audio but no
+        // screen video when the sharer also had their webcam on.
+        // (#5347 v3.15.5)
+        const senders = conn.getSenders();
+        const screenTracks = this.screenStream.getTracks().filter(t => t.readyState === 'live');
+        const missing = screenTracks.filter(track => !senders.some(s => s.track === track));
+        if (missing.length) {
+          missing.forEach(track => conn.addTrack(track, this.screenStream));
+          const res = this.screenResolution;
+          const maxBitrate = this._screenBitrates[res] || this._screenBitrates[0];
+          this._applyScreenBitrate(conn, maxBitrate);
+        }
+
+        // Renegotiate to include the video tracks (or refresh an existing
+        // screen-share m-section that the receiver lost frames on)
+        await this._renegotiate(targetUserId, conn);
+      };
+      tryRenegotiate(6);
     });
 
     // Server asks us to renegotiate our webcam with a late joiner
@@ -829,11 +885,21 @@ class VoiceManager {
   // whole stop/start cycle (it only ends when the transceiver is stopped), so
   // the watchdog saw a healthy live video track and concluded all was well
   // while the viewer stared at an empty grid.
-  _watchForScreenStream(sharerId, attemptsLeft = 3) {
+  //
+  // Default attempts bumped (3 → 6) and interval shortened (3.5s → 2.5s):
+  // startup races where the sharer's renegotiate-screen offer collides with
+  // the joiner's voice offer used to exhaust the old budget before the peer
+  // was stable, leaving the stream permanently missing until a full restream.
+  _watchForScreenStream(sharerId, attemptsLeft = 6) {
     setTimeout(() => {
       if (!this.screenSharers.has(sharerId)) return; // sharer stopped
       if (!this.inVoice || !this.currentChannel) return;
-      if (this._screenDelivered.has(sharerId)) return; // viewer has it
+      if (this._screenDelivered.has(sharerId)) {
+        // Delivered flag can go stale if the track later ended/muted. Verify
+        // the UI still has a live track; if not, clear and keep recovering.
+        if (this._screenStillLive(sharerId)) return;
+        this._screenDelivered.delete(sharerId);
+      }
       // Media may already be flowing into an unrendered receiver — adopt it
       // rather than paying for a round of signalling we don't need.
       if (this._deliverScreenFromReceivers(sharerId)) {
@@ -841,10 +907,48 @@ class VoiceManager {
           '— no track event fired for this share');
         return;
       }
-      console.warn('[Voice] No video from screen sharer', sharerId, '— requesting renegotiate');
+      console.warn('[Voice] No video from screen sharer', sharerId, '— requesting renegotiate',
+        `(attempts left after this: ${Math.max(0, attemptsLeft - 1)})`);
       this.requestScreenStream(sharerId);
       if (attemptsLeft > 1) this._watchForScreenStream(sharerId, attemptsLeft - 1);
-    }, 3500);
+    }, 2500);
+  }
+
+  // True when we both marked the share delivered AND still have a live
+  // non-muted video receiver for it (or a live <video> tile).
+  _screenStillLive(sharerId) {
+    try {
+      const peer = this.peers.get(sharerId);
+      if (peer && peer.connection) {
+        const camTrackId = peer._webcamTrackId || null;
+        const live = peer.connection.getReceivers().some(r => {
+          const t = r.track;
+          return t && t.kind === 'video' && t.readyState === 'live' &&
+            !t.muted && t.id !== camTrackId;
+        });
+        if (live) return true;
+      }
+    } catch { /* ignore */ }
+    try {
+      const tile = document.getElementById(`screen-tile-${sharerId}`);
+      const vid = tile && tile.querySelector('video');
+      const track = vid && vid.srcObject && vid.srcObject.getVideoTracks?.()[0];
+      if (track && track.readyState === 'live' && vid.videoWidth > 0) return true;
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  // Re-arm recovery for every known sharer. Cheap, idempotent, and the
+  // right response after ICE heal / fast-path rejoin / UI desync restore.
+  _rearmScreenWatchdogs() {
+    if (!this.inVoice) return;
+    for (const sharerId of this.screenSharers) {
+      if (sharerId === this.localUserId) continue;
+      if (this._screenDelivered.has(sharerId) && this._screenStillLive(sharerId)) continue;
+      this._screenDelivered.delete(sharerId);
+      if (this._deliverScreenFromReceivers(sharerId)) continue;
+      this._watchForScreenStream(sharerId);
+    }
   }
 
   async join(channelCode) {
@@ -966,7 +1070,7 @@ class VoiceManager {
 
         // Initialize RNNoise and apply saved noise mode
         await this._initRNNoise();
-        if (this.noiseMode === 'suppress' && this._rnnoiseReady) {
+        if (this.noiseMode === 'suppress' && this._rnnoiseWasmBytes) {
           this.setNoiseSensitivity(0);
           this._enableRNNoise();
         } else if (this.noiseMode === 'off') {
@@ -1007,6 +1111,16 @@ class VoiceManager {
   }
 
   leave() {
+    // Breadcrumb for the maximize/resize "fake disconnect" bug — if leave()
+    // runs when the user didn't click Disconnect, the stack tells us why.
+    try {
+      console.warn('[Voice] leave() invoked', {
+        channel: this.currentChannel,
+        inVoice: this.inVoice,
+        peers: this.peers.size,
+        stack: new Error().stack
+      });
+    } catch {}
     // Stop screen share first if active
     if (this.isScreenSharing) {
       this.stopScreenShare();
@@ -1905,6 +2019,17 @@ class VoiceManager {
           clearTimeout(this._disconnectTimers[userId]);
           delete this._disconnectTimers[userId];
         }
+        // ICE/DTLS just came (back) up. If this peer is screen-sharing,
+        // the video m-line may need a fresh delivery into the UI — ontrack
+        // does not always re-fire after an ICE restart, so the tile that
+        // was live before the blip can stay black/missing until we adopt
+        // the receiver track ourselves.
+        if (this.screenSharers.has(userId)) {
+          if (!this._deliverScreenFromReceivers(userId)) {
+            this._screenDelivered.delete(userId);
+            this._watchForScreenStream(userId);
+          }
+        }
       }
     };
 
@@ -2020,6 +2145,10 @@ class VoiceManager {
   // don't fire a burst of simultaneous offers through signaling.
   _healPeerConnections() {
     if (!this.inVoice) return;
+    // After the ICE sweep, re-check every active screen share. A heal that
+    // restores voice audio often leaves screen video undelivered because
+    // ontrack doesn't re-fire for an already-negotiated transceiver.
+    setTimeout(() => { try { this._rearmScreenWatchdogs(); } catch {} }, 2500);
     let i = 0;
     for (const [userId, peer] of this.peers) {
       const conn = peer && peer.connection;
@@ -2174,8 +2303,9 @@ class VoiceManager {
     this._startNoiseGate();
     this._startLocalTalkDetection();
 
-    // Re-enable RNNoise if it was active
-    if (this.noiseMode === 'suppress' && this._rnnoiseReady) {
+    // Re-enable RNNoise if it was active (bytes loaded is enough to re-arm;
+    // _rnnoiseReady flips true asynchronously when the worklet confirms).
+    if (this.noiseMode === 'suppress' && this._rnnoiseWasmBytes) {
       this.setNoiseSensitivity(0);
       this._enableRNNoise();
     } else if (this.noiseMode === 'gate') {
@@ -2384,10 +2514,12 @@ class VoiceManager {
       if (this.noiseSensitivity !== 0) {
         this.setNoiseSensitivity(0);
       }
-      if (!this._rnnoiseReady) {
+      // _rnnoiseWasmBytes = bytes loaded on main thread.
+      // _rnnoiseReady = worklet confirmed init (set asynchronously in _enableRNNoise).
+      if (!this._rnnoiseWasmBytes) {
         this._initRNNoise().then(() => {
-          if (this._rnnoiseReady) this._enableRNNoise();
-          else console.warn('[Voice] AI suppression unavailable');
+          if (this._rnnoiseWasmBytes) this._enableRNNoise();
+          else console.warn('[Voice] AI suppression unavailable (WASM failed to load)');
         });
       } else {
         this._enableRNNoise();
@@ -2405,35 +2537,88 @@ class VoiceManager {
   }
 
   async _initRNNoise() {
-    if (this._rnnoiseReady || !this.audioCtx) return;
+    // Loads the worklet module + wasm bytes. Does NOT set _rnnoiseReady —
+    // that only flips true when the worklet posts {type:'ready'} (#5458).
+    if (this._rnnoiseWasmBytes || !this.audioCtx) return;
     try {
       await this.audioCtx.audioWorklet.addModule('/js/rnnoise-processor.js');
       const wasmResponse = await fetch('/js/rnnoise.wasm');
+      if (!wasmResponse.ok) {
+        throw new Error(`rnnoise.wasm HTTP ${wasmResponse.status}`);
+      }
       const wasmBytes = await wasmResponse.arrayBuffer();
-      const wasmModule = await WebAssembly.compile(wasmBytes);
-      this._rnnoiseWasmModule = wasmModule;
-      this._rnnoiseReady = true;
+      if (!wasmBytes || wasmBytes.byteLength < 1000) {
+        throw new Error(`rnnoise.wasm too small (${wasmBytes ? wasmBytes.byteLength : 0} bytes)`);
+      }
+      // Early validity check on the main thread so a corrupt/HTML 404 body
+      // fails here with a clear log, not inside the worklet.
+      await WebAssembly.compile(wasmBytes.slice(0));
+      this._rnnoiseWasmBytes = wasmBytes;
+      this._rnnoiseReady = false;
     } catch (err) {
       console.warn('[Voice] RNNoise init failed:', err);
+      this._rnnoiseWasmBytes = null;
       this._rnnoiseReady = false;
     }
   }
 
   _enableRNNoise() {
-    if (!this._rnnoiseReady || !this._rnnoiseSource || this._rnnoiseNode) return;
+    if (!this._rnnoiseWasmBytes || !this._rnnoiseSource || this._rnnoiseNode) return;
     try {
+      // RNNoise is locked to 48 kHz frames. Warn (don't hard-fail) if the
+      // AudioContext landed on a different rate — suppression still runs
+      // but frequency mapping is wrong and quality drops (#5458).
+      if (this.audioCtx && this.audioCtx.sampleRate !== 48000) {
+        console.warn(
+          `[Voice] RNNoise expects 48 kHz but AudioContext is ${this.audioCtx.sampleRate} Hz — ` +
+          'suppression quality will be reduced. Prefer an output device at 48 kHz.'
+        );
+      }
+
       const node = new AudioWorkletNode(this.audioCtx, 'rnnoise-processor', {
         numberOfInputs: 1, numberOfOutputs: 1,
         outputChannelCount: [1], channelCount: 1
       });
-      node.port.postMessage({ type: 'wasm-module', module: this._rnnoiseWasmModule });
-      // Re-wire: source → rnnoise → gateGain (gate is open since sensitivity=0)
+
+      // Listen for worklet ready/error. Previously these messages were
+      // discarded, so a silent init failure looked "healthy" (#5458).
+      node.port.onmessage = (e) => {
+        const data = e && e.data;
+        if (!data || !data.type) return;
+        if (data.type === 'ready') {
+          this._rnnoiseReady = true;
+          console.log('[Voice] RNNoise worklet ready', data.sampleRate ? `(sr=${data.sampleRate})` : '');
+        } else if (data.type === 'error') {
+          console.warn('[Voice] RNNoise worklet error:', data.message);
+          this._rnnoiseReady = false;
+          // Tear the dead node out so audio keeps flowing unprocessed
+          // rather than sitting on a forever-passthrough worklet that
+          // claims to be "AI suppression".
+          try { this._disableRNNoise(); } catch {}
+        }
+      };
+      node.port.onmessageerror = () => {
+        console.warn('[Voice] RNNoise port messageerror (WASM payload failed to clone)');
+        this._rnnoiseReady = false;
+        try { this._disableRNNoise(); } catch {}
+      };
+
+      // Post raw bytes (transfer a copy so our cached buffer stays usable
+      // for the next enable). WebAssembly.Module does NOT survive structured
+      // clone into AudioWorkletGlobalScope — that was the whole bug.
+      const bytesCopy = this._rnnoiseWasmBytes.slice(0);
+      node.port.postMessage({ type: 'wasm-bytes', bytes: bytesCopy }, [bytesCopy]);
+
+      // Re-wire: source → rnnoise → gateGain (gate is open since sensitivity=0).
+      // Audio passes through the worklet until {type:'ready'}; then processed.
       this._rnnoiseSource.disconnect(this._noiseGateGain);
       this._rnnoiseSource.connect(node);
       node.connect(this._noiseGateGain);
       this._rnnoiseNode = node;
+      this._rnnoiseReady = false; // stays false until worklet confirms
     } catch (err) {
       console.warn('[Voice] Failed to enable RNNoise:', err);
+      this._rnnoiseReady = false;
     }
   }
 
@@ -2443,6 +2628,7 @@ class VoiceManager {
       this._rnnoiseNode.port.postMessage({ type: 'destroy' });
       this._rnnoiseNode.disconnect();
       this._rnnoiseNode = null;
+      this._rnnoiseReady = false;
       // Re-wire: source → gateGain directly
       if (this._rnnoiseSource && this._noiseGateGain) {
         this._rnnoiseSource.connect(this._noiseGateGain);
@@ -2551,8 +2737,13 @@ class VoiceManager {
       // and switchOutputDevice() never fires until the user opens the
       // device picker, which is exactly the symptom in #184 (audio routes
       // to speakers when the user already chose their headset).
+      //
+      // sampleRate: 48000 — RNNoise is fixed at 48 kHz frames. Leaving the
+      // context free to follow a 96 kHz headset silently halves the model's
+      // frequency mapping and defeats AI suppression even when WASM loads
+      // correctly (#5458). Browsers resample to the device as needed.
       const savedOutput = localStorage.getItem('haven_output_device') || '';
-      const ctxOpts = {};
+      const ctxOpts = { sampleRate: 48000 };
       if (savedOutput && typeof AudioContext !== 'undefined' &&
           AudioContext.prototype && 'setSinkId' in AudioContext.prototype) {
         ctxOpts.sinkId = savedOutput;
@@ -2560,8 +2751,13 @@ class VoiceManager {
       try {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)(ctxOpts);
       } catch {
-        // Older Chromium throws when sinkId is passed in options.
-        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Older Chromium throws when sinkId is passed in options — retry
+        // with just sampleRate, then fully bare.
+        try {
+          this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+        } catch {
+          this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
       }
       // Best-effort: if sinkId-in-options wasn't honored but setSinkId() is
       // available on the instance, apply it now.

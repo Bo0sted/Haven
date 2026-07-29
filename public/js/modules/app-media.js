@@ -2964,10 +2964,44 @@ _showImageContextMenu(e, src) {
       // the async fetch + clipboard write. We still control the toast.
       this._hideImageContextMenu();
       (async () => {
+        const isDesktop = !!(window.havenDesktop?.isDesktopApp || window.havenDesktop?.clipboardWriteImage);
         const fetchAsBlob = async () => {
+          // Prefer the blob the menu started warming on open.
+          if (this._ctxImageBlob && this._ctxImageBlobSrc === src) {
+            try {
+              const warmed = await this._ctxImageBlob;
+              if (warmed) return warmed;
+            } catch { /* fall through to fresh fetch */ }
+          }
           const resp = await fetch(src, { credentials: 'same-origin' });
           if (!resp.ok) throw new Error('fetch ' + resp.status);
           return await resp.blob();
+        };
+        // Last-resort decode from an already-painted <img> (lightbox or chat).
+        // Survives when fetch is blocked (CORS / opaque redirect) but the
+        // browser already decoded the pixels for display.
+        const blobFromDomImage = async () => {
+          const candidates = [];
+          const lb = document.getElementById('lightbox-img');
+          if (lb?.src) candidates.push(lb);
+          document.querySelectorAll('img.chat-image').forEach(img => {
+            if (img.src === src || this._normalizeImgSrc?.(img.getAttribute('src')) === this._normalizeImgSrc?.(src)) {
+              candidates.push(img);
+            }
+          });
+          for (const img of candidates) {
+            try {
+              if (!img.naturalWidth) continue;
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              canvas.getContext('2d').drawImage(img, 0, 0);
+              const blob = await new Promise((res, rej) =>
+                canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), 'image/png'));
+              if (blob) return blob;
+            } catch { /* tainted canvas or detached node — try next */ }
+          }
+          return null;
         };
         const toPngBlob = async (blob) => {
           if (blob.type === 'image/png') return blob;
@@ -2979,23 +3013,41 @@ _showImageContextMenu(e, src) {
           return await new Promise((res, rej) =>
             canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), 'image/png'));
         };
-        const blobToDataUrl = (blob) => new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.onerror = () => rej(r.error || new Error('FileReader failed'));
-          r.readAsDataURL(blob);
-        });
+        const blobToBase64 = async (blob) => {
+          const buf = await blob.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          // Chunked binary→base64 so large screenshots don't blow the call stack.
+          const chunk = 0x8000;
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+          }
+          return btoa(binary);
+        };
+        const resolvePngBlob = async () => {
+          try {
+            return await toPngBlob(await fetchAsBlob());
+          } catch (fetchErr) {
+            console.warn('[Haven] Image fetch for copy failed, trying DOM decode:', fetchErr);
+            const domBlob = await blobFromDomImage();
+            if (!domBlob) throw fetchErr;
+            return domBlob.type === 'image/png' ? domBlob : await toPngBlob(domBlob);
+          }
+        };
 
         // Strategy 1: Electron desktop IPC (most reliable — main process
-        // clipboard has no user-gesture requirement).
+        // clipboard has no user-gesture requirement). Prefer raw base64 over
+        // a data: URL so IPC doesn't pay the "data:image/png;base64," tax on
+        // multi‑MB screenshots.
         if (window.havenDesktop?.clipboardWriteImage) {
           try {
-            const blob = await fetchAsBlob();
-            const png = await toPngBlob(blob);
-            const dataUrl = await blobToDataUrl(png);
-            const res = await window.havenDesktop.clipboardWriteImage(dataUrl);
+            try { window.focus(); } catch {}
+            const png = await resolvePngBlob();
+            const b64 = await blobToBase64(png);
+            const res = await window.havenDesktop.clipboardWriteImage(b64);
             if (res?.ok) { this._showToast('Image copied to clipboard', 'success'); return; }
             console.warn('[Haven] IPC clipboard write failed:', res?.reason);
+            // Fall through — still try web/desktop text fallbacks.
           } catch (err) {
             console.warn('[Haven] IPC clipboard path errored:', err);
           }
@@ -3018,9 +3070,7 @@ _showImageContextMenu(e, src) {
           }
           // Reuse the blob the menu started fetching on open where possible, so
           // a slow image can't stretch this past the transient user activation.
-          const blobPromise = this._ctxImageBlob && this._ctxImageBlobSrc === src
-            ? this._ctxImageBlob
-            : (async () => toPngBlob(await fetchAsBlob()))();
+          const blobPromise = (async () => resolvePngBlob())();
           await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blobPromise })
           ]);
@@ -3029,10 +3079,24 @@ _showImageContextMenu(e, src) {
         } catch (err) {
           console.error('[Haven] Web clipboard.write failed:', err);
           // Strategy 3: at least put the URL on the clipboard so the
-          // user has something to paste.
+          // user has something to paste. On desktop, route text through
+          // main-process IPC too — navigator.clipboard is often gesture-
+          // locked in Electron BrowserViews after a context menu closes.
           try {
+            if (window.havenDesktop?.clipboardWriteText) {
+              const res = await window.havenDesktop.clipboardWriteText(src);
+              if (res?.ok) {
+                this._showToast('Copied image URL (image bytes unavailable)', 'warning');
+                return;
+              }
+            }
             await navigator.clipboard.writeText(src);
-            this._showToast('Copied image URL (browser blocked image copy)', 'warning');
+            this._showToast(
+              isDesktop
+                ? 'Copied image URL (could not copy image pixels)'
+                : 'Copied image URL (browser blocked image copy)',
+              'warning'
+            );
             return;
           } catch (err2) {
             console.error('[Haven] writeText fallback failed:', err2);
@@ -3042,7 +3106,9 @@ _showImageContextMenu(e, src) {
             const denied = /denied|NotAllowed/i.test(String(err2?.name) + String(err2?.message));
             this._showToast(
               denied
-                ? 'Clipboard blocked by the browser — click the page first, then retry'
+                ? (isDesktop
+                    ? 'Could not access clipboard — click inside Haven and try Copy Image again'
+                    : 'Clipboard blocked by the browser — click the page first, then retry')
                 : 'Failed to copy image: ' + (err2?.message || err2),
               'error'
             );

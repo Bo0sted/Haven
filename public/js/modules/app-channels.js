@@ -213,7 +213,11 @@ async switchChannel(code) {
     }
   }
   this.socket.emit('get-channel-members', { code });
-  this.socket.emit('request-voice-users', { code });
+  // VOICE panel shows who's in voice in the channel you just opened.
+  this.socket.emit('request-voice-users', {
+    code,
+    iAmInVoice: !!(this.voice && this.voice.inVoice && this.voice.currentChannel === code)
+  });
   // Safety net (#post-sleep-channel-desync round 2): if message-history
   // doesn't arrive within 5 s for the channel we just switched to, the
   // socket is likely a zombie (silent disconnect, write buffered but not

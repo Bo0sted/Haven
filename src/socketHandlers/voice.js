@@ -749,6 +749,36 @@ module.exports = function register(socket, ctx) {
     const _hadRoomEntry = !!voiceUsers.get(code)?.has(socket.user.id);
     console.log(`[VoiceDiag] voice-rejoin: ${socket.user.username} (id=${socket.user.id}) on ${code} hadExisting=${_hadRoomEntry} newSocketId=${socket.id}`);
 
+    // ── ALREADY-HERE PATH ──────────────────────────────────
+    // Client is still bound to this room on THIS socket (common: UI
+    // reconciler / watchdog / resize-triggered voice-rejoin while nothing
+    // actually broke). Do NOT emit voice-user-left/joined and do NOT send
+    // voice-existing-users without skipRenegotiate — that made the client
+    // tear down live RTCPeerConnections and drop screen shares, while the
+    // join-sound / roster churn looked like a disconnect. Just refresh the
+    // roster snapshot and leave media alone.
+    const _already = voiceUsers.get(code)?.get(socket.user.id);
+    if (_already && _already.socketId === socket.id) {
+      socket.join(`voice:${code}`);
+      voiceLastActivity.set(socket.user.id, Date.now());
+      _already.username = socket.user.displayName;
+      console.log(`[VoiceDiag] voice-rejoin NO-OP (already bound on same socket) for ${socket.user.username} on ${code}`);
+      const existingUsers = Array.from(voiceUsers.get(code).values())
+        .filter(u => u.id !== socket.user.id);
+      const vchSettings = db.prepare('SELECT voice_bitrate FROM channels WHERE code = ?').get(code);
+      socket.emit('voice-existing-users', {
+        channelCode: code,
+        users: existingUsers.map(u => ({ id: u.id, username: u.username })),
+        voiceBitrate: vchSettings ? (vchSettings.voice_bitrate || 0) : 0,
+        skipRenegotiate: true
+      });
+      // Private roster refresh for the requester only — don't rebroadcast
+      // voice-user-joined (that would play join sounds for everyone).
+      broadcastVoiceUsers(code);
+      broadcastStreamInfo(code);
+      return;
+    }
+
     for (const [prevCode, room] of voiceUsers) {
       if (room.has(socket.user.id) && prevCode !== code) {
         handleVoiceLeave(socket, prevCode);

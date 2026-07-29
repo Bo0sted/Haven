@@ -192,8 +192,11 @@ _setupSocketListeners() {
       this._historyAfter = null;
       this.socket.emit('get-messages', { code: this.currentChannel });
       this.socket.emit('get-channel-members', { code: this.currentChannel });
-      // Request fresh voice list for this channel
-      this.socket.emit('request-voice-users', { code: this.currentChannel });
+      // Request fresh voice list for the channel currently in view.
+      this.socket.emit('request-voice-users', {
+        code: this.currentChannel,
+        iAmInVoice: !!(this.voice && this.voice.inVoice && this.voice.currentChannel === this.currentChannel)
+      });
     }
     // Re-join voice if we were in voice before reconnect
     if (this.voice && this.voice.inVoice && this.voice.currentChannel) {
@@ -340,7 +343,10 @@ _setupSocketListeners() {
         // Pull a fresh online-users + voice roster so the right-side panels
         // aren't stuck on whatever stale snapshot was rendered before sleep.
         this.socket.emit('request-online-users', { code: this.currentChannel });
-        this.socket.emit('request-voice-users', { code: this.currentChannel });
+        this.socket.emit('request-voice-users', {
+          code: this.currentChannel,
+          iAmInVoice: !!(this.voice && this.voice.inVoice && this.voice.currentChannel === this.currentChannel)
+        });
       }
       // Re-fetch channels in case list changed while backgrounded
       this.socket?.emit('get-channels');
@@ -405,16 +411,34 @@ _setupSocketListeners() {
   // unlocks the PC and clicks back into the Haven window, focus fires even
   // if visibilitychange didn't. We debounce against the wake detector so
   // we don't double-cycle the socket within a few seconds.
+  //
+  // CRITICAL: title-bar drag / double-click maximize also fires `focus`,
+  // often during a multi-second main-thread stall while the stream video
+  // element relayouts. A single missed pong used to hard-cycle the socket
+  // (`focus-zombie`), which is exactly the "first resize drops me from
+  // voice roster but I can still talk" bug — server grace-evicts the old
+  // socketId, UI flips to Join Voice, WebRTC peers keep carrying audio.
+  window.addEventListener('resize', () => {
+    this._recentWindowResizeAt = Date.now();
+  });
   window.addEventListener('focus', () => {
     const sinceLastResync = Date.now() - (this._lastForcedResync || 0);
     if (sinceLastResync < 5000) return;
+    // Ignore focus storms that accompany a window resize/maximize.
+    if (this._recentWindowResizeAt && (Date.now() - this._recentWindowResizeAt) < 2500) {
+      return;
+    }
     // Cheap liveness probe: emit a ping-check and force-resync if no pong
-    // arrives within 4 s. Avoids needlessly cycling the socket on a quick
-    // window-switch where the connection is actually fine.
+    // arrives. Avoids needlessly cycling the socket on a quick window-switch
+    // where the connection is actually fine.
     if (!this.socket?.connected) {
       this._forceFullResync('focus-disconnected');
       return;
     }
+    // In an active voice session, never hard-disconnect on one missed pong.
+    // Stream decode + layout on maximize routinely blocks the renderer long
+    // enough for a 4s timer to fire even though the socket is healthy.
+    const voiceLive = !!(this.voice && (this.voice.inVoice || this.voice.liveVoicePeerCount?.() > 0));
     const probeStart = Date.now();
     let acked = false;
     const ackHandler = () => { acked = true; };
@@ -423,13 +447,21 @@ _setupSocketListeners() {
     // real round trip and should show up as one; emitting 'ping-check' directly
     // here is what desynced the queue-less reading.
     try { this._pingSend(); } catch {}
+    const probeMs = voiceLive ? 10000 : 6000;
     setTimeout(() => {
       this.socket?.off('pong-check', ackHandler);
-      if (!acked) {
-        console.log(`[wake-detect] no pong in 4s on focus (probe ${Date.now()-probeStart}ms), zombie socket — forcing resync`);
-        this._forceFullResync('focus-zombie');
+      if (acked) return;
+      if (voiceLive) {
+        // Light recovery only — rebind voice + refresh rosters. Do NOT
+        // disconnect; that is what knocks us out of the server voice map
+        // while leaving WebRTC audio running.
+        console.warn(`[wake-detect] no pong in ${probeMs}ms on focus while in voice (probe ${Date.now()-probeStart}ms) — light resync, not disconnect`);
+        this._lightVoiceResync('focus-zombie-in-voice');
+        return;
       }
-    }, 4000);
+      console.log(`[wake-detect] no pong in ${probeMs}ms on focus (probe ${Date.now()-probeStart}ms), zombie socket — forcing resync`);
+      this._forceFullResync('focus-zombie');
+    }, probeMs);
   });
 
   this.socket.on('disconnect', () => {
@@ -453,12 +485,25 @@ _setupSocketListeners() {
     // Defer the teardown by 2 s; if we reconnect first (the common case),
     // skip the soft-leave entirely. The reconnect handler will issue
     // `voice-rejoin` which rebinds our voice slot to the new socketId.
+    //
+    // If WebRTC peers are still connected, NEVER soft-leave — that destroys
+    // working audio/streams while the user can still talk, and the server
+    // grace timer + missed voice-rejoin is what makes everyone else see
+    // "they left" even though media is live. Keep the session and wait for
+    // socket reconnect to rebind.
     if (this.voice && this.voice.inVoice) {
       if (this._voiceDisconnectTimer) clearTimeout(this._voiceDisconnectTimer);
       this._voiceDisconnectTimer = setTimeout(() => {
         this._voiceDisconnectTimer = null;
         if (this.socket?.connected) return; // reconnected in time
         if (!(this.voice && this.voice.inVoice)) return;
+        const peersLive = (this.voice.liveVoicePeerCount?.() || 0) > 0;
+        const micLive = !!(this.voice.localStream &&
+          this.voice.localStream.getTracks().some(t => t.readyState === 'live'));
+        if (peersLive || micLive) {
+          console.warn('[Voice] socket still down after 2s but WebRTC media is live — keeping session (no soft-leave)');
+          return;
+        }
         console.warn('[Voice] socket still down after 2s — soft-leaving voice');
         this.voice._softLeave();
         this._updateVoiceButtons(false);
@@ -1032,8 +1077,9 @@ _setupSocketListeners() {
   });
 
   this.socket.on('voice-users-update', (data) => {
-    // (#5347 follow-up) Re-render the voice participant list whenever the
-    // user is either viewing the channel OR currently in voice on it.
+    // Right-side VOICE panel shows who's in voice for the channel you are
+    // currently *viewing* (not whichever VC you happen to be connected to).
+    // Left-sidebar badges still track every channel via the maps below.
     const isViewing = data.channelCode === this.currentChannel;
     // Repair the local flags from the live peer connections before reading
     // them. Without this, a stale `inVoice === false` makes the filter below
@@ -1091,8 +1137,27 @@ _setupSocketListeners() {
         this.socket.emit('voice-rejoin', { code: data.channelCode });
       }
     }
-    if ((isViewing || isInVoice) && localStorage.getItem('haven_hide_voice_panel') !== 'true') {
-      this._renderVoiceUsers(users, data.channelCode);
+    if (isViewing && localStorage.getItem('haven_hide_voice_panel') !== 'true') {
+      // Anti-flicker: while viewing a channel we're in voice on, ignore
+      // transient empty snapshots from prune/rejoin races. Keep the last
+      // good list and re-poll — otherwise the panel strobes
+      // empty ↔ everyone. Legitimate "everyone left" still lands once the
+      // follow-up poll returns a stable empty/self-only roster.
+      const sameChannelList = this._lastVoiceUsersChannel === data.channelCode;
+      const hadPeople = sameChannelList && Array.isArray(this._lastVoiceUsers) && this._lastVoiceUsers.length > 0;
+      if (users.length === 0 && isInVoice && hadPeople) {
+        console.warn('[Voice] Ignoring empty roster snapshot while inVoice (keeping last list)', {
+          channel: data.channelCode,
+          lastCount: this._lastVoiceUsers.length
+        });
+        const now = Date.now();
+        if ((now - (this._lastEmptyRosterPollAt || 0)) > 2000 && this.socket?.connected) {
+          this._lastEmptyRosterPollAt = now;
+          this.socket.emit('request-voice-users', { code: data.channelCode, iAmInVoice: true });
+        }
+      } else {
+        this._renderVoiceUsers(users, data.channelCode);
+      }
     }
     // (#5347 v3.15.4) Keep the left sidebar in sync with the right panel.
     // Previously the right panel was driven by voice-users-update and the
@@ -1100,11 +1165,20 @@ _setupSocketListeners() {
     // event arrived stale or out of order (the user saw both users on the
     // right but only themselves on the left). Both stores are now updated
     // from this single authoritative event so they cannot disagree.
+    //
+    // Exception: when we're in voice on this channel and the snapshot is
+    // transiently empty, don't wipe the sidebar either — same race as the
+    // panel guard above.
     const usersForSidebar = users.map(u => ({
       id: u.id, username: u.username,
       isMuted: !!u.isMuted, isDeafened: !!u.isDeafened
     }));
-    if (usersForSidebar.length > 0) {
+    const skipEmptyWipe = usersForSidebar.length === 0 && isInVoice &&
+      Array.isArray(this.voiceChannelUsers?.[data.channelCode]) &&
+      this.voiceChannelUsers[data.channelCode].length > 0;
+    if (skipEmptyWipe) {
+      // keep existing sidebar maps
+    } else if (usersForSidebar.length > 0) {
       this.voiceCounts[data.channelCode] = usersForSidebar.length;
       this.voiceChannelUsers[data.channelCode] = usersForSidebar;
     } else {
@@ -1365,15 +1439,25 @@ _setupSocketListeners() {
   });
 
   // ── Voice kicked ────────────────────────────────
+  // NOTE: voice.js also listens for `voice-kicked` and calls leave() +
+  // onVoiceKicked (which toasts). Wait a tick so that handler runs first;
+  // only tear down + toast here if the session is somehow still live
+  // (channel-mismatch edge case). Avoids double leave / double toast.
   this.socket.on('voice-kicked', (data) => {
-    // Server forcibly removed us from voice — tear down locally
-    if (this.voice && this.voice.inVoice) {
-      this.voice.leave();
+    if (!data) return;
+    setTimeout(() => {
+      const stillIn = !!(this.voice && this.voice.inVoice);
+      if (stillIn) {
+        try { this.voice.leave(); } catch {}
+        this._showToast(
+          t('toasts.kicked_from_voice', { by: data.kickedBy || data.reason || t('toasts.a_moderator') }),
+          'error'
+        );
+      }
       this._updateVoiceButtons(false);
       this._updateVoiceStatus(false);
       this._updateVoiceBar();
-      this._showToast(t('toasts.kicked_from_voice', { by: data.kickedBy || t('toasts.a_moderator') }), 'error');
-    }
+    }, 0);
   });
 
   // ── Stream viewer tracking ───────────────────────
@@ -1886,6 +1970,17 @@ _setupSocketListeners() {
     this._renderBanList(data);
   });
 
+  // (#5457) A banned user submitted an appeal. Nudge online admins and, if the
+  // Banned Users modal is open, refresh it so the appeal shows immediately.
+  this.socket.on('ban-appeal-received', (data) => {
+    if (!this.user?.isAdmin) return;
+    this._showToast(t('toasts.ban_appeal_received', { username: data?.username || 'A banned user' }), 'info');
+    const bansModal = document.getElementById('bans-modal');
+    if (bansModal && bansModal.style.display !== 'none') {
+      this.socket.emit('get-bans');
+    }
+  });
+
   this.socket.on('ip-ban-list', (data) => {
     this._renderIpBanList(data);
   });
@@ -2140,8 +2235,19 @@ _forceFullResync(reason) {
   const now = Date.now();
   if (now - (this._lastForcedResync || 0) < 3000) return;
   this._lastForcedResync = now;
-  console.log(`[force-resync] reason=${reason}, socket.connected=${!!this.socket?.connected}`);
+  const inVoiceLive = !!(this.voice && this.voice.inVoice &&
+    ((this.voice.liveVoicePeerCount?.() || 0) > 0 || this.voice.localStream));
+  console.log(`[force-resync] reason=${reason}, socket.connected=${!!this.socket?.connected}, inVoiceLive=${inVoiceLive}`);
   if (!this.socket) return;
+
+  // Hard-cycling the socket while WebRTC is healthy is what produces the
+  // "left voice on the roster / lost the stream / can still talk" desync
+  // on window maximize. Prefer a light resync whenever media is live.
+  if (inVoiceLive && this.socket.connected) {
+    this._lightVoiceResync(reason);
+    return;
+  }
+
   try { this.socket.disconnect(); } catch {}
   try { this.socket.connect(); } catch {}
   // Defensive: if for some reason 'connect' doesn't fire within 6 s,
@@ -2158,9 +2264,42 @@ _forceFullResync(reason) {
         try { this.socket.emit('get-channel-members', { code: this.currentChannel }); } catch {}
         try { this.socket.emit('request-online-users', { code: this.currentChannel }); } catch {}
         try { this.socket.emit('request-voice-users', { code: this.currentChannel }); } catch {}
+        if (this.voice?.inVoice && this.voice.currentChannel) {
+          try { this.socket.emit('voice-rejoin', { code: this.voice.currentChannel }); } catch {}
+        }
       }
     }
   }, 6000);
+},
+
+// Refresh channel/voice state without tearing down the socket (and therefore
+// without risking a server-side voice grace-eviction while WebRTC is fine).
+_lightVoiceResync(reason) {
+  console.log(`[light-resync] reason=${reason}`);
+  if (!this.socket?.connected) {
+    try { this.socket?.connect(); } catch {}
+    return;
+  }
+  try {
+    if (this.currentChannel) {
+      this.socket.emit('enter-channel', { code: this.currentChannel });
+      this.socket.emit('request-online-users', { code: this.currentChannel });
+      this.socket.emit('request-voice-users', {
+        code: this.currentChannel,
+        iAmInVoice: !!(this.voice && this.voice.inVoice && this.voice.currentChannel === this.currentChannel)
+      });
+    }
+    if (this.voice?.inVoice && this.voice.currentChannel) {
+      // voice-rejoin is now a no-op on the server when already bound on this
+      // socket (skipRenegotiate). Still safe — used only to refresh roster.
+      this.socket.emit('voice-rejoin', { code: this.voice.currentChannel });
+      // UI may have been flipped to "Join Voice" by a partial desync — restore.
+      try { this._reconcileVoiceUi?.(); } catch {}
+      try { this.voice.reassertScreenStreams?.(); } catch {}
+    }
+  } catch (e) {
+    console.warn('[light-resync] failed:', e);
+  }
 },
 
 };

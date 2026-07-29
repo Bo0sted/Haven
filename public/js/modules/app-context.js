@@ -1224,7 +1224,11 @@ _startPingMonitor() {
   this._memberRefreshInterval = setInterval(() => {
     if (this.socket && this.socket.connected && this.currentChannel) {
       this.socket.emit('request-online-users', { code: this.currentChannel });
-      this.socket.emit('request-voice-users', { code: this.currentChannel });
+      // VOICE panel follows the channel in view.
+      this.socket.emit('request-voice-users', {
+        code: this.currentChannel,
+        iAmInVoice: !!(this.voice && this.voice.inVoice && this.voice.currentChannel === this.currentChannel)
+      });
     }
   }, 30000);
 

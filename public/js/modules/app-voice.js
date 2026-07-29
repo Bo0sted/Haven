@@ -120,9 +120,10 @@ _leaveVoice() {
   if (leftCode) {
     delete this.voiceCounts[leftCode];
     delete this.voiceChannelUsers[leftCode];
-    // If the right panel is currently showing this channel's voice users,
-    // empty it immediately so the user sees the leave reflected on click.
-    if (this.currentChannel === leftCode) {
+    // Clear the right VOICE panel whenever it was bound to the channel we
+    // just left — including the case where we're reading a different text
+    // channel (DM etc.) while the panel was still showing the VC roster.
+    if (this.currentChannel === leftCode || this._lastVoiceUsersChannel === leftCode) {
       this._renderVoiceUsers([], leftCode);
     }
     this._updateChannelVoiceIndicators();
@@ -207,47 +208,77 @@ _toggleDeafen() {
 // and are untouched, which is exactly why the stream's sound kept playing.
 //
 // This runs on a timer and on focus/resize and repairs whichever side is stale.
+// IMPORTANT: this is UI-only. It must NEVER emit voice-rejoin / voice-leave.
+// A previous revision did, and on window maximize that tore down live peers
+// via voice-existing-users (no skipRenegotiate) — the "instant disconnect
+// on first resize while streaming" bug.
 _reconcileVoiceUi() {
   if (!this.voice) return;
 
   // Fix the bookkeeping first if the media session says we're still in voice.
   const repaired = this.voice.reassertSessionIfLive();
 
-  const inVoice = !!(this.voice.inVoice && this.voice.currentChannel);
+  const peersLive = (this.voice.liveVoicePeerCount?.() || 0) > 0;
+  const micLive = !!(this.voice.localStream &&
+    this.voice.localStream.getTracks().some(t => t.readyState === 'live'));
+  const flagsInVoice = !!(this.voice.inVoice && this.voice.currentChannel);
+  // Media truth wins. Never paint "Join Voice" while peers/mic are live.
+  const sessionInVoice = flagsInVoice || peersLive || micLive;
+
+  const joinBtn = document.getElementById('voice-join-btn');
+  const joinVisible = !!joinBtn && joinBtn.style.display !== 'none';
   const bar = document.getElementById('voice-bar');
-  const uiShowsVoice = !!bar && bar.style.display !== 'none';
+  const barShowsVoice = !!bar && bar.style.display !== 'none' && bar.style.display !== '';
 
-  // Already consistent — the overwhelmingly common case, so stay cheap.
-  if (!repaired && inVoice === uiShowsVoice) return;
+  // Already consistent.
+  if (!repaired && sessionInVoice && !joinVisible && barShowsVoice) return;
+  if (!repaired && !sessionInVoice && joinVisible && !barShowsVoice) return;
 
-  console.warn('[Voice] UI/session desync — reconciling', { inVoice, uiShowsVoice, repaired });
-
-  this._updateVoiceButtons(inVoice);
-  this._updateVoiceStatus(inVoice);
-  this._updateVoiceBar();
-
-  if (inVoice) {
-    this._syncMuteDeafenButtons();
-    // Our roster entry may have been filtered out locally while the flags were
-    // wrong; ask for an authoritative copy.
-    try { this.socket.emit('request-voice-users', { code: this.voice.currentChannel }); } catch {}
-    // _updateVoiceButtons(false) wiped the stream tiles on the way down. Put
-    // back anything still being received.
-    const restored = this.voice.reassertScreenStreams();
-    if (restored) console.warn('[Voice] Restored', restored, 'stream tile(s) after UI desync');
+  // Only repair UPWARD when media is live. Never tear UI down on a flaky
+  // layout read during maximize — that wiped stream tiles.
+  if (!sessionInVoice) {
+    // Genuinely idle — leave UI alone unless it still shows connected chrome.
+    if (!barShowsVoice && joinVisible) return;
+    // Bar still says connected but media is dead: clear chrome.
+    if (barShowsVoice || !joinVisible) {
+      console.warn('[Voice] UI shows voice but media is dead — clearing chrome');
+      this._updateVoiceButtons(false);
+      this._updateVoiceStatus(false);
+      this._updateVoiceBar();
+    }
+    return;
   }
+
+  console.warn('[Voice] UI/session desync — repairing UI upward', {
+    flagsInVoice, peersLive, micLive, joinVisible, barShowsVoice, repaired
+  });
+
+  this._updateVoiceButtons(true);
+  this._updateVoiceStatus(true);
+  this._updateVoiceBar();
+  this._syncMuteDeafenButtons();
+
+  // Restore stream tiles if a prior false-leave wiped them. No signalling.
+  try {
+    const restored = this.voice.reassertScreenStreams?.();
+    if (restored) console.warn('[Voice] Restored', restored, 'stream tile(s) after UI desync');
+  } catch {}
 },
 
 _startVoiceUiReconciler() {
   if (this._voiceUiReconcilerBound) return;
   this._voiceUiReconcilerBound = true;
+  // Debounce resize heavily: maximize fires a burst of events. We only
+  // need to fix chrome after the layout settles — never mid-drag.
+  let resizeTimer = null;
   const run = () => { try { this._reconcileVoiceUi(); } catch (e) { console.warn('[Voice] reconcile failed:', e); } };
-  // Window focus and resize are when this has actually been observed to break
-  // (maximising the desktop window), so check immediately on both rather than
-  // waiting up to a full interval.
-  window.addEventListener('focus', run);
-  window.addEventListener('resize', run);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) run(); });
+  const runDebounced = () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(run, 300);
+  };
+  window.addEventListener('focus', runDebounced);
+  window.addEventListener('resize', runDebounced);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) runDebounced(); });
   this._voiceUiReconcilerTimer = setInterval(run, 5000);
 },
 
@@ -331,22 +362,40 @@ _updateVoiceButtons(inVoice) {
     if (vsPanel) vsPanel.style.display = 'none';
     const vsBtn = document.getElementById('voice-settings-toggle');
     if (vsBtn) vsBtn.classList.remove('active');
-    // Clear all stream tiles so no ghost tiles persist after leaving voice
-    const grid = document.getElementById('screen-share-grid');
-    grid.querySelectorAll('video').forEach(v => { v.srcObject = null; });
-    grid.innerHTML = '';
-    document.getElementById('screen-share-container').style.display = 'none';
-    // Clear all webcam tiles
-    const wcGrid = document.getElementById('webcam-grid');
-    if (wcGrid) {
-      wcGrid.querySelectorAll('video').forEach(v => { v.srcObject = null; });
-      wcGrid.innerHTML = '';
+
+    // Only destroy stream/webcam tiles when media is actually dead.
+    // A UI-only desync (maximize/resize flipping Join Voice on while
+    // WebRTC is still carrying the stream) used to wipe the grid here —
+    // audio kept playing with no tile and no way to restore without
+    // leave/rejoin. If peers or screen receivers are still live, leave
+    // the tiles alone; the reconciler will re-show the voice chrome.
+    const mediaStillLive = !!(this.voice && (
+      this.voice.inVoice ||
+      (this.voice.liveVoicePeerCount?.() || 0) > 0 ||
+      (this.voice.screenSharers && this.voice.screenSharers.size > 0) ||
+      (this.voice.localStream && this.voice.localStream.getTracks().some(t => t.readyState === 'live'))
+    ));
+    if (!mediaStillLive) {
+      const grid = document.getElementById('screen-share-grid');
+      if (grid) {
+        grid.querySelectorAll('video').forEach(v => { v.srcObject = null; });
+        grid.innerHTML = '';
+      }
+      const ssContainer = document.getElementById('screen-share-container');
+      if (ssContainer) ssContainer.style.display = 'none';
+      const wcGrid = document.getElementById('webcam-grid');
+      if (wcGrid) {
+        wcGrid.querySelectorAll('video').forEach(v => { v.srcObject = null; });
+        wcGrid.innerHTML = '';
+      }
+      const wcContainer = document.getElementById('webcam-container');
+      if (wcContainer) wcContainer.style.display = 'none';
+      this._screenShareMinimized = false;
+      this._removeScreenShareIndicator();
+      this._hideMusicPanel();
+    } else {
+      console.warn('[Voice] _updateVoiceButtons(false) skipped stream wipe — media still live');
     }
-    const wcContainer = document.getElementById('webcam-container');
-    if (wcContainer) wcContainer.style.display = 'none';
-    this._screenShareMinimized = false;
-    this._removeScreenShareIndicator();
-    this._hideMusicPanel();
   }
 },
 
