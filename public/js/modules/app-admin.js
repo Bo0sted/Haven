@@ -546,6 +546,9 @@ _applyServerSettings() {
   const riAfter = document.getElementById('role-icon-after-name');
   if (riAfter) riAfter.checked = this.serverSettings.role_icon_after_name === 'true';
 
+  // (#5461) Reflect the saved channel-creator-role choice.
+  this._renderChannelCreatorRoleSelect();
+
   if (bannerPreview) {
     if (this.serverSettings.server_banner) {
       bannerPreview.innerHTML = `<img src="${this._escapeHtml(this.serverSettings.server_banner)}" style="max-width:100%;max-height:80px;border-radius:6px;object-fit:cover">`;
@@ -1288,14 +1291,20 @@ _renderBanList(bans) {
     return;
   }
   list.innerHTML = bans.map(b => `
-    <div class="ban-item">
+    <div class="ban-item${b.appeal ? ' has-appeal' : ''}">
       <div class="ban-info">
         <strong>${this._escapeHtml(b.username)}</strong>
         <span class="ban-reason">${b.reason ? this._escapeHtml(b.reason) : t('settings.admin.no_reason')}</span>
         <span class="ban-date">${new Date(b.created_at).toLocaleDateString()}</span>
+        ${b.appeal ? `
+        <div class="ban-appeal">
+          <span class="ban-appeal-label">📝 ${t('settings.admin.ban_appeal_label')}${b.appeal_at ? ' · ' + new Date(b.appeal_at).toLocaleDateString() : ''}</span>
+          <span class="ban-appeal-text">${this._escapeHtml(b.appeal)}</span>
+        </div>` : ''}
       </div>
       <div class="ban-actions">
         <button class="btn-sm btn-unban" data-uid="${b.user_id}">${t('settings.admin.unban_btn')}</button>
+        ${b.appeal ? `<button class="btn-sm btn-dismiss-appeal" data-uid="${b.user_id}" title="${t('settings.admin.dismiss_appeal_title')}">${t('settings.admin.dismiss_appeal_btn')}</button>` : ''}
         <button class="btn-sm btn-delete-user" data-uid="${b.user_id}" data-uname="${this._escapeHtml(b.username)}" title="${t('settings.admin.delete_user_title')}">🗑️</button>
       </div>
     </div>
@@ -1304,6 +1313,12 @@ _renderBanList(bans) {
   list.querySelectorAll('.btn-unban').forEach(btn => {
     btn.addEventListener('click', () => {
       this.socket.emit('unban-user', { userId: parseInt(btn.dataset.uid) });
+    });
+  });
+
+  list.querySelectorAll('.btn-dismiss-appeal').forEach(btn => {
+    btn.addEventListener('click', () => {
+      this.socket.emit('dismiss-ban-appeal', { userId: parseInt(btn.dataset.uid) });
     });
   });
 
@@ -3545,6 +3560,42 @@ _renderRolesPreview() {
       <span class="muted-text" style="font-size:11px;margin-left:auto">Lv.${r.level}</span>
     </div>`
   ).join('');
+  // Keep the "channel creator role" picker in sync with the role list (#5461)
+  this._renderChannelCreatorRoleSelect();
+},
+
+// (#5461) Build the "Channel creator role" dropdown from the current roles and
+// select the saved value. 'default' = highest channel-scoped role (pre-5461
+// behavior), 'none' = no auto-grant, or a specific role id.
+_renderChannelCreatorRoleSelect() {
+  const sel = document.getElementById('channel-creator-role-select');
+  if (!sel) return;
+  const roles = this._allRoles || [];
+  const saved = (this.serverSettings && typeof this.serverSettings.channel_creator_role === 'string')
+    ? this.serverSettings.channel_creator_role.trim() : '';
+  const value = (saved === '') ? 'default' : saved;
+
+  sel.innerHTML =
+    `<option value="default">${this._escapeHtml(t('settings.admin.channel_creator_role_default'))}</option>` +
+    `<option value="none">${this._escapeHtml(t('settings.admin.channel_creator_role_none'))}</option>` +
+    roles.map(r => {
+      const scope = r.scope === 'channel' ? 'channel' : 'server';
+      return `<option value="${r.id}">${this._escapeHtml(r.name)} (${scope}, Lv.${r.level})</option>`;
+    }).join('');
+
+  // Fall back to Default if the saved role was since deleted.
+  const has = Array.from(sel.options).some(o => o.value === String(value));
+  sel.value = has ? String(value) : 'default';
+
+  if (!this._ccrWired) {
+    this._ccrWired = true;
+    sel.addEventListener('change', () => {
+      const v = sel.value; // 'default' | 'none' | '<roleId>'
+      this.serverSettings = this.serverSettings || {};
+      this.serverSettings.channel_creator_role = (v === 'default') ? '' : v;
+      this.socket.emit('update-server-setting', { key: 'channel_creator_role', value: v });
+    });
+  }
 },
 
 _openRoleModal() {

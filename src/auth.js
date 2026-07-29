@@ -591,12 +591,6 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check if user is banned
-    const ban = db.prepare('SELECT reason FROM bans WHERE user_id = ?').get(user.id);
-    if (ban) {
-      return res.status(403).json({ error: 'You have been banned from this server' });
-    }
-
     const valid = await bcrypt.compare(password, user.password_hash);
     // (#5300 DM-preservation) If the original password didn't match, fall
     // back to the temp hash set by an admin reset. Tracking which one matched
@@ -614,6 +608,21 @@ router.post('/login', authLimiter, async (req, res) => {
     }
     if (!okWithOriginal && !usedTemp) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // ── Ban check (deferred until AFTER credentials verify) ──────
+    // Kept below the password check on purpose (#5457): the ban reason is
+    // only revealed to whoever actually owns the account, never on a bare
+    // username guess. The client shows the reason and an appeal box; the
+    // /ban-appeal endpoint re-verifies these same credentials before storing.
+    const ban = db.prepare('SELECT reason FROM bans WHERE user_id = ?').get(user.id);
+    if (ban) {
+      return res.status(403).json({
+        error: 'You have been banned from this server',
+        banned: true,
+        reason: (typeof ban.reason === 'string' && ban.reason.trim()) ? ban.reason.trim() : '',
+        canAppeal: true
+      });
     }
 
     // Bootstrap admin from ADMIN_USERNAME env only when NO admin exists
@@ -671,6 +680,67 @@ router.post('/login', authLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Ban appeal submission (#5457) ───────────────────────────
+// A banned user proves ownership of the account (same credential check as
+// login) and submits one appeal, which admins see next to the ban in the
+// Banned Users list. Returns the same generic 'Invalid credentials' as login
+// for a bad username/password so it can't be used to probe which accounts
+// exist or are banned. Rate-limited via authLimiter; one active appeal per
+// user (re-submitting overwrites the previous text).
+router.post('/ban-appeal', authLimiter, async (req, res) => {
+  try {
+    const username = sanitizeString(req.body.username, 20);
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const appeal = typeof req.body.appeal === 'string' ? req.body.appeal.trim() : '';
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+    if (appeal.length < 1 || appeal.length > 2000) {
+      return res.status(400).json({ error: 'Appeal must be between 1 and 2000 characters' });
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    let ok = false;
+    try { ok = await bcrypt.compare(password, user.password_hash); } catch { ok = false; }
+    if (!ok && user.temp_password_hash) {
+      try { ok = await bcrypt.compare(password, user.temp_password_hash); } catch { ok = false; }
+    }
+    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const ban = db.prepare('SELECT id FROM bans WHERE user_id = ?').get(user.id);
+    if (!ban) return res.status(400).json({ error: 'This account is not banned' });
+
+    // One active appeal per user — resubmitting replaces the previous text.
+    db.prepare(
+      'INSERT INTO ban_appeals (user_id, appeal) VALUES (?, ?) ' +
+      'ON CONFLICT(user_id) DO UPDATE SET appeal = excluded.appeal, created_at = CURRENT_TIMESTAMP'
+    ).run(user.id, appeal);
+
+    // Best-effort real-time nudge to any online admin (they check the Banned
+    // Users list to review). Non-fatal if io isn't reachable.
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        const displayName = user.display_name || user.username;
+        for (const [, s] of io.sockets.sockets) {
+          if (s.user && s.user.isAdmin) {
+            s.emit('ban-appeal-received', { userId: user.id, username: displayName });
+          }
+        }
+      }
+    } catch { /* non-critical */ }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Ban appeal error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

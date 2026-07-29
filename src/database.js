@@ -105,6 +105,19 @@ function initDatabase() {
       UNIQUE(user_id)
     );
 
+    -- Ban appeals (#5457). A banned user who authenticates with the correct
+    -- password can submit one appeal, which admins see next to the ban in the
+    -- Banned Users list. UNIQUE(user_id) keeps it to one active appeal per
+    -- user (re-submitting overwrites). Rows are removed when the user is
+    -- unbanned or the appeal is dismissed.
+    CREATE TABLE IF NOT EXISTS ban_appeals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      appeal TEXT NOT NULL DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id)
+    );
+
     CREATE TABLE IF NOT EXISTS mutes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

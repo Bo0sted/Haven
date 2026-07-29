@@ -226,6 +226,25 @@
         </p>
       </form>
 
+      <!-- Ban appeal form (#5457), shown when a login is rejected with a ban -->
+      <form id="ban-appeal-form" class="auth-form" style="display:none">
+        <p style="text-align:center;color:var(--text-muted);font-size:0.9rem;margin-bottom:12px;">
+          <span data-i18n="auth.ban_appeal.instruction">🚫 Your account is banned from this server.</span>
+        </p>
+        <div id="ban-appeal-reason" style="background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.4);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:0.85rem;color:var(--text-secondary)"></div>
+        <div class="form-group">
+          <label for="ban-appeal-text" data-i18n="auth.ban_appeal.text_label">Appeal to the admins</label>
+          <textarea id="ban-appeal-text" maxlength="2000" rows="5" required style="resize:vertical"
+                    data-i18n-placeholder="auth.ban_appeal.text_placeholder"
+                    placeholder="Explain why you think the ban should be lifted..."></textarea>
+          <small data-i18n="auth.ban_appeal.text_hint">The server admins will see this next to your ban. Max 2000 characters.</small>
+        </div>
+        <button type="submit" class="btn-primary" data-i18n="auth.ban_appeal.submit">Submit Appeal</button>
+        <p style="text-align:center;margin-top:8px">
+          <a href="#" id="ban-appeal-back-btn" data-i18n="auth.ban_appeal.back" style="color:var(--text-muted);font-size:0.8rem;text-decoration:none">← Back to login</a>
+        </p>
+      </form>
+
       <!-- EULA acceptance (required before login/register) -->
       <div class="eula-notice" id="eula-notice">
         <label class="eula-check-row">

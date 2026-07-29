@@ -286,6 +286,8 @@ module.exports = function register(socket, ctx) {
     if (!isInt(data.userId)) return;
 
     db.prepare('DELETE FROM bans WHERE user_id = ?').run(data.userId);
+    // Any appeal is resolved once the ban is lifted (#5457).
+    db.prepare('DELETE FROM ban_appeals WHERE user_id = ?').run(data.userId);
     const targetUser = db.prepare('SELECT COALESCE(display_name, username) as username FROM users WHERE id = ?').get(data.userId);
     socket.emit('error-msg', `Unbanned ${targetUser ? targetUser.username : 'user'}`);
     _audit({ actor: socket.user, action: 'user_unban',
@@ -293,10 +295,47 @@ module.exports = function register(socket, ctx) {
       target_name: targetUser ? targetUser.username : null });
 
     const bans = db.prepare(`
-      SELECT b.id, b.user_id, b.reason, b.created_at, COALESCE(u.display_name, u.username) as username
-      FROM bans b JOIN users u ON b.user_id = u.id ORDER BY b.created_at DESC
+      SELECT b.id, b.user_id, b.reason, b.created_at,
+             COALESCE(u.display_name, u.username) as username,
+             ba.appeal as appeal, ba.created_at as appeal_at
+      FROM bans b
+      JOIN users u ON b.user_id = u.id
+      LEFT JOIN ban_appeals ba ON ba.user_id = b.user_id
+      ORDER BY b.created_at DESC
     `).all();
-    bans.forEach(b => { b.created_at = utcStamp(b.created_at); });
+    bans.forEach(b => {
+      b.created_at = utcStamp(b.created_at);
+      if (b.appeal_at) b.appeal_at = utcStamp(b.appeal_at);
+    });
+    socket.emit('ban-list', bans);
+  });
+
+  // ── Dismiss a ban appeal without unbanning (#5457) ──────────
+  // Lets an admin clear an appeal they've reviewed and rejected, so the
+  // Banned Users list stops flagging it, while the ban itself stays.
+  socket.on('dismiss-ban-appeal', (data) => {
+    if (!data || typeof data !== 'object') return;
+    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'ban_user')) {
+      return socket.emit('error-msg', 'You don\'t have permission to review appeals');
+    }
+    if (!isInt(data.userId)) return;
+    db.prepare('DELETE FROM ban_appeals WHERE user_id = ?').run(data.userId);
+    _audit({ actor: socket.user, action: 'ban_appeal_dismiss',
+      target_type: 'user', target_id: data.userId });
+
+    const bans = db.prepare(`
+      SELECT b.id, b.user_id, b.reason, b.created_at,
+             COALESCE(u.display_name, u.username, '[deleted user]') as username,
+             ba.appeal as appeal, ba.created_at as appeal_at
+      FROM bans b
+      LEFT JOIN users u ON b.user_id = u.id
+      LEFT JOIN ban_appeals ba ON ba.user_id = b.user_id
+      ORDER BY b.created_at DESC
+    `).all();
+    bans.forEach(b => {
+      b.created_at = utcStamp(b.created_at);
+      if (b.appeal_at) b.appeal_at = utcStamp(b.appeal_at);
+    });
     socket.emit('ban-list', bans);
   });
 
@@ -693,13 +732,21 @@ module.exports = function register(socket, ctx) {
     if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'ban_user')) {
       return socket.emit('ban-list', []);
     }
-    // LEFT JOIN so bans referencing a since-deleted user still appear
+    // LEFT JOIN so bans referencing a since-deleted user still appear, plus
+    // any pending appeal text for this ban (#5457).
     const bans = db.prepare(`
       SELECT b.id, b.user_id, b.reason, b.created_at,
-             COALESCE(u.display_name, u.username, '[deleted user]') as username
-      FROM bans b LEFT JOIN users u ON b.user_id = u.id ORDER BY b.created_at DESC
+             COALESCE(u.display_name, u.username, '[deleted user]') as username,
+             ba.appeal as appeal, ba.created_at as appeal_at
+      FROM bans b
+      LEFT JOIN users u ON b.user_id = u.id
+      LEFT JOIN ban_appeals ba ON ba.user_id = b.user_id
+      ORDER BY b.created_at DESC
     `).all();
-    bans.forEach(b => { b.created_at = utcStamp(b.created_at); });
+    bans.forEach(b => {
+      b.created_at = utcStamp(b.created_at);
+      if (b.appeal_at) b.appeal_at = utcStamp(b.appeal_at);
+    });
     socket.emit('ban-list', bans);
   });
 

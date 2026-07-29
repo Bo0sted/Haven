@@ -10582,6 +10582,42 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .btn-delete-user:hover { opacity: 0.85; }
 
+/* Ban appeals (#5457) */
+.ban-item.has-appeal {
+  align-items: flex-start;
+  border-left: 3px solid var(--accent);
+}
+
+.ban-appeal {
+  margin-top: 5px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+
+.ban-appeal-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.ban-appeal-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.btn-dismiss-appeal {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 8px !important;
+}
+
 .chat-image[src$=".gif"],
 .chat-image[src*=".gif?"] {
   border: 1px solid var(--border);
