@@ -728,6 +728,7 @@
   <div id="move-msg-toolbar" class="move-msg-toolbar" style="display:none">
     <span id="move-msg-count">0 selected</span>
     <button class="btn-sm btn-accent" id="move-msg-move-btn" data-i18n="modals.move_messages.move_to">Move to...</button>
+    <button class="btn-sm btn-danger-fill" id="move-msg-delete-btn" data-i18n="modals.move_messages.delete_btn">Delete</button>
     <button class="btn-sm" id="move-msg-cancel-btn" data-i18n="modals.common.cancel">Cancel</button>
   </div>
 
@@ -2390,6 +2391,17 @@
               <input type="checkbox" id="role-icon-after-name">
             </label>
             <small class="settings-hint">Controls where role icons appear. "After username" moves icons to the right side of the name instead of the left.</small>
+          </div>
+          <div class="settings-group" style="margin-top:12px">
+            <small class="settings-group-label" data-i18n="settings.admin.channel_creator_role_group">Channel Creator Role</small>
+            <label class="select-row">
+              <span data-i18n="settings.admin.channel_creator_role_label">Role given to a channel's creator</span>
+              <select id="channel-creator-role-select">
+                <option value="default" data-i18n="settings.admin.channel_creator_role_default">Default (highest channel role)</option>
+                <option value="none" data-i18n="settings.admin.channel_creator_role_none">None</option>
+              </select>
+            </label>
+            <small class="settings-hint" data-i18n="settings.admin.channel_creator_role_hint">When a non-admin who can create channels makes one, they are given this role inside that channel so they can manage it. Admins are never affected.</small>
           </div>
           <div id="roles-list-preview" style="margin-top:8px;">
           </div>

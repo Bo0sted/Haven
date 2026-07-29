@@ -11,6 +11,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.38.0] — 2026-07-28
+
+### Added
+- **Delete several messages at once (#5460).** The "Select messages" tool (mods/admins) now has a **Delete** button next to "Move to", so you can multi-select and remove a batch in one go with an "are you sure" confirm. Deletion runs through the same per-message permission rules as a single delete, so it can never remove more than you could delete one at a time.
+- **Configurable channel-creator role (#5461).** When a non-admin who has permission to create channels makes one, they are auto-granted a role inside that channel so they can manage it. That already happened for top-level channels using the highest channel-scoped role; it is now a setting in Admin → Roles (pick a specific role, keep the default, or turn it off) and also applies to sub-channels. Admins are never auto-assigned anything.
+- **Ban appeals (#5457).** A banned user who signs in with the correct password now sees the ban reason and a box to send the admins an appeal, instead of a dead-end error. Appeals show up next to the user in the Banned Users list with an option to unban or dismiss, and online admins get a heads-up when one arrives. The reason is only revealed after the password is verified, so it never leaks on a bare username guess.
+- **Opt-in Cloudflare Turnstile CAPTCHA on registration.** Admins can require a Turnstile challenge on the sign-up form (Admin → Settings) to slow down automated account creation. Off by default; needs a Turnstile site key and secret.
+- **Opt-in global registration rate limit.** A server-wide cap on how many new accounts can be created per hour, to blunt bot waves. Off by default and configurable in Admin → Settings.
+- **Admin bulk cleanup tool for bot-wave accounts.** A new admin utility to review and remove batches of recently-created spam/bot accounts at once instead of one at a time, with a vetting checklist before anything is deleted.
+
+### Fixed
+- **AI noise suppression (RNNoise) was a silent no-op.** The main thread posted a WebAssembly.Module into the AudioWorklet via postMessage, but Module does not survive structured clone into AudioWorkletGlobalScope (the port fires messageerror, never message). The worklet never initialised and permanently passed mic audio through unprocessed, while rnnoiseReady still reported healthy. The worklet now receives raw WASM **bytes**, compiles inside the worklet, and reports ready/error back to the main thread. Also: HTTP status check on rnnoise.wasm, messageerror logging, rnnoiseReady only true after worklet confirm, and AudioContext prefers sampleRate 48000 so a 96 kHz headset does not defeat the model. Thanks to @Serionard for the full diagnosis (#5458).
+- **Voice roster no longer strobes empty while you are still in voice.** Transient empty voice-users-update snapshots (prune/rejoin races) are ignored while you are in voice on that channel, and a follow-up poll refreshes the real list. The right VOICE panel still follows the **channel you are viewing** (not the channel you are connected to).
+- **Screen shares that appeared at join then vanished are recovered more aggressively.** renegotiate-screen retries if the peer is not ready yet; the viewer watchdog runs longer and re-checks live tiles; ICE heal / fast-path rejoin re-arms screen recovery; connectionState connected re-delivers screen tracks when ontrack does not re-fire.
+- **voice-rejoin while already bound on the same socket is a no-op.** It no longer fans out join/leave or forces peer rebuilds (which could look like a disconnect and kill stream tiles). voice-existing-users without skipRenegotiate will not tear down healthy peers either; only missing peers are created.
+- **Voice users are no longer pruned during their reconnect grace window (#5444).** A brief socket flap could evict someone from the voice roster before their reconnect landed, so others saw them drop and rejoin. The prune now respects the reconnect grace window and leaves them in place.
+
+### Changed
+- Desktop image copy from the lightbox uses main-process clipboard IPC more reliably (base64 payload, window focus, DOM decode fallback) and no longer shows a browser-only error toast inside the desktop app. (Desktop package change pairs with this.)
+
+---
+
 ## [3.37.2] — 2026-07-25
 
 ### Fixed

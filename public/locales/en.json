@@ -47,6 +47,21 @@
       "submit": "Reset Password",
       "back": "← Back to login"
     },
+    "ban_appeal": {
+      "instruction": "🚫 Your account is banned from this server.",
+      "reason_prefix": "Reason:",
+      "no_reason": "No reason was provided for this ban.",
+      "text_label": "Appeal to the admins",
+      "text_placeholder": "Explain why you think the ban should be lifted...",
+      "text_hint": "The server admins will see this next to your ban. Max 2000 characters.",
+      "submit": "Submit Appeal",
+      "back": "← Back to login",
+      "submitted": "Appeal submitted. An admin will review it.",
+      "errors": {
+        "empty": "Please write your appeal first",
+        "failed": "Could not submit appeal — please try again"
+      }
+    },
     "eula": {
       "age_confirm": "I confirm that I am <strong>18 years of age or older</strong> (or the age of legal majority in my jurisdiction)",
       "tos_confirm": "I have read and agree to the <a href=\"#\" id=\"eula-link\">Terms of Service &amp; Release of Liability Agreement</a>",
@@ -160,6 +175,7 @@
     "channel_deleted": "Channel was deleted",
     "channel_code_rotated": "Channel code rotated for #{{name}}",
     "a_moderator": "a moderator",
+    "ban_appeal_received": "{{username}} submitted a ban appeal",
     "kicked_from_voice": "Kicked from voice by {{by}}",
     "kicked_from_server": "You were kicked",
     "kicked_from_server_reason": "You were kicked: {{reason}}",
@@ -939,12 +955,20 @@
       "emojis_hint": "Upload images for custom server emojis",
       "emojis_upload_hint": "Upload images for custom server emojis (max 256 KB, png/gif/webp). Name must be lowercase, no spaces.",
       "roles_hint": "Create and manage roles. Assign roles to users from the user list context menu.",
+      "channel_creator_role_group": "Channel Creator Role",
+      "channel_creator_role_label": "Role given to a channel's creator",
+      "channel_creator_role_default": "Default (highest channel role)",
+      "channel_creator_role_none": "None",
+      "channel_creator_role_hint": "When a non-admin who can create channels makes one, they are given this role inside that channel so they can manage it. Admins are never affected.",
       "bots_hint": "Create and manage webhook bots that can post messages to channels.",
       "import_hint": "Import channels and messages from a Discord export file",
       "modmode_hint": "Rearrange sidebar sections and snap server/sidebar/status panels",
       "no_banned_users": "No banned users",
       "no_reason": "No reason",
       "unban_btn": "Unban",
+      "ban_appeal_label": "Appeal",
+      "dismiss_appeal_btn": "Dismiss appeal",
+      "dismiss_appeal_title": "Clear this appeal without unbanning",
       "delete_user_title": "Delete user",
       "confirm_delete_user": "⚠️ Permanently delete {{name}}? This cannot be undone.",
       "no_deleted_users": "No deleted users",
@@ -1610,7 +1634,14 @@
       "title": "Move Messages",
       "desc": "Select a destination channel",
       "move_one": "Move {{n}} message to:",
-      "move_many": "Move {{n}} messages to:"
+      "move_many": "Move {{n}} messages to:",
+      "delete_btn": "Delete",
+      "delete_confirm_one": "Delete {{n}} selected message?",
+      "delete_confirm_many": "Delete {{n}} selected messages?",
+      "delete_confirm_warn": "This permanently removes them for everyone and cannot be undone.",
+      "deleted_one": "Deleted {{n}} message",
+      "deleted_many": "Deleted {{n}} messages",
+      "deleted_partial": "Deleted {{n}}, skipped {{skipped}} you can't delete"
     },
     "hidden_channels": {
       "title": "Hidden Channels",
