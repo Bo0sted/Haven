@@ -1776,9 +1776,11 @@ _toggleMoveSelect(msgEl) {
 _updateMoveCount() {
   const countEl = document.getElementById('move-msg-count');
   const moveBtn = document.getElementById('move-msg-move-btn');
+  const deleteBtn = document.getElementById('move-msg-delete-btn');
   const n = this._moveSelectedIds.size;
   if (countEl) countEl.textContent = t('modals.move_messages.selected', { n });
   if (moveBtn) moveBtn.disabled = n === 0;
+  if (deleteBtn) deleteBtn.disabled = n === 0;
 },
 
 _showMoveChannelPicker() {
@@ -1832,6 +1834,47 @@ _executeMoveMessages(toCode, toName) {
   });
 },
 
+async _executeDeleteMessages() {
+  const n = this._moveSelectedIds.size;
+  if (n === 0) return;
+  const ok = await this._showConfirmModal(
+    t(n === 1 ? 'modals.move_messages.delete_confirm_one' : 'modals.move_messages.delete_confirm_many', { n }),
+    t('modals.move_messages.delete_confirm_warn'),
+    { danger: true, confirmLabel: t('msg_toolbar.delete') }
+  );
+  if (!ok) return;
+
+  const ids = [...this._moveSelectedIds];
+  const code = this.currentChannel;
+  // For E2E DMs the server can't read attachment URLs out of ciphertext, so
+  // hand it the URLs per message the same way single-delete does. The move
+  // selector is mod/non-DM gated today, but keep this future-proof.
+  const attachmentsByMessage = {};
+  for (const id of ids) {
+    const urls = this._getMessageAttachments?.(id);
+    if (Array.isArray(urls) && urls.length) attachmentsByMessage[id] = urls;
+  }
+
+  this.socket.emit('delete-messages', {
+    code,
+    messageIds: ids,
+    attachmentsByMessage
+  }, (resp) => {
+    if (resp && resp.error && !resp.deleted) {
+      this._showToast(resp.error, 'error');
+    } else if (resp && resp.success) {
+      const deleted = resp.deleted || 0;
+      const skipped = resp.skipped || 0;
+      if (skipped > 0) {
+        this._showToast(t('modals.move_messages.deleted_partial', { n: deleted, skipped }), 'warning');
+      } else {
+        this._showToast(t(deleted === 1 ? 'modals.move_messages.deleted_one' : 'modals.move_messages.deleted_many', { n: deleted }), 'success');
+      }
+    }
+    this._exitMoveSelectionMode();
+  });
+},
+
 _initMoveMessages() {
   // Header "Select messages" toggle button
   const selectBtn = document.getElementById('move-select-btn');
@@ -1843,6 +1886,10 @@ _initMoveMessages() {
   // "Move to..." button in toolbar
   const moveBtn = document.getElementById('move-msg-move-btn');
   if (moveBtn) moveBtn.addEventListener('click', () => this._showMoveChannelPicker());
+
+  // "Delete" button in toolbar (#5460)
+  const deleteBtn = document.getElementById('move-msg-delete-btn');
+  if (deleteBtn) deleteBtn.addEventListener('click', () => this._executeDeleteMessages());
 
   // Cancel button in toolbar
   const cancelBtn = document.getElementById('move-msg-cancel-btn');

@@ -515,14 +515,14 @@ module.exports = function register(socket, ctx) {
     });
   });
 
-  // ── Bulk delete from media gallery (#5375) ──────────────
-  // Lets admins / users with delete permission remove many attachments at
-  // once from the Files & Media view. Reuses the same permission rules and
-  // file-move-to-deleted-attachments behavior as the single-message
-  // `delete-message` handler. Operates per-message inside a transaction
-  // and broadcasts `message-deleted` for each one so other clients update.
-  socket.on('delete-channel-media', (data, callback) => {
-    const cb = typeof callback === 'function' ? callback : () => {};
+  // ── Shared bulk message delete ──────────────────────────
+  // Deletes many messages by id in one transaction using the same
+  // permission rules as the single `delete-message` handler, moves their
+  // attachments to deleted-attachments/, and broadcasts `message-deleted`
+  // for each so other clients update. Shared by the Files & Media gallery
+  // (delete-channel-media, #5375) and the multi-select toolbar Delete
+  // (delete-messages, #5460) so both stay behaviourally identical.
+  const bulkDeleteMessagesByIds = (data, cb) => {
     if (!data || typeof data !== 'object') return cb({ error: 'Bad request' });
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return cb({ error: 'Bad channel' });
@@ -633,6 +633,22 @@ module.exports = function register(socket, ctx) {
     }
 
     cb({ success: true, deleted: deletable.length, skipped: skipped.length });
+  };
+
+  // ── Bulk delete from media gallery (#5375) ──────────────
+  socket.on('delete-channel-media', (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    bulkDeleteMessagesByIds(data, cb);
+  });
+
+  // ── Bulk delete from the multi-select toolbar (#5460) ────
+  // Piggybacks the "Select messages" move selector: a mod picks messages and
+  // hits Delete instead of "Move to". Per-message permission is enforced in
+  // the shared helper, so a lower mod can only remove what they could already
+  // delete one at a time.
+  socket.on('delete-messages', (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    bulkDeleteMessagesByIds(data, cb);
   });
 
   // ── Send message ────────────────────────────────────────
