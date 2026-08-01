@@ -3290,6 +3290,29 @@ html.rgb-cycling *::after {
   white-space: nowrap;
 }
 
+/* Rows of settings action buttons. A wrapping flexbox left these ragged --
+   each button sized to its own label, so they formed uneven rows of differing
+   widths. A grid gives every button the same width and keeps the columns
+   lined up; auto-fit drops to a single column when the panel is narrow. */
+.settings-btn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.settings-btn-grid > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  /* .btn-sm is nowrap, so a long label would otherwise spill past its cell. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .btn-sm:hover { background: var(--bg-hover); color: var(--text-primary); }
 .btn-sm.btn-accent { background: var(--accent); color: white; font-size: 16px; padding: 7px 10px; line-height: 1; }
 .btn-sm.btn-accent:hover { background: var(--accent-hover); }
@@ -10137,7 +10160,19 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   color: var(--text-muted);
   font-size: 10px;
   display: block;
-  margin-top: -2px;
+  /* Was -2px, which tucked the hint up into the row above. That was invisible
+     next to a 16px checkbox but collides with a 20px switch. */
+  margin-top: 0;
+}
+
+/* A hint sits under its control row but spans the full panel width, so its
+   text used to run underneath the control on the right. Reserve that column so
+   the text wraps before reaching it instead of sliding under it. */
+.toggle-row + .settings-hint,
+.select-row + .settings-hint,
+.checkbox-row + .settings-hint,
+.volume-row + .settings-hint {
+  padding-right: 44px;
 }
 .settings-hint.error { color: #e94560; }
 .settings-hint.success { color: #43b581; }
@@ -13253,8 +13288,11 @@ ul.chat-list { list-style-type: disc; }
    beside it. The dot keeps all its own state styling (dnd square, away dome,
    invisible ring) untouched inside. */
 .status-picker-btn {
-  width: 17px;
-  height: 17px;
+  /* 18px, not 17: with a 1px border the content box is 16px, so the 8px dot
+     centres on whole pixels (4px a side). At 17px the gap works out to 4.5px
+     and the browser snaps it, painting the dot visibly off-centre at 1x. */
+  width: 18px;
+  height: 18px;
   padding: 0;
   flex-shrink: 0;
   display: flex;
