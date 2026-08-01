@@ -22,6 +22,16 @@
     window.visualViewport.addEventListener('resize', resetDocScroll);
     window.visualViewport.addEventListener('scroll', resetDocScroll);
   }
+  // Toggle style (sliders vs classic checkboxes). Applied before first paint
+  // so on/off settings don't render as one shape and then swap to the other.
+  // Sliders are the default, so only an explicit 'box' choice changes it.
+  try {
+    var _ts = localStorage.getItem('haven-toggle-style');
+    document.documentElement.setAttribute('data-toggle-style', _ts === 'box' ? 'box' : 'switch');
+  } catch (e) {
+    document.documentElement.setAttribute('data-toggle-style', 'switch');
+  }
+
   var t = localStorage.getItem('haven_theme');
   if (t) {
     if (t.indexOf('file:') === 0) {

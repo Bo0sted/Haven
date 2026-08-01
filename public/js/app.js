@@ -300,6 +300,7 @@ class HavenApp {
     this.modMode = typeof ModMode === 'function' ? new ModMode() : null;
     this.modMode?.init();
     this._setupDensityPicker();
+    this._setupToggleStylePicker();
     this._setupFontSizePicker();
     this._setupEmojiSizePicker();
     this._setupImageModePicker();

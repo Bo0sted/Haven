@@ -102,15 +102,15 @@
                 <button id="create-channel-btn" class="btn-sm btn-accent">+</button>
               </div>
               <label class="checkbox-row" title="Invite-only" style="margin:6px 0 2px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.8rem;opacity:0.8">
-                <input type="checkbox" id="new-channel-private" style="width:14px;height:14px">
+                <input type="checkbox" id="new-channel-private">
                 <span>🔒 <span data-i18n="app.sidebar.private_channel">Private</span></span>
               </label>
               <label class="checkbox-row" title="Auto-deletes when empty" style="margin:2px 0;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.8rem;opacity:0.8">
-                <input type="checkbox" id="new-channel-temporary" style="width:14px;height:14px">
+                <input type="checkbox" id="new-channel-temporary">
                 <span>⏱️ <span data-i18n="app.sidebar.temporary_channel">Temporary</span></span>
               </label>
               <label class="checkbox-row" id="new-channel-add-all-row" title="Everyone joins automatically" style="margin:2px 0;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.8rem;opacity:0.8">
-                <input type="checkbox" id="new-channel-add-all" style="width:14px;height:14px">
+                <input type="checkbox" id="new-channel-add-all">
                 <span>👥 <span data-i18n="app.sidebar.add_all_members">Add all members</span></span>
               </label>
               <div id="temp-channel-duration-row" style="display:none;margin:4px 0 2px;padding-left:22px">
@@ -1209,10 +1209,26 @@
         </div>
       </div>
 
+      <!-- Toggle Style (sliders vs checkboxes) -->
+      <div class="settings-section" id="section-toggle-style" style="border-top: 1px solid var(--border-light); padding-top: 16px; margin-top: 8px;">
+        <h5 class="settings-section-title">🎚️ <span data-i18n="settings.toggle_style.title">Toggle Style</span></h5>
+        <div class="font-size-picker" id="toggle-style-picker">
+          <button type="button" class="density-btn active" data-togglestyle="switch" data-i18n-title="settings.toggle_style.switch_hint" title="Sliding switches (default)">
+            <span class="density-icon">🎚️</span>
+            <span class="density-label" data-i18n="settings.toggle_style.switch">Sliders</span>
+          </button>
+          <button type="button" class="density-btn" data-togglestyle="box" data-i18n-title="settings.toggle_style.box_hint" title="Classic square checkboxes">
+            <span class="density-icon">☑️</span>
+            <span class="density-label" data-i18n="settings.toggle_style.box">Boxes</span>
+          </button>
+        </div>
+        <small class="settings-hint" style="margin-top:4px;display:block" data-i18n="settings.toggle_style.hint">Applies to on/off settings. Lists you tick items in, like permissions and channel pickers, always stay as boxes.</small>
+      </div>
+
       <!-- Soundboard Sidebar Setting -->
       <div class="settings-section" id="section-soundboard-mode" style="border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 8px;">
         <h5 class="settings-section-title">🎵 Soundboard</h5>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+        <label class="checkbox-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
           <input type="checkbox" id="soundboard-sidebar-mode-settings" style="cursor:pointer">
           Sidebar mode
         </label>
@@ -3436,11 +3452,11 @@
       <label style="display:block;margin:12px 0 6px;font-size:0.85rem;opacity:0.7" data-i18n="modals.create_sub.name_label">Sub-channel name</label>
       <input type="text" id="create-sub-name" class="input" maxlength="50" data-i18n-placeholder="modals.create_sub.name_placeholder" placeholder="sub-channel name..." style="width:100%">
       <label class="checkbox-row" style="margin:14px 0 8px;display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="create-sub-private" style="width:16px;height:16px">
+        <input type="checkbox" id="create-sub-private">
         <span style="font-size:0.9rem">🔒 <span data-i18n="modals.create_sub.private_label">Private</span> <span style="opacity:0.5;font-size:0.8rem" data-i18n="modals.create_sub.private_hint">(invite-only, hidden from non-members)</span></span>
       </label>
       <label class="checkbox-row" style="margin:2px 0 8px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem">
-        <input type="checkbox" id="create-sub-temporary" style="width:16px;height:16px">
+        <input type="checkbox" id="create-sub-temporary">
         <span>⏱️ <span data-i18n="modals.create_sub.temporary_label">Temporary</span> <span style="opacity:0.5;font-size:0.8rem" data-i18n="modals.create_sub.temporary_hint">(auto-delete)</span></span>
       </label>
       <div id="sub-temp-duration-row" style="display:none;margin:0 0 8px;padding-left:24px">

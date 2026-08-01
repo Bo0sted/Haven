@@ -717,6 +717,14 @@
       "spacious": "Spacious",
       "spacious_hint": "Spacious — more breathing room"
     },
+    "toggle_style": {
+      "title": "Toggle Style",
+      "switch": "Sliders",
+      "switch_hint": "Sliding switches (default)",
+      "box": "Boxes",
+      "box_hint": "Classic square checkboxes",
+      "hint": "Applies to on/off settings. Lists you tick items in, like permissions and channel pickers, always stay as boxes."
+    },
     "font_size": {
       "title": "Font Size",
       "small": "Small",

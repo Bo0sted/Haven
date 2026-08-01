@@ -13340,6 +13340,116 @@ ul.chat-list { list-style-type: disc; }
   border-color: var(--accent);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Toggle Style — sliding switches for on/off settings
+   ═══════════════════════════════════════════════════════════════════
+   Settings > Layout & Density picks between sliders (default) and classic
+   boxes; the choice lands on <html data-toggle-style>. theme-init.js sets it
+   pre-paint so nothing flips shape after load.
+
+   Scope is deliberate. A switch says "this setting is on or off", while a
+   checkbox says "this item is selected", so only genuine settings rows are
+   listed here. Permission grids (.rac-perm-item, .cr-perm-toggle), channel and
+   media pickers, backup contents (.backup-include), poll votes and the ToS box
+   stay as checkboxes on purpose — they are lists you tick, and a column of
+   switches there would read as a wall of settings and take twice the width.
+
+   These stay real <input type="checkbox"> elements, so keyboard focus, the
+   space key, labels and screen readers all keep working untouched. */
+:root[data-toggle-style="switch"] .toggle-row > input[type="checkbox"],
+:root[data-toggle-style="switch"] .checkbox-row > input[type="checkbox"]:not(.backup-include),
+:root[data-toggle-style="switch"] .status-activity-toggle > input[type="checkbox"],
+:root[data-toggle-style="switch"] .android-beta-promo-dismiss-label > input[type="checkbox"],
+:root[data-toggle-style="switch"] .desktop-promo-dismiss-label > input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* The knob. Sized off the track so both scale together if the track changes. */
+:root[data-toggle-style="switch"] .toggle-row > input[type="checkbox"]::after,
+:root[data-toggle-style="switch"] .checkbox-row > input[type="checkbox"]:not(.backup-include)::after,
+:root[data-toggle-style="switch"] .status-activity-toggle > input[type="checkbox"]::after,
+:root[data-toggle-style="switch"] .android-beta-promo-dismiss-label > input[type="checkbox"]::after,
+:root[data-toggle-style="switch"] .desktop-promo-dismiss-label > input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  /* Positioned with `left` rather than a transform. The travel is 16px on a
+     one-off click, so there's nothing to gain from compositing it, and `left`
+     is readable from getComputedStyle on a pseudo-element, which keeps the
+     knob position testable. */
+  transition: left 0.18s ease, background 0.18s ease;
+}
+
+:root[data-toggle-style="switch"] .toggle-row > input[type="checkbox"]:checked,
+:root[data-toggle-style="switch"] .checkbox-row > input[type="checkbox"]:not(.backup-include):checked,
+:root[data-toggle-style="switch"] .status-activity-toggle > input[type="checkbox"]:checked,
+:root[data-toggle-style="switch"] .android-beta-promo-dismiss-label > input[type="checkbox"]:checked,
+:root[data-toggle-style="switch"] .desktop-promo-dismiss-label > input[type="checkbox"]:checked {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+:root[data-toggle-style="switch"] .toggle-row > input[type="checkbox"]:checked::after,
+:root[data-toggle-style="switch"] .checkbox-row > input[type="checkbox"]:not(.backup-include):checked::after,
+:root[data-toggle-style="switch"] .status-activity-toggle > input[type="checkbox"]:checked::after,
+:root[data-toggle-style="switch"] .android-beta-promo-dismiss-label > input[type="checkbox"]:checked::after,
+:root[data-toggle-style="switch"] .desktop-promo-dismiss-label > input[type="checkbox"]:checked::after {
+  left: 16px;
+  background: #fff;
+}
+
+/* Keyboard focus has to stay visible — the native outline is suppressed by
+   appearance:none on some platforms. */
+:root[data-toggle-style="switch"] .toggle-row > input[type="checkbox"]:focus-visible,
+:root[data-toggle-style="switch"] .checkbox-row > input[type="checkbox"]:not(.backup-include):focus-visible,
+:root[data-toggle-style="switch"] .status-activity-toggle > input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:root[data-toggle-style="switch"] .toggle-row > input[type="checkbox"]:disabled,
+:root[data-toggle-style="switch"] .checkbox-row > input[type="checkbox"]:not(.backup-include):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Win95 restores native checkboxes on purpose (see the appearance:auto rule
+   near the top), so a sliding switch would be out of place there. */
+[data-theme="win95"] .toggle-row > input[type="checkbox"],
+[data-theme="win95"] .checkbox-row > input[type="checkbox"],
+[data-theme="win95"] .status-activity-toggle > input[type="checkbox"] {
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+[data-theme="win95"] .toggle-row > input[type="checkbox"]::after,
+[data-theme="win95"] .checkbox-row > input[type="checkbox"]::after,
+[data-theme="win95"] .status-activity-toggle > input[type="checkbox"]::after {
+  content: none !important;
+}
+
 /* Quick activity toggles. These are a convenient second home for the two
    sub-toggles in Settings > Activity, not a replacement for that section --
    the master switch and the account connections still live there. */

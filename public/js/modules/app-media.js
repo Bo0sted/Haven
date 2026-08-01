@@ -2315,6 +2315,32 @@ _setupDensityPicker() {
   });
 },
 
+// ── Toggle Style Picker (sliders vs checkboxes) ──
+// Sets data-toggle-style on <html>; the CSS does the rest. theme-init.js
+// applies the same value pre-paint, so this only has to keep the buttons in
+// step and persist the choice.
+_setupToggleStylePicker() {
+  const picker = document.getElementById('toggle-style-picker');
+  if (!picker) return;
+
+  // Sliders are the default; only an explicit 'box' choice differs.
+  const saved = localStorage.getItem('haven-toggle-style') === 'box' ? 'box' : 'switch';
+  document.documentElement.dataset.toggleStyle = saved;
+  picker.querySelectorAll('.density-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.togglestyle === saved);
+  });
+
+  picker.addEventListener('click', (e) => {
+    const btn = e.target.closest('.density-btn');
+    if (!btn) return;
+    const style = btn.dataset.togglestyle === 'box' ? 'box' : 'switch';
+    document.documentElement.dataset.toggleStyle = style;
+    localStorage.setItem('haven-toggle-style', style);
+    picker.querySelectorAll('.density-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+},
+
 // ── Font Size Picker ──
 
 _setupFontSizePicker() {
