@@ -483,6 +483,8 @@ _setupNotifications() {
     if (shareGameToggle)  shareGameToggle.checked  = prefs.share_game_activity  !== 'false';
     if (shareMusicToggle) shareMusicToggle.checked = prefs.share_music_activity !== 'false';
     if (activitySubOptions) activitySubOptions.style.display = master ? '' : 'none';
+    // Keep the quick toggles in the status picker in step with this section.
+    this._syncStatusPickerActivity?.();
   };
   this._syncActivityUI = syncActivityUI;
   syncActivityUI();

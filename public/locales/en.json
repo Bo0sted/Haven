@@ -165,7 +165,11 @@
       "dnd": "Do Not Disturb",
       "invisible": "Invisible",
       "set_status": "Set status",
-      "custom_status_placeholder": "Custom status..."
+      "custom_status_placeholder": "Custom status...",
+      "music_activity": "Music Activity",
+      "game_activity": "Game Activity",
+      "share_activity_title": "Share Activity",
+      "share_activity_hint": "Let others see what you're playing or listening to. Never shared while you're Invisible."
     }
   },
   "toasts": {

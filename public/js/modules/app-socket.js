@@ -2054,6 +2054,9 @@ _setupSocketListeners() {
     const prev = new Set((this._connections?.connections || []).map(c => c.provider));
     this._connections = data || { connections: [], available: {} };
     this._renderConnections?.();
+    // The quick toggles in the status picker read as on only when a provider
+    // is linked, so linking or unlinking one has to refresh them.
+    this._syncStatusPickerActivity?.();
     // The link may have completed in a different browser window entirely, so
     // this push is often the first the app hears of it — announce anything
     // newly linked rather than letting the row change silently.

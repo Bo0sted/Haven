@@ -2417,17 +2417,28 @@ _setupStatusPicker() {
   const userBar = document.querySelector('.user-bar');
   if (!userBar) return;
 
-  // Insert status dot to the right of the username block
+  // Insert status dot to the right of the username block. The dot sits inside
+  // a real <button> so it looks and behaves like the control it has always
+  // been — on its own an 8px dot reads as a status indicator, not something
+  // clickable. _updateStatusPickerUI still owns the inner dot's classes.
+  const statusBtn = document.createElement('button');
+  statusBtn.id = 'user-status-btn';
+  statusBtn.className = 'status-picker-btn';
+  statusBtn.type = 'button';
+  statusBtn.title = t('app.profile.set_status');
+  statusBtn.setAttribute('aria-label', t('app.profile.set_status'));
+
   const statusDot = document.createElement('span');
   statusDot.id = 'user-status-dot';
   statusDot.className = 'user-dot status-picker-dot';
-  statusDot.title = t('app.profile.set_status');
-  statusDot.addEventListener('click', (e) => { e.stopPropagation(); this._toggleStatusPicker(); });
+  statusBtn.appendChild(statusDot);
+  statusBtn.addEventListener('click', (e) => { e.stopPropagation(); this._toggleStatusPicker(); });
+
   const userNames = userBar.querySelector('.user-names');
   if (userNames && userNames.nextSibling) {
-    userBar.insertBefore(statusDot, userNames.nextSibling);
+    userBar.insertBefore(statusBtn, userNames.nextSibling);
   } else {
-    userBar.appendChild(statusDot);
+    userBar.appendChild(statusBtn);
   }
 
   // Build dropdown (opens downward to avoid clipping)
@@ -2442,6 +2453,17 @@ _setupStatusPicker() {
     <div class="status-option" data-status="invisible"><span class="user-dot invisible"></span> ${t('app.profile.invisible')}</div>
     <div class="status-text-row">
       <input type="text" id="status-text-input" placeholder="${t('app.profile.custom_status_placeholder')}" maxlength="128">
+    </div>
+    <div class="status-activity-row">
+      <div class="status-activity-label">${t('app.profile.share_activity_title')}</div>
+      <label class="status-activity-toggle" title="${t('app.profile.share_activity_hint')}">
+        <span>${t('app.profile.music_activity')}</span>
+        <input type="checkbox" id="status-music-activity">
+      </label>
+      <label class="status-activity-toggle" title="${t('app.profile.share_activity_hint')}">
+        <span>${t('app.profile.game_activity')}</span>
+        <input type="checkbox" id="status-game-activity">
+      </label>
     </div>
   `;
   userBar.appendChild(picker);
@@ -2471,9 +2493,41 @@ _setupStatusPicker() {
     }
   });
 
+  // Quick activity toggles. Same two server-side preferences the Activity
+  // section in Settings writes, so the two stay in lockstep either way.
+  const bindQuickActivity = (el, kind, prefKey) => {
+    if (!el) return;
+    el.addEventListener('change', () => {
+      if (el.checked && !this._activityProviderReady(kind)) {
+        // Nothing is linked that could produce this activity yet, so flipping
+        // the preference here would be a no-op the user can't diagnose. Send
+        // them to the full Activity section, which explains the setup and is
+        // where the account connections live.
+        el.checked = false;
+        picker.style.display = 'none';
+        this._openActivitySettings();
+        return;
+      }
+      const v = String(el.checked);
+      if (this._userPrefs) this._userPrefs[prefKey] = v;
+      this.socket?.emit('set-preference', { key: prefKey, value: v });
+      // The sub-preferences do nothing while the master switch is off. Turning
+      // one on from here turns the master on too, rather than showing a ticked
+      // box that shares nothing.
+      if (el.checked && this._userPrefs?.share_activity === 'false') {
+        this._userPrefs.share_activity = 'true';
+        this.socket?.emit('set-preference', { key: 'share_activity', value: 'true' });
+      }
+      this._syncActivityUI?.();
+      this._syncStatusPickerActivity();
+    });
+  };
+  bindQuickActivity(document.getElementById('status-music-activity'), 'music', 'share_music_activity');
+  bindQuickActivity(document.getElementById('status-game-activity'),  'game',  'share_game_activity');
+
   // Close picker on outside click
   document.addEventListener('click', (e) => {
-    if (!picker.contains(e.target) && e.target !== statusDot) {
+    if (!picker.contains(e.target) && !statusBtn.contains(e.target)) {
       picker.style.display = 'none';
     }
   });
@@ -2481,7 +2535,12 @@ _setupStatusPicker() {
 
 _toggleStatusPicker() {
   const picker = document.getElementById('status-picker');
-  const dot = document.getElementById('user-status-dot');
+  // Anchor on the button, which is the visible surface now, falling back to the
+  // dot so nothing breaks if the markup is ever built the old way.
+  const dot = document.getElementById('user-status-btn') || document.getElementById('user-status-dot');
+  // Preferences can change from the Settings panel (or another device) while
+  // the picker sits in the DOM, so re-read them every time it opens.
+  this._syncStatusPickerActivity();
   if (picker.style.display !== 'none' && picker.style.display !== '') {
     picker.style.display = 'none';
     return;
@@ -2519,6 +2578,45 @@ _toggleStatusPicker() {
     }
   }
   picker.style.display = 'block';
+},
+
+// Is there anything linked that could actually produce this kind of activity?
+// Haven's own music player shares without a connection, but it only runs while
+// you're listening in a voice channel, so a linked provider is still the right
+// signal for whether the toggle has anything to do day to day.
+_activityProviderReady(kind) {
+  const linked = new Set((this._connections?.connections || []).map(c => c.provider));
+  return kind === 'music'
+    ? (linked.has('lastfm') || linked.has('spotify'))
+    : linked.has('steam');
+},
+
+// Open Settings on the Activity section (master switch + connections).
+// Mirrors the pattern used by the recovery-codes and push notices.
+_openActivitySettings() {
+  document.getElementById('open-settings-btn')?.click();
+  setTimeout(() => {
+    document.querySelector('.settings-nav-item[data-target="section-activity"]')?.click();
+  }, 150);
+},
+
+// Reflect the current preferences on the quick toggles. A box is only ticked
+// when something would actually be shared: the master switch is on, the
+// sub-preference is on, AND an account is linked that can produce it. Both
+// sub-preferences default to on when absent, so without the readiness check a
+// brand new user would open this menu and see both already ticked while
+// nothing was being shared at all. Showing them off means ticking one routes
+// to the Activity settings, which is where the setup actually happens.
+_syncStatusPickerActivity() {
+  const prefs = this._userPrefs || {};
+  const master = prefs.share_activity !== 'false';
+  const music = document.getElementById('status-music-activity');
+  const game  = document.getElementById('status-game-activity');
+  // Absent sub-preference means "on" — matches the server's read in activity.js.
+  if (music) music.checked = master && prefs.share_music_activity !== 'false'
+                             && this._activityProviderReady('music');
+  if (game)  game.checked  = master && prefs.share_game_activity  !== 'false'
+                             && this._activityProviderReady('game');
 },
 
 _updateStatusPickerUI() {
