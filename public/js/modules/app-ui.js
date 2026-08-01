@@ -1774,6 +1774,12 @@ _setupUI() {
       e.preventDefault();
       this._openQuickSwitcher();
     }
+    // Ctrl+E = toggle emoji picker (open/close)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'e' && this.currentChannel) {
+      e.preventDefault();
+      this._emojiPickerContext = 'main';
+      this._toggleEmojiPicker();
+    }
     // Alt+ArrowUp/Down = navigate channels
     if (e.altKey && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
@@ -1791,6 +1797,10 @@ _setupUI() {
       document.getElementById('theme-popup').style.display = 'none';
       document.getElementById('quick-switcher-overlay')?.remove();
       document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+      // Close the emoji picker too. Reuse its toggle so the parent/anchor
+      // restore runs, and only when it's open so Escape can't open it.
+      const emojiPicker = document.getElementById('emoji-picker');
+      if (emojiPicker && emojiPicker.style.display === 'flex') this._toggleEmojiPicker();
     }
   });
 

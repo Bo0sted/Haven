@@ -1368,7 +1368,12 @@ _toggleEmojiPicker(anchorEl) {
       const section = catSections[cat];
       // Scroll to the section wrapper, not its header: the wrapper isn't
       // sticky, so its offsetTop is always the true layout position.
-      if (section) grid.scrollTop = section.offsetTop;
+      if (section) {
+        grid.scrollTop = section.offsetTop;
+        // Move the keyboard highlight to this category's first emoji, so
+        // arrowing/Enter continues from where the user just jumped to.
+        highlightFirstEmoji(section);
+      }
       setActiveTab(cat);
     });
     catTabs[cat] = tab;
@@ -1417,6 +1422,16 @@ _toggleEmojiPicker(anchorEl) {
     parent.appendChild(btn);
   }
 
+  // Keyboard nav: highlight the first emoji so arrow keys + Enter work the
+  // moment the picker opens (Discord-style). Re-run after every grid render.
+  // Pass a section to highlight the first emoji within it (e.g. after a
+  // category jump); defaults to the first emoji in the whole grid.
+  const highlightFirstEmoji = (scope) => {
+    grid.querySelectorAll('.emoji-item.kb-active').forEach(el => el.classList.remove('kb-active'));
+    const first = (scope || grid).querySelector('.emoji-item');
+    if (first) first.classList.add('kb-active');
+  };
+
   function renderGrid(filter) {
     grid.innerHTML = '';
     for (const k in catSections) delete catSections[k];
@@ -1451,6 +1466,7 @@ _toggleEmojiPicker(anchorEl) {
       results.className = 'emoji-cat-grid';
       matched.forEach(e => appendEmojiButton(results, e));
       grid.appendChild(results);
+      highlightFirstEmoji();
       return;
     }
     // No filter: render every category as its own section (sticky header +
@@ -1470,6 +1486,7 @@ _toggleEmojiPicker(anchorEl) {
       grid.appendChild(section);
       catSections[cat] = section;
     }
+    highlightFirstEmoji();
   }
 
   // Scroll-spy: highlight the tab of whichever section is at the top. Compares
@@ -1495,6 +1512,44 @@ _toggleEmojiPicker(anchorEl) {
   });
 
   renderGrid();
+
+  // Arrow-key navigation + Enter to pick, bound once to the picker. Reads its
+  // state from the DOM on each keypress so it survives the grid being rebuilt
+  // on search/category changes. Enter reuses the emoji's own click handler, so
+  // there's a single source of truth for what "picking" an emoji does.
+  if (!picker._havenNavBound) {
+    picker._havenNavBound = true;
+    picker.addEventListener('keydown', (e) => {
+      if (picker.style.display === 'none') return;
+      const items = [...picker.querySelectorAll('.emoji-grid .emoji-item')];
+      if (!items.length) return;
+      const active = picker.querySelector('.emoji-item.kb-active');
+      const setActive = (el) => {
+        if (!el) return;
+        items.forEach(i => i.classList.remove('kb-active'));
+        el.classList.add('kb-active');
+        el.scrollIntoView({ block: 'nearest' });
+      };
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const idx = active ? items.indexOf(active) : -1;
+        if (idx === -1) { setActive(items[0]); return; }
+        if (e.key === 'ArrowRight') setActive(items[Math.min(idx + 1, items.length - 1)]);
+        else if (e.key === 'ArrowLeft') setActive(items[Math.max(idx - 1, 0)]);
+        else setActive(this._emojiGridVerticalNav(items, idx, e.key === 'ArrowDown' ? 1 : -1));
+      } else if (e.key === 'Enter' && active) {
+        e.preventDefault();
+        active.click(); // insert the selected emoji (same as clicking it)
+        if (e.shiftKey) {
+          // Shift+Enter: keep the menu open to pick more; clicking moved focus
+          // to the message box, so hand it back to the search field.
+          picker.querySelector('.emoji-search-input')?.focus();
+        } else {
+          this._toggleEmojiPicker(); // plain Enter closes after one pick
+        }
+      }
+    });
+  }
 
   // On mobile with the iOS keyboard open, dynamically position the picker
   // above the input area using the visual viewport so it doesn't push
@@ -1528,6 +1583,32 @@ _toggleEmojiPicker(anchorEl) {
 
   picker.style.display = 'flex';
   searchInput.focus();
+
+  // Always open scrolled to the top, so the view and the keyboard highlight
+  // both start on the first category in every browser. Chromium discards the
+  // old scroll when the grid is rebuilt; Firefox/Safari can preserve it, which
+  // would leave the view on the last-used category while the highlight resets.
+  grid.scrollTop = 0;
+},
+
+// Find the emoji one visual row above/below the current one (dir: -1 up, 1 down).
+// Emoji wrap into rows of varying counts across category sections, so this walks
+// by geometry rather than a fixed column count: nearest row wins first, then the
+// closest horizontal neighbour in that row.
+_emojiGridVerticalNav(items, idx, dir) {
+  const cur = items[idx].getBoundingClientRect();
+  const curX = cur.left + cur.width / 2;
+  const curY = cur.top + cur.height / 2;
+  let best = null, bestScore = Infinity;
+  for (let i = 0; i < items.length; i++) {
+    if (i === idx) continue;
+    const r = items[i].getBoundingClientRect();
+    const dy = (r.top + r.height / 2) - curY;
+    if (dir === 1 ? dy <= 2 : dy >= -2) continue; // must be strictly below/above
+    const score = Math.abs(dy) * 1000 + Math.abs((r.left + r.width / 2) - curX);
+    if (score < bestScore) { bestScore = score; best = items[i]; }
+  }
+  return best || items[idx];
 },
 
 // ═══════════════════════════════════════════════════════

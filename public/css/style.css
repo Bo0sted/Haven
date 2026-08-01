@@ -6985,6 +6985,9 @@ details.sound-section:not([open]) .sound-section-label::before {
   max-height: 240px;
   padding: 2px;
   position: relative; /* offsetParent for category sections, so tab clicks can scroll to them */
+  /* Reserve the sticky .emoji-cat-header strip (26px) so keyboard scrollIntoView
+     lands emoji below the header instead of tucked underneath it. */
+  scroll-padding-top: 26px;
 }
 
 .emoji-cat-grid {
@@ -7024,6 +7027,13 @@ details.sound-section:not([open]) .sound-section-label::before {
 .emoji-item:hover {
   background: var(--bg-tertiary);
   transform: scale(1.2);
+}
+
+/* Keyboard selection highlight (arrow-key navigation in the picker) */
+.emoji-item.kb-active {
+  background: var(--bg-tertiary);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* ── Stickers ───────────────────────────────────────── */
