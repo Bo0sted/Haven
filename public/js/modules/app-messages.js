@@ -725,7 +725,12 @@ _createMessageEl(msg, prevMsg) {
   // toggle look broken because users with only `pin_message` saw nothing.
   const canPin = this.user.isAdmin || this._hasPerm('pin_message');
   const canArchive = this.user.isAdmin || this._hasPerm('archive_messages');
-  const canDelete = msg.user_id === this.user.id || this.user.isAdmin || this._canModerate();
+  // _canModerate() is a level check (effectiveLevel >= 25), so on its own it
+  // ignored the delete_message permission entirely: someone granted "delete any
+  // message" through a channel role but sitting below level 25 got no delete
+  // button, even though the server would have allowed it. (#5461)
+  const canDelete = msg.user_id === this.user.id || this.user.isAdmin ||
+                    this._canModerate() || this._hasPerm('delete_message');
   if (canPin) {
     toolbarActions.push({
       key: 'pin',
@@ -1930,7 +1935,9 @@ _showMessageContextMenu(e, msgEl) {
   const canPin       = !!(this.user?.isAdmin || this._hasPerm('pin_message'));
   const canArchive   = !!(this.user?.isAdmin || this._hasPerm('archive_messages'));
   const canShareLink = !isDm && !!this._canShareChannelLink?.(this.currentChannel);
-  const canDelete    = isOwn || this.user?.isAdmin || this._canModerate();
+  // Same level-vs-permission gap as the toolbar above (#5461).
+  const canDelete    = isOwn || this.user?.isAdmin || this._canModerate() ||
+                       this._hasPerm('delete_message');
 
   // Layout: the actions defined first (Edit, Reply, Quote, Pin) — separator —
   // the remaining hover-toolbar actions (React, Thread, Copy Link, Protect) —

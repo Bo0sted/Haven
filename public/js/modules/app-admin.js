@@ -723,7 +723,8 @@ _snapshotAdminSettings() {
     stun_urls: this.serverSettings.stun_urls || '',
     turn_url: this.serverSettings.turn_url || '',
     turn_username: this.serverSettings.turn_username || '',
-    turn_password: this.serverSettings.turn_password || ''
+    turn_password: this.serverSettings.turn_password || '',
+    channel_creator_role: this.serverSettings.channel_creator_role || ''
   };
   const tosEl = document.getElementById('custom-tos-input');
   if (tosEl) tosEl.value = this._adminSnapshot.custom_tos;
@@ -938,6 +939,14 @@ _saveAdminSettings() {
     this.socket.emit('update-server-setting', { key: 'turn_password', value: turnPassVal });
     changed = true;
   }
+
+  // The Channel Creator Role select writes straight through on `change`, so by
+  // the time Save runs the value is already stored. It still has to be counted
+  // here or the panel reports "No changes to save" for an edit that plainly
+  // happened. Comparing against the snapshot means re-picking the original
+  // value still correctly counts as no change. (#5461)
+  const ccrNow = (this.serverSettings?.channel_creator_role || '');
+  if (ccrNow !== (snap.channel_creator_role || '')) changed = true;
 
   if (changed) {
     this._showToast(t('settings.admin.settings_saved'), 'success');

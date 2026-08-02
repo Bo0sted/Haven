@@ -627,9 +627,15 @@ module.exports = function register(socket, ctx) {
   socket.on('delete-channel', (data) => {
     if (!data || typeof data !== 'object') return;
     const delCode = typeof data.code === 'string' ? data.code.trim() : '';
-    const delCh = delCode ? db.prepare('SELECT created_by, is_temp_voice FROM channels WHERE code = ?').get(delCode) : null;
+    const delCh = delCode ? db.prepare('SELECT id, created_by, is_temp_voice FROM channels WHERE code = ?').get(delCode) : null;
     const isOwnTemp = delCh && delCh.is_temp_voice && delCh.created_by === socket.user.id;
-    if (!socket.user.isAdmin && !isOwnTemp && !userHasPermission(socket.user.id, 'delete_channel')) {
+    // Pass the channel so channel-scoped grants count. Without it this only saw
+    // server-wide roles, so a channel creator holding delete_channel through the
+    // channel's own role could not delete the channel they had just made, nor
+    // its sub-channels. getChannelRoleChain walks parents, so a grant on the
+    // parent covers its children too. (#5461)
+    if (!socket.user.isAdmin && !isOwnTemp &&
+        !userHasPermission(socket.user.id, 'delete_channel', delCh ? delCh.id : null)) {
       return socket.emit('error-msg', 'Only admins can delete channels');
     }
 
