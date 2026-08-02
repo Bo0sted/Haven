@@ -11,6 +11,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.39.0] — 2026-08-02
+
+### Added
+- **Interface zoom (#5464).** The four fixed font-size tiers are replaced by a Zoom slider (70–150%) in Settings → Layout & Density that scales the **whole** interface, not just text: sidebars, the server rail, avatars, icons, spacing and headers all grow together, and the layout reflows instead of running off screen. Your old Small/Normal/Large/XL choice is migrated to the closest zoom level automatically, and the setting is applied before the first paint so nothing jumps on load. At 100% the UI is unchanged from before. Thanks to @Bo0sted for a meticulous conversion.
+- **Keyboard control for the emoji picker (#5459).** Ctrl+E opens and closes it, arrow keys move a highlight through the grid, Enter inserts the highlighted emoji and closes, Shift+Enter inserts without closing so you can pick several, and Escape closes. The first emoji is highlighted the moment the picker opens, so Enter works without arrowing first. Thanks to @Bo0sted.
+- **Sliding switches for on/off settings.** Settings that toggle something now render as switches instead of checkboxes, themed from your accent colour. Settings → Layout & Density has a **Toggle Style** control to switch back to classic boxes. Lists where you tick items — permissions, channel and media pickers, backup contents, polls — deliberately stay as checkboxes, since those are selections rather than settings.
+- **Activity toggles in the status menu.** Clicking your status dot now also offers Music Activity and Game Activity under a Share Activity heading, so you can flip what you broadcast without opening Settings. The full Activity section is unchanged and still holds the master switch and account connections. A toggle only reads as on when something would actually be shared; ticking one with no linked account takes you to Settings → Activity to set it up.
+
+### Changed
+- **The status dot is now a button.** It always opened the status menu, but an 8px dot did not look clickable. It now sits inside a proper button with hover and focus states, while keeping its own shapes for Do Not Disturb, Away and Invisible.
+
+### Fixed
+- **AI noise suppression failed after leaving and rejoining a call (#5458).** The worklet module is registered per AudioContext, but the check that decided whether to register it keyed on a value that survived teardown. Rejoining built a fresh AudioContext, skipped registration, and enabling Suppression (AI) threw an InvalidStateError. The check now keys on the AudioContext itself. Reported by @Serionard.
+- **AI noise suppression produced a constant crackle (#5458).** The worklet drained its output buffer with no headroom, and because RNNoise's 480-sample frames do not divide evenly into the browser's 128-sample audio blocks, the buffer periodically ran dry and emitted digital silence — measured at 5.07% of all output samples, in gaps recurring around 72 Hz, which is audible as broadband clicking. Output now goes through a ring FIFO with independent read and write cursors and two frames of pre-fill. This adds roughly 9–19 ms of latency and a one-off ~19 ms of silence when you switch suppression on. Diagnosis and approach from @Serionard.
+- **The member-list gear menu did nothing on narrow windows (#5462).** Below 900px the right sidebar becomes a slide-in overlay with a very high stacking order, and the gear menu was opening behind it. Reported by @birdcrazy.
+- **Channel-scoped delete permissions were ignored (#5461).** Someone granted "delete any message" through a channel's own role saw no Delete option, because the client decided from your level rather than your permissions. Separately, deleting a channel only ever consulted server-wide roles, so a channel creator holding delete_channel through the channel role could not delete the channel they had just made, nor its sub-channels. Both now honour channel-scoped grants, and a grant on a parent channel covers its sub-channels. Reported by @birdcrazy.
+- **Changing the Channel Creator Role reported "No changes to save" (#5461).** The setting saved correctly; only the confirmation was wrong. Reported by @birdcrazy.
+- **Hint text under a setting could overlap its control.** Hints sat 2px too high and ran the full panel width, so they slid underneath the control on the right. They now clear it and wrap before reaching it.
+- **The PiP thread panel lost its clamp to the viewport height** in the web client, so on a short window it could extend past the bottom of the screen.
+- **Admin action buttons no longer sit in ragged rows.** View Bans, View IP Bans, View Deleted Users and View All Members now share an even grid.
+
+---
+
 ## [3.38.0] — 2026-07-28
 
 ### Added
