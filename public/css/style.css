@@ -8121,7 +8121,11 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   bottom: calc(var(--thread-footer-offset, 0px) + 14px);
   width: min(26.25rem, calc(100vw - 1.75rem));
   height: min(58vh, 32.5rem);
-  max-height: calc(100vh - var(--thread-footer-offset, 0) - 1.75rem);
+  /* The fallback must keep its unit. --thread-footer-offset is only defined
+     under [data-desktop-app], so on the web client the fallback is what runs,
+     and a unitless 0 makes this calc() invalid -- the whole max-height is
+     dropped and the PiP thread panel loses its viewport clamp. */
+  max-height: calc(100vh - var(--thread-footer-offset, 0px) - 1.75rem);
   border: 1px solid var(--border-light);
   border-radius: 0.75rem;
   resize: both;
