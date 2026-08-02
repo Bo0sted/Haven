@@ -9606,7 +9606,14 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 /* ── User gear dropdown menu ─────────────── */
 .user-gear-menu {
   position: fixed;
-  z-index: 10002;
+  /* The menu is appended to <body>, so it stacks against the whole page rather
+     than inside the member list it belongs to. At <= 900px the right sidebar
+     becomes a fixed overlay at z-index 100000, which left this menu (10002)
+     rendering behind the very sidebar it was opened from, so clicking the gear
+     looked like it did nothing (#5462). 100010 matches the value already used
+     elsewhere for popups that must clear modal overlays (100001), which also
+     covers opening this menu from the profile popup. */
+  z-index: 100010;
   min-width: 10rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
