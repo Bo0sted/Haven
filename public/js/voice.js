@@ -2539,24 +2539,38 @@ class VoiceManager {
   async _initRNNoise() {
     // Loads the worklet module + wasm bytes. Does NOT set _rnnoiseReady —
     // that only flips true when the worklet posts {type:'ready'} (#5458).
-    if (this._rnnoiseWasmBytes || !this.audioCtx) return;
+    if (!this.audioCtx) return;
+    // addModule() registers the processor on ONE AudioContext, but the wasm
+    // bytes are reusable across contexts. Guarding on the bytes alone meant
+    // that after leave() closed the context, a rejoin built a fresh one, this
+    // returned early, addModule() never ran on it, and _enableRNNoise() threw
+    // "AudioWorklet does not have a valid AudioWorkletGlobalScope". Keying on
+    // the context itself survives any future teardown path that forgets to
+    // clear state, which clearing the bytes field would not. (#5458)
+    if (this._rnnoiseModuleCtx === this.audioCtx && this._rnnoiseWasmBytes) return;
+    // Capture the context: awaits below can straddle a leave/rejoin.
+    const ctx = this.audioCtx;
     try {
-      await this.audioCtx.audioWorklet.addModule('/js/rnnoise-processor.js');
-      const wasmResponse = await fetch('/js/rnnoise.wasm');
-      if (!wasmResponse.ok) {
-        throw new Error(`rnnoise.wasm HTTP ${wasmResponse.status}`);
+      await ctx.audioWorklet.addModule('/js/rnnoise-processor.js');
+      this._rnnoiseModuleCtx = ctx;
+      if (!this._rnnoiseWasmBytes) {
+        const wasmResponse = await fetch('/js/rnnoise.wasm');
+        if (!wasmResponse.ok) {
+          throw new Error(`rnnoise.wasm HTTP ${wasmResponse.status}`);
+        }
+        const wasmBytes = await wasmResponse.arrayBuffer();
+        if (!wasmBytes || wasmBytes.byteLength < 1000) {
+          throw new Error(`rnnoise.wasm too small (${wasmBytes ? wasmBytes.byteLength : 0} bytes)`);
+        }
+        // Early validity check on the main thread so a corrupt/HTML 404 body
+        // fails here with a clear log, not inside the worklet.
+        await WebAssembly.compile(wasmBytes.slice(0));
+        this._rnnoiseWasmBytes = wasmBytes;
       }
-      const wasmBytes = await wasmResponse.arrayBuffer();
-      if (!wasmBytes || wasmBytes.byteLength < 1000) {
-        throw new Error(`rnnoise.wasm too small (${wasmBytes ? wasmBytes.byteLength : 0} bytes)`);
-      }
-      // Early validity check on the main thread so a corrupt/HTML 404 body
-      // fails here with a clear log, not inside the worklet.
-      await WebAssembly.compile(wasmBytes.slice(0));
-      this._rnnoiseWasmBytes = wasmBytes;
       this._rnnoiseReady = false;
     } catch (err) {
       console.warn('[Voice] RNNoise init failed:', err);
+      this._rnnoiseModuleCtx = null;
       this._rnnoiseWasmBytes = null;
       this._rnnoiseReady = false;
     }
