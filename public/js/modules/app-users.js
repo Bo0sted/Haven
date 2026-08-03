@@ -300,16 +300,28 @@ _renderUserItem(u, scoreLookup) {
   const modBtns = (dmBtn || gearBtn)
     ? `<div class="user-admin-actions">${dmBtn}${gearBtn}</div>`
     : '';
+  // The name gets a line to itself. Everything used to sit on one row, so a
+  // custom status and an activity together squeezed the username down to a
+  // couple of characters and an ellipsis. Whatever the person is doing now
+  // goes on a smaller second line underneath, and only one thing is shown
+  // there: a game beats music (picked in _sidebarActivityHtml), and any
+  // activity beats a custom status, which is the least specific of the three.
+  const subLine = activityHtml || statusTextHtml;
+  const subLineHtml = subLine ? `<div class="user-item-sub">${subLine}</div>` : '';
+
   return `
-    <div class="user-item${onlineClass}" data-user-id="${u.id}">
+    <div class="user-item${onlineClass}${subLineHtml ? ' has-sub' : ''}" data-user-id="${u.id}">
       ${avatarHtml}
-      ${roleDot}${roleIconBefore}
-      <span class="user-item-name"${nameStyle}${this._nicknames[u.id] ? ` title="${this._escapeHtml(u.username)}"` : ''}>${this._escapeHtml(this._getNickname(u.id, u.username))}</span>
-      ${roleIconAfter}
-      ${roleBadge}
-      ${guestBadge}
-      ${statusTextHtml}
-      ${activityHtml}
+      <div class="user-item-text">
+        <div class="user-item-line">
+          ${roleDot}${roleIconBefore}
+          <span class="user-item-name"${nameStyle}${this._nicknames[u.id] ? ` title="${this._escapeHtml(u.username)}"` : ''}>${this._escapeHtml(this._getNickname(u.id, u.username))}</span>
+          ${roleIconAfter}
+          ${roleBadge}
+          ${guestBadge}
+        </div>
+        ${subLineHtml}
+      </div>
       ${scoreBadge}
       ${modBtns}
     </div>

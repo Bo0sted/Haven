@@ -5166,12 +5166,54 @@ details.sound-section:not([open]) .sound-section-label::before {
 }
 
 .user-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+/* Text column beside the avatar: name on its own line, with an optional
+   smaller line under it for whatever the person is doing. Previously the name
+   sat in the same flex row as the custom status, the activity and the score
+   badge, all of which reserved width, so a user with both a status and a game
+   saw their username collapse to one character and an ellipsis. */
+.user-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.0625rem;
+}
+
+/* The name line. Role dot/icon and badges sit with the name; nothing else
+   competes for this row. */
+.user-item-line {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+/* The "half line". Deliberately smaller and dimmer than the name so the list
+   still scans by username first. */
+.user-item-sub {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 1.15;
+}
+
 .user-item-name {
   font-size: 0.8125rem;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Inside the sub-line these fill the width instead of reserving a fixed slice
+   of the name's row, which is what made them crowd the username before. */
+.user-item-sub .user-status-text,
+.user-item-sub .user-activity {
+  max-width: 100%;
+  margin-left: 0;
   flex: 1;
   min-width: 0;
 }
