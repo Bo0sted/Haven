@@ -418,6 +418,18 @@ function setupSocketHandlers(io, db, opts = {}) {
           ch.canOverrideReadOnly = isAdmin || userHasPermission(userId, 'read_only_override', ch.id);
         }
 
+        // Whether this viewer may invite someone into this private channel.
+        // Mirrors the rule the invite-to-channel handler already enforces:
+        // admin, the channel's creator, or a moderator within that channel.
+        // The menu only ever offered private channels to admins, so creators
+        // and channel moderators held the right with no way to use it. This
+        // does not widen the rule, it just lets the UI match it. (#5466)
+        if (!ch.is_dm && (ch.is_private || ch.code_visibility === 'private')) {
+          ch.canInvitePrivate = isAdmin
+            || ch.created_by === userId
+            || userHasPermission(userId, 'kick_user', ch.id);
+        }
+
         if (ch.is_dm) {
           const otherUser = db.prepare(`
             SELECT u.id, COALESCE(u.display_name, u.username) as username FROM users u

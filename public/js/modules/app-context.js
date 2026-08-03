@@ -45,8 +45,14 @@ _showUserContextMenu(e, targetUserId) {
   // Private channels are excluded for non-admins: regular members can't bypass
   // the code requirement by using the right-click invite menu.
   // Both is_private=1 and code_visibility='private' count as private here.
+  // Private channels are offered to whoever the server would actually accept an
+  // invite from: an admin, the channel's creator, or a moderator in that
+  // channel. canInvitePrivate is decided per channel server-side. Previously
+  // only admins saw them, so creators and channel mods had the permission and
+  // no button. (#5466)
   const inviteChannels = (this.channels || []).filter(ch =>
-    !ch.is_dm && ch.name && ((!ch.is_private && ch.code_visibility !== 'private') || this.user?.isAdmin)
+    !ch.is_dm && ch.name &&
+    ((!ch.is_private && ch.code_visibility !== 'private') || this.user?.isAdmin || ch.canInvitePrivate)
   );
   if (inviteChannels.length > 0) {
     const inviteItem = document.createElement('div');

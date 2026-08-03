@@ -89,9 +89,11 @@ _showUserGearMenu(anchorEl, userId, username) {
   // Mirror of the right-click context menu's invite filter: any non-DM,
   // non-private channel the user can see (admins also see private channels).
   // Showing the entry only when there's at least one channel available.
+  // Same rule as the right-click menu: the server accepts invites to a private
+  // channel from its creator or a moderator in it, not admins alone. (#5466)
   const inviteChannels = (this.channels || []).filter(ch =>
     !ch.is_dm && ch.name && !ch.parent_channel_id &&
-    ((!ch.is_private && ch.code_visibility !== 'private') || isAdmin)
+    ((!ch.is_private && ch.code_visibility !== 'private') || isAdmin || ch.canInvitePrivate)
   );
   const canInvite = inviteChannels.length > 0 && userId !== this.user?.id;
 
