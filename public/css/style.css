@@ -5282,7 +5282,12 @@ details.sound-section:not([open]) .sound-section-label::before {
 
 .profile-popup {
   position: fixed;
-  z-index: 10001;
+  /* Appended to <body>, so it stacks against the page rather than inside the
+     member list that opened it. Below 900px the right sidebar becomes a fixed
+     overlay at 100000 with its backdrop at 99996, which left this popup at
+     10001 rendering behind both (#5465). Same layer the member-list gear menu
+     uses for exactly this reason (#5462). */
+  z-index: 100010;
   width: 20rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
