@@ -1582,9 +1582,18 @@ function setupSocketHandlers(io, db, opts = {}) {
     registerAdmin(socket, ctx);
 
     // ── Disconnect handler ────────────────────────────────
-    socket.on('disconnect', () => {
+    // Socket.IO hands us why the socket went away, and throwing that away made
+    // reconnect loops impossible to diagnose from a server log: every drop
+    // looked identical. The reason separates the causes that need completely
+    // different fixes -- "ping timeout" means the client stopped answering
+    // heartbeats (a backgrounded tab whose timers the browser throttled),
+    // "transport close" means something in between cut the connection (a proxy
+    // or tunnel idle timeout), and "client namespace disconnect" means the
+    // client asked to leave. (#5463)
+    socket.on('disconnect', (reason, description) => {
       if (!socket.user) return;
-      console.log(`❌ ${socket.user.username} disconnected`);
+      const detail = description && description.message ? ` (${description.message})` : '';
+      console.log(`❌ ${socket.user.username} disconnected [${reason || 'unknown'}]${detail}`);
 
       // (#5381) Guest cleanup — if this was the last live socket for an
       // ephemeral guest account, delete the users row so the username is
