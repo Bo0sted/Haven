@@ -11,6 +11,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.40.0] — 2026-08-03
+
+### Added
+- **GIF search works on new servers again (#5472).** GIPHY stopped issuing API keys to new applications, so the setup guide walked admins to a page that could never finish and GIF search stayed switched off forever. Tenor is now the preferred provider, with a setup guide to match, and it can be configured in the same place. Servers that already have a GIPHY key keep working exactly as before, and the picker footer tells you which service actually served the GIFs. Thanks to @Amnibro.
+- **Braid themes and the Braid Layout plugin.** An optional darker mint-on-slate theme (plus a light variant) and a simplified two-edge layout that folds the server rail into the sidebar and tucks header extras into a single menu. Both are opt-in and off by default: admins publish the themes under Settings → Custom Themes, and the layout is enabled per person under Plugins. Every control the layout hides stays reachable from its menu. Thanks to @Amnibro.
+
+### Changed
+- **The member list gives each name its own line.** A custom status and a game used to sit on the same row as the username, and both reserved width, so anyone doing both had their name squeezed down to a character and an ellipsis. Whatever someone is doing now shows on a smaller second line underneath, and only one thing appears there: a game outranks music, and any activity outranks a custom status. People with nothing to show keep a single-line row at the same height as before.
+- **The status bar shows an address worth sharing.** It used to display whatever address your own browser connected on, which for the person running the server meant "localhost:3000" behind a hide toggle and a click-to-copy, neither of which was any use. It now shows the address other people could actually connect on: an active tunnel if there is one, otherwise your configured public address. When there is nothing shareable to show, the whole thing is hidden rather than offering to copy an address that only works on one machine.
+- Haven now runs on Node 24 and 26. The launcher used to refuse to start on anything newer than Node 22 based purely on the version number; it now checks whether the database module actually loads, which is the thing that matters. Thanks to @Amnibro.
+
+### Fixed
+- **Haven could appear to crash silently on launch (#5471).** If the port was already taken, the failure was caught by the keep-alive handler and written to the crash log, leaving a process running that never got a network connection. There was no banner, no error and no exit, and the launcher's readiness check was satisfied by the older process still holding the port, so it reported that Haven was live. Every retry left another invisible copy behind. A failed start now says which port and why, then exits. Diagnosis and fix from @Amnibro.
+- **The profile card opened behind the member list on narrow windows (#5465).** Below 900px the member list becomes a slide-in panel that sits above the page, and the profile card was underneath it and its shading. Reported by @birdcrazy.
+
+---
+
 ## [3.39.0] — 2026-08-02
 
 ### Added
