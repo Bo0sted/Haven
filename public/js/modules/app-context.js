@@ -514,7 +514,15 @@ _setupNotifications() {
   const statusUrlEl = document.getElementById('status-url-text');
   const statusUrlToggle = document.getElementById('status-url-toggle');
   if (statusUrlEl && statusUrlToggle) {
-    const origin = window.location.origin;
+    // Start from where this browser connected, then ask the server for the
+    // address other people could actually use. For whoever runs the server
+    // that is the difference between "localhost:3000" and something worth
+    // copying. (#status-bar)
+    let origin = window.location.origin;
+    const urlItem = document.getElementById('status-url-item');
+
+    const isLoopback = (u) => /^https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|$)/i.test(u || '');
+
     // Always start hidden each session — the address is only revealed after
     // an explicit click, and that choice is intentionally NOT persisted so it
     // resets to hidden every time the app (re)loads. (privacy default)
@@ -534,6 +542,26 @@ _setupNotifications() {
       }
     };
     applyUrlVis();
+
+    // Swap in the shareable address once the server reports it. `origin` is
+    // read at call time by both the toggle and the copy handler, so they pick
+    // this up without rewiring anything.
+    fetch('/api/connection-address', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('haven_token') || ''}` }
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data && data.url) {
+          origin = data.url;
+          applyUrlVis();
+        } else if (isLoopback(origin) && urlItem) {
+          // Nothing shareable exists and the local address is no use to
+          // anyone else, so hide the widget rather than offer to copy
+          // localhost.
+          urlItem.style.display = 'none';
+        }
+      })
+      .catch(() => { /* keep the local origin; the bar still works */ });
 
     statusUrlToggle.addEventListener('click', () => {
       urlVisible = !urlVisible;

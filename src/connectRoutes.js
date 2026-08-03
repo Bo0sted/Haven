@@ -332,4 +332,4 @@ function createConnectRoutes(getActivity) {
   return router;
 }
 
-module.exports = { createConnectRoutes };
+module.exports = { createConnectRoutes, baseUrl };

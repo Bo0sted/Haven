@@ -389,7 +389,7 @@ app.use('/api/auth', authRoutes);
 // swallowed by a catch-all. The activity engine is built later inside
 // setupSocketHandlers, hence the getter — see activityRef below.
 const activityRef = { engine: null };
-const { createConnectRoutes } = require('./src/connectRoutes');
+const { createConnectRoutes, baseUrl } = require('./src/connectRoutes');
 app.use('/connect', createConnectRoutes(() => activityRef.engine));
 
 // ── Push notification VAPID public key endpoint ──────────
@@ -967,6 +967,39 @@ app.post('/api/upload-persona-avatar', uploadLimiter, (req, res) => {
 });
 
 // ── Serve pages ──────────────────────────────────────────
+
+// ── Connection address (any signed-in user) ──────────────
+// The status bar used to show window.location.origin, which for the person
+// running the server is "localhost:3000" — useless to share and pointless to
+// hide or copy. Resolve the address someone else could actually connect on:
+// an active tunnel wins, otherwise the same PUBLIC_URL / X-Forwarded-Host /
+// Host resolution the OAuth callbacks already rely on.
+//
+// Auth-gated on purpose. This is not in /api/public-config because that is
+// unauthenticated, and an anonymous caller reaching the box on its LAN
+// address should not be handed the server's public hostname.
+app.get('/api/connection-address', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const tunnel = getTunnelStatus();
+    if (tunnel && tunnel.active && tunnel.url) {
+      return res.json({ url: tunnel.url, source: 'tunnel' });
+    }
+    const resolved = baseUrl(req);
+    // Loopback means we could not work out anything shareable. Say so rather
+    // than handing back localhost, so the client can hide the widget instead
+    // of offering to copy an address that only works on this machine.
+    const isLoopback = /^https?:\/\/(localhost|127\.0\.0\.1|\[?::1\]?)(:|$)/i.test(resolved);
+    res.json({
+      url: isLoopback ? null : resolved,
+      source: isLoopback ? 'loopback' : (process.env.PUBLIC_URL ? 'public_url' : 'host'),
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to resolve address' });
+  }
+});
 
 // ── Tunnel API (Admin only) ──────────────────────────────
 app.get('/api/tunnel/status', (req, res) => {
