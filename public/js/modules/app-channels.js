@@ -118,8 +118,12 @@ async switchChannel(code) {
   const msgInputArea = document.getElementById('message-input-area');
   const _textOff = channel && channel.text_enabled === 0;
   const _mediaOff = channel && channel.media_enabled === 0;
-  // Read-only: hide input unless user is admin or has read_only_override permission
-  const _isReadOnly = channel && channel.read_only === 1 && !this.user?.isAdmin && !this._hasPerm('read_only_override');
+  // Read-only: hide the composer unless this viewer may actually post here.
+  // canOverrideReadOnly is decided per channel by the server. _hasPerm reads a
+  // flat list that merges every channel-scoped grant together, so holding the
+  // override in one channel used to reveal the composer in all of them, and the
+  // send was then refused. (#5468)
+  const _isReadOnly = channel && channel.read_only === 1 && !this.user?.isAdmin && !channel.canOverrideReadOnly;
   if (msgInputArea) msgInputArea.style.display = (_isReadOnly || (_textOff && _mediaOff)) ? 'none' : '';
   // Text-only elements
   const _msgInput = document.getElementById('message-input');

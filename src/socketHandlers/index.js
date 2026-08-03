@@ -408,6 +408,16 @@ function setupSocketHandlers(io, db, opts = {}) {
           ch.unreadCount = 0;
         }
 
+        // Whether this viewer may post in a read-only channel, answered per
+        // channel. The client only ever had a flat permission list that merges
+        // server-wide grants with every channel-scoped one, so holding
+        // read_only_override in a single channel made the composer appear in
+        // every read-only channel. The send was still refused server-side, so
+        // the box looked usable and silently was not. (#5468)
+        if (ch.read_only === 1 && !ch.is_dm) {
+          ch.canOverrideReadOnly = isAdmin || userHasPermission(userId, 'read_only_override', ch.id);
+        }
+
         if (ch.is_dm) {
           const otherUser = db.prepare(`
             SELECT u.id, COALESCE(u.display_name, u.username) as username FROM users u

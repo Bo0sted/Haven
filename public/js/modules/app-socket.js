@@ -654,7 +654,8 @@ _setupSocketListeners() {
         const msgInputArea = document.getElementById('message-input-area');
         const _textOff = curCh.text_enabled === 0;
         const _mediaOff = curCh.media_enabled === 0;
-        const _isReadOnly = curCh.read_only === 1 && !this.user?.isAdmin && !this._hasPerm('read_only_override');
+        // Per-channel, same reasoning as the composer gate in app-channels.js (#5468)
+        const _isReadOnly = curCh.read_only === 1 && !this.user?.isAdmin && !curCh.canOverrideReadOnly;
         if (msgInputArea) msgInputArea.style.display = (_isReadOnly || (_textOff && _mediaOff)) ? 'none' : '';
       }
     }
