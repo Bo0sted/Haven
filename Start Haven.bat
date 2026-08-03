@@ -75,12 +75,12 @@ echo  [OK] Node.js found: & node -v
 :: better-sqlite3 ships prebuilts for it.  The real gate is the functional
 :: native-module load check after npm install below.
 if defined NODE_MAJOR (
-    if %NODE_MAJOR% GEQ 25 (
+    if %NODE_MAJOR% GEQ 27 (
         color 0E
         echo.
-        echo  [!] WARNING: Node.js v%NODE_MAJOR% detected. Haven is tested on Node 18-24.
+        echo  [!] WARNING: Node.js v%NODE_MAJOR% detected. Haven is tested on Node 18-26.
         echo      If the native module check fails below, install
-        echo      Node.js 24 LTS from https://nodejs.org
+        echo      Node.js 26 LTS from https://nodejs.org
         echo.
     )
 )
@@ -104,7 +104,7 @@ if %ERRORLEVEL% NEQ 0 (
     color 0C
     echo.
     echo  [ERROR] The better-sqlite3 native module failed to load on Node v%NODE_MAJOR%.
-    echo          Install Node.js 24 LTS from https://nodejs.org and try again.
+    echo          Install Node.js 26 LTS from https://nodejs.org and try again.
     echo.
     pause
     exit /b 1
