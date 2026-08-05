@@ -2076,7 +2076,7 @@
         <div class="admin-settings" id="section-security" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🔒 <span data-i18n="settings.admin.security_title">Security</span></h5>
           <small class="settings-group-label" style="margin-top:8px;display:block">🔗 <span data-i18n="settings.admin.referrer_policy_group">Referrer configuration</span></small>
-          <small class="settings-hint" style="display:block" data-i18n="settings.admin.referrer_policy_desc">Sets the Referrer-Policy header Haven sends to browsers, which controls how much of the current page's address is shared when the browser loads resources or follows links to other sites. The recommended options cover almost every server; the advanced policies are standard browser values included for completeness and are left to your discretion.</small>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.referrer_policy_desc">Sets the Referrer-Policy header Haven sends to browsers, which controls how much of the current page's address is shared when the browser loads resources or follows links to other sites. The recommended options cover almost every server; the advanced policies are standard browser values left to your discretion. Policies that would send the full page address to other sites are not offered, because Haven invite links live in that address.</small>
           <ul class="settings-hint" style="margin:6px 0 0;padding-left:20px">
             <li data-i18n-html="settings.admin.referrer_policy_opt_default"><strong>Strict-Origin-When-Cross-Origin (default):</strong> within this server, shares the full address; to other sites, shares only the origin.</li>
             <li style="margin-top:4px" data-i18n-html="settings.admin.referrer_policy_opt_same"><strong>Same-Origin:</strong> within this server, shares the full address; to other sites, shares nothing.</li>
@@ -2095,8 +2095,6 @@
                 <option value="strict-origin">Strict-Origin</option>
                 <option value="origin">Origin</option>
                 <option value="origin-when-cross-origin">Origin-When-Cross-Origin</option>
-                <option value="no-referrer-when-downgrade">No-Referrer-When-Downgrade</option>
-                <option value="unsafe-url">Unsafe-URL</option>
               </optgroup>
             </select>
           </label>

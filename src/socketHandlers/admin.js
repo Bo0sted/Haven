@@ -67,7 +67,11 @@ module.exports = function register(socket, ctx) {
     if (key === 'registration_rate_limit_enabled' && !['true', 'false'].includes(value)) return;
     if (key === 'registration_rate_limit_per_hour') { const n = parseInt(value); if (isNaN(n) || n < 1 || n > 100000) return; }
 
-    if (key === 'referrer_policy' && !['no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin', 'unsafe-url'].includes(value)) return;
+    // 'unsafe-url' and 'no-referrer-when-downgrade' are intentionally absent —
+    // both leak the full URL cross-origin, and Haven's invite links live in the
+    // query string. See the note on VALID_REFERRER_POLICIES in server.js, which
+    // this list must match.
+    if (key === 'referrer_policy' && !['no-referrer', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin'].includes(value)) return;
     if (key === 'member_visibility' && !['all', 'online', 'none'].includes(value)) return;
     if (key === 'cleanup_enabled' && !['true', 'false'].includes(value)) return;
     if (key === 'cleanup_max_age_days') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 3650) return; }

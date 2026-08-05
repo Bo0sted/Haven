@@ -192,7 +192,21 @@ function userHasPermission(userId, permission) {
 // middleware below. Admins can change it from Settings → Security; the value is
 // cached in memory (loaded at boot, refreshed when it changes) so we never read
 // the DB per request. Default matches the value helmet used to set.
-const VALID_REFERRER_POLICIES = ['no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin', 'unsafe-url'];
+//
+// Two of the eight standard policies are deliberately NOT offered: 'unsafe-url'
+// (sends the full URL to every site, always) and 'no-referrer-when-downgrade'
+// (sends the full URL to any cross-origin HTTPS site). Haven puts secrets in
+// the query string — invite links arrive as ?invite=CODE and deep links as
+// ?channel=CODE&message=ID — and they are only scrubbed by replaceState once
+// the socket connects. Under either policy, an externally hosted image in the
+// channel would carry that invite code to its host in the Referer header on
+// first paint. The six kept here all stop at the origin cross-origin, which is
+// enough for the case this setting exists for (CDNs like X/Twitter that reject
+// a cross-origin referrer on video). Anything not in this list falls back to
+// the default below, so a value saved before this list was narrowed degrades
+// safely instead of persisting.
+// Keep in sync with the validation list in src/socketHandlers/admin.js.
+const VALID_REFERRER_POLICIES = ['no-referrer', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin'];
 const DEFAULT_REFERRER_POLICY = 'strict-origin-when-cross-origin';
 let currentReferrerPolicy = DEFAULT_REFERRER_POLICY;
 
