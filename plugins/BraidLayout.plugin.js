@@ -569,8 +569,8 @@ class BraidLayout {
   // ── Mod Mode interop ─────────────────────────────────────
   // While the layout editor is active the Braid gates come off and the
   // server rail unfolds, so every draggable section and panel handle is
-  // real and visible. On exit the layer re-applies — and honours any
-  // custom section order the user just saved (see _evalOrderCSS).
+  // real and visible. On exit the layer re-applies, leaving whatever
+  // section order the user just saved in Mod Mode alone.
   _suspend() {
     this._suspended = true;
     this._showModDone();
