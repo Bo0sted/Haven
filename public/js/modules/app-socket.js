@@ -275,6 +275,9 @@ _setupSocketListeners() {
     // wake until you switch channels twice). (#post-sleep-channel-desync)
     if (document.hidden) {
       this._hiddenAt = Date.now();
+      // (#5463) Mark the current wake-detector window as tainted — see the
+      // background-throttling note on _wakeCheckInterval below.
+      this._tabHiddenSinceWakeCheck = true;
       return;
     }
     const hiddenForMs = this._hiddenAt ? (Date.now() - this._hiddenAt) : 0;
@@ -288,7 +291,16 @@ _setupSocketListeners() {
       // does the full resync (enter-channel, get-messages, members,
       // voice users, voice-rejoin) rather than relying on the partial
       // refresh below.
-      if (hiddenForMs > 30000 && this.socket) {
+      //
+      // (#5444) Never do that while a live voice session is running,
+      // though. Cycling the socket makes the server grace-evict the voice
+      // slot and re-add it a moment later, which is heard by everyone in
+      // the call as a leave sound followed by a join sound — for nothing
+      // more than the user tabbing away for half a minute and coming
+      // back. In that case fall through to the in-place refresh below.
+      const voiceLive = !!(this.voice && this.voice.inVoice &&
+        ((this.voice.liveVoicePeerCount?.() || 0) > 0 || this.voice.localStream));
+      if (hiddenForMs > 30000 && this.socket && !voiceLive) {
         try { this.socket.disconnect(); } catch {}
         try { this.socket.connect(); } catch {}
         return;
@@ -348,6 +360,12 @@ _setupSocketListeners() {
           iAmInVoice: !!(this.voice && this.voice.inVoice && this.voice.currentChannel === this.currentChannel)
         });
       }
+      // (#5444) We deliberately kept the socket alive above if voice was
+      // live, so rebind the voice slot here instead. This is a no-op on
+      // the server when we're already bound on this socket.
+      if (voiceLive && this.voice?.currentChannel && this.socket?.connected) {
+        this.socket.emit('voice-rejoin', { code: this.voice.currentChannel });
+      }
       // Re-fetch channels in case list changed while backgrounded
       this.socket?.emit('get-channels');
       
@@ -393,12 +411,37 @@ _setupSocketListeners() {
   // the next tick fires immediately with a huge gap from the previous
   // tick. If that gap exceeds the threshold, we know the process was
   // suspended and the socket is almost certainly a zombie.
+  //
+  // (#5463 / #5444) BUT: timer drift is ALSO what a backgrounded tab looks
+  // like. Once a tab has been hidden and silent for ~5 minutes, Chromium
+  // applies "intensive throttling" and fires setInterval at most once per
+  // MINUTE. That produced a 60 s drift on every tick, which tripped this
+  // detector, which hard-cycled the socket, which grace-evicted the user
+  // from voice on the server — a self-inflicted disconnect/reconnect loop
+  // running exactly every 60 seconds, forever, for as long as the tab sat
+  // in the background. It only ever hit web users because Haven Desktop
+  // sets `backgroundThrottling: false` on its windows, and it only ever
+  // hit idle tabs because a foreground tab is never throttled.
+  //
+  // So: only trust drift while the tab is actually visible. A hidden tab
+  // has its own recovery path already — the visibilitychange handler above
+  // forces a full resync when it comes back after >30 s hidden — and a
+  // socket that genuinely died while hidden is handled by socket.io's own
+  // reconnection. The PC-lock case this detector exists for is unaffected,
+  // because Win+L does NOT mark the page hidden.
   this._lastWakeCheck = Date.now();
+  this._tabHiddenSinceWakeCheck = document.hidden;
   if (this._wakeCheckInterval) clearInterval(this._wakeCheckInterval);
   this._wakeCheckInterval = setInterval(() => {
     const now = Date.now();
     const drift = now - this._lastWakeCheck;
     this._lastWakeCheck = now;
+    // Discard any interval that the tab spent hidden for even part of its
+    // length — the drift is throttling, not a suspend, and we can't tell
+    // the two apart from the timestamp alone.
+    const wasHidden = document.hidden || this._tabHiddenSinceWakeCheck;
+    this._tabHiddenSinceWakeCheck = document.hidden;
+    if (wasHidden) return;
     // Threshold: 30 s. Normal tick is 5 s, so even with heavy GC pauses
     // or main-thread blocking we won't false-positive at 30 s.
     if (drift > 30000) {
