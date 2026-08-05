@@ -53,8 +53,16 @@ async _checkForUpdates() {
         title: t('header.update_title', { remote: remoteVersion, local: localVersion }),
         href: zipAsset ? zipAsset.browser_download_url : release.html_url
       };
-      this._applyUpdateBanner();
+    } else {
+      // Already current. This has to clear, because the check re-runs every 30
+      // minutes on a page that may have been open since before the update: the
+      // banner was only ever switched on, never off, so once it appeared it
+      // stayed until a full reload even after the server had been updated.
+      // Most visible on a machine that always runs the newest build, which
+      // would show "update available" for its own version. (#update-banner)
+      this._pendingUpdate = null;
     }
+    this._applyUpdateBanner();
   } catch (e) {
     // Silently fail — update check is non-critical
   }
@@ -70,7 +78,10 @@ async _checkForUpdates() {
 _applyUpdateBanner() {
   const banner = document.getElementById('update-banner');
   if (!banner) return;
-  if (!this._pendingUpdate) return; // no update detected yet
+  // No update pending: hide it. This used to return early and leave whatever
+  // was on screen, which is how a stale banner survived once the server had
+  // caught up.
+  if (!this._pendingUpdate) { banner.style.display = 'none'; return; }
 
   const adminOnly = this.serverSettings?.update_banner_admin_only === 'true';
   const canSee = !adminOnly || this.user?.isAdmin;
