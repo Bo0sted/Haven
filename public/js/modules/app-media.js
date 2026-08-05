@@ -724,6 +724,29 @@ _setupSoundManagement() {
       window._sbToggleRealignTimer = setTimeout(() => place(true), 300); // settle: real width
     };
     window._updateSbToggleRight();
+
+    // The button's position is an inline `right` written by the code above, so
+    // it only stays correct while something calls it. It was called on the
+    // toggles and on a resize-handle drag, but nothing else -- so any other
+    // change to the panel's real width left the button behind, sitting away
+    // from the panel edge with a gap. Resizing the window is the obvious one:
+    // the panel is a flex item that shrinks before its requested width, and no
+    // resize listener ever re-placed the button.
+    //
+    // Watching the panels themselves catches every cause rather than the two
+    // that were wired up: window resize, flex-shrink, the interface zoom
+    // changing rem sizes, and a stream or soundboard opening and reflowing the
+    // row. The observer only reads the panels and writes to the buttons, so it
+    // cannot retrigger itself.
+    if (!window._sbToggleResizeObserver && typeof ResizeObserver === 'function') {
+      window._sbToggleResizeObserver = new ResizeObserver(() => {
+        window._updateSbToggleRight?.();
+      });
+      for (const id of ['right-sidebar', 'sb-sidebar-panel']) {
+        const el = document.getElementById(id);
+        if (el) window._sbToggleResizeObserver.observe(el);
+      }
+    }
   }
 
 
