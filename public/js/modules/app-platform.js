@@ -116,8 +116,25 @@ _isNewerVersion(remote, local) {
  *  itself is shown via the unified welcome-popup queue (see
  *  `_initWelcomePopups`) — this function only handles the persistent banner. */
 _initDesktopAppBanner() {
-  // Don't show if already in the desktop app
-  if (window.havenDesktop || navigator.userAgent.includes('Electron')) return;
+  // Don't advertise the desktop app to someone already running it. This checks
+  // every signal the rest of the client uses rather than just two: the preload
+  // exposes window.havenDesktop late in a long file, so anything that throws
+  // above it leaves that undefined, and the runtime does not always carry
+  // "Electron" in the user agent. data-desktop-app is set independently by the
+  // preload, so any one of them surviving is enough to recognise the app.
+  const inDesktopApp = !!(
+    window.havenDesktop?.isDesktopApp ||
+    window.havenDesktop ||
+    navigator.userAgent.includes('Electron') ||
+    document.documentElement.hasAttribute('data-desktop-app')
+  );
+  if (inDesktopApp) {
+    // Hide rather than just bail: the banner may already be on screen from a
+    // check that ran before the desktop signals landed.
+    const b = document.getElementById('desktop-app-banner');
+    if (b) b.style.display = 'none';
+    return;
+  }
 
   // Don't show on mobile / tablet — desktop app isn't relevant there
   if (/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent)) return;

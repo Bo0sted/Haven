@@ -316,11 +316,18 @@
             <span class="update-text">Update Available</span>
           </a>
           <!-- Desktop app banner -->
-          <a id="desktop-app-banner" class="desktop-app-banner" href="https://ancsemi.github.io/Haven/#download" target="_blank" rel="noopener" style="display:none">
-            <span class="desktop-app-icon">🖥️</span>
-            <span class="desktop-app-text" data-i18n="header.get_desktop_app">Get the Desktop App</span>
-            <button class="desktop-app-dismiss" id="desktop-app-dismiss" title="Dismiss">&times;</button>
-          </a>
+          <!-- The dismiss button is a SIBLING of the link, not inside it. A
+               <button> nested in an <a> is invalid HTML: the parser hoists it
+               out, so clicking the X activated the anchor and opened the
+               download page instead of dismissing. Same trap as the Android
+               banner below, which hit it with nested <button>s. -->
+          <span id="desktop-app-banner" class="desktop-app-banner" style="display:none">
+            <a class="desktop-app-link" href="https://ancsemi.github.io/Haven/#download" target="_blank" rel="noopener">
+              <span class="desktop-app-icon">🖥️</span>
+              <span class="desktop-app-text" data-i18n="header.get_desktop_app">Get the Desktop App</span>
+            </a>
+            <button type="button" class="desktop-app-dismiss" id="desktop-app-dismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
+          </span>
           <!-- Android beta banner (must be <div>, not <button>; nesting
                <button> inside <button> is invalid HTML and causes the
                dismiss ×  to be hoisted out of its parent by the parser,
