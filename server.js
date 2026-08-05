@@ -207,7 +207,13 @@ function userHasPermission(userId, permission) {
 // safely instead of persisting.
 // Keep in sync with the validation list in src/socketHandlers/admin.js.
 const VALID_REFERRER_POLICIES = ['no-referrer', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin'];
-const DEFAULT_REFERRER_POLICY = 'strict-origin-when-cross-origin';
+// Default is 'same-origin' as of 3.41.0, up from the 'strict-origin-when-cross-origin'
+// helmet used to set. Sending the origin cross-origin is enough for X's video CDN to
+// return 403, so Twitter/X embeds showed a thumbnail and a dead play button on every
+// Haven server out of the box. 'same-origin' sends nothing cross-origin, which fixes
+// that and shares strictly less than before. Admins who need the old behaviour (a host
+// that uses the referrer for hotlink protection) can pick it in Settings → Security.
+const DEFAULT_REFERRER_POLICY = 'same-origin';
 let currentReferrerPolicy = DEFAULT_REFERRER_POLICY;
 
 // ── Security Headers (helmet) ────────────────────────────

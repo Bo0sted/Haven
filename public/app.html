@@ -2078,18 +2078,18 @@
           <small class="settings-group-label" style="margin-top:8px;display:block">🔗 <span data-i18n="settings.admin.referrer_policy_group">Referrer configuration</span></small>
           <small class="settings-hint" style="display:block" data-i18n="settings.admin.referrer_policy_desc">Sets the Referrer-Policy header Haven sends to browsers, which controls how much of the current page's address is shared when the browser loads resources or follows links to other sites. The recommended options cover almost every server; the advanced policies are standard browser values left to your discretion. Policies that would send the full page address to other sites are not offered, because Haven invite links live in that address.</small>
           <ul class="settings-hint" style="margin:6px 0 0;padding-left:20px">
-            <li data-i18n-html="settings.admin.referrer_policy_opt_default"><strong>Strict-Origin-When-Cross-Origin (default):</strong> within this server, shares the full address; to other sites, shares only the origin.</li>
-            <li style="margin-top:4px" data-i18n-html="settings.admin.referrer_policy_opt_same"><strong>Same-Origin:</strong> within this server, shares the full address; to other sites, shares nothing.</li>
+            <li data-i18n-html="settings.admin.referrer_policy_opt_same"><strong>Same-Origin (default):</strong> within this server, shares the full address; to other sites, shares nothing.</li>
             <li style="margin-top:4px" data-i18n-html="settings.admin.referrer_policy_opt_none"><strong>No-Referrer:</strong> shares nothing anywhere — not even within this server.</li>
+            <li style="margin-top:4px" data-i18n-html="settings.admin.referrer_policy_opt_default"><strong>Strict-Origin-When-Cross-Origin:</strong> within this server, shares the full address; to other sites, shares only the origin. This was Haven's default before 3.41.0 — pick it to go back to the old behaviour.</li>
           </ul>
-          <small class="settings-hint" style="display:block;margin-top:6px" data-i18n="settings.admin.referrer_policy_note">Same-Origin and No-Referrer send nothing to other sites, so either one fixes embeds whose CDN rejects a cross-origin referrer, such as Twitter/X video. They differ only in what is shared within this server.</small>
+          <small class="settings-hint" style="display:block;margin-top:6px" data-i18n="settings.admin.referrer_policy_note">Same-Origin and No-Referrer send nothing to other sites, so either one fixes embeds whose CDN rejects a cross-origin referrer, such as Twitter/X video. If an image or embed somewhere else stops loading after this change, that host wants a referrer: switch to Strict-Origin-When-Cross-Origin to restore the pre-3.41.0 behaviour.</small>
           <label class="select-row" style="margin-top:8px">
             <span data-i18n="settings.admin.referrer_policy_label">Referrer policy</span>
             <select id="referrer-policy-select">
               <optgroup label="Recommended">
-                <option value="strict-origin-when-cross-origin">Strict-Origin-When-Cross-Origin (default)</option>
-                <option value="same-origin">Same-Origin</option>
+                <option value="same-origin">Same-Origin (default)</option>
                 <option value="no-referrer">No-Referrer</option>
+                <option value="strict-origin-when-cross-origin">Strict-Origin-When-Cross-Origin (Haven's pre-3.41.0 default)</option>
               </optgroup>
               <optgroup label="Advanced — use at your own discretion">
                 <option value="strict-origin">Strict-Origin</option>

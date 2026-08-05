@@ -699,7 +699,7 @@ _snapshotAdminSettings() {
     server_title: this.serverSettings.server_title || '',
     welcome_message: this.serverSettings.welcome_message || '',
     member_visibility: this.serverSettings.member_visibility || 'online',
-    referrer_policy: this.serverSettings.referrer_policy || 'strict-origin-when-cross-origin',
+    referrer_policy: this.serverSettings.referrer_policy || 'same-origin', // must match DEFAULT_REFERRER_POLICY in server.js
     cleanup_enabled: this.serverSettings.cleanup_enabled || 'false',
     cleanup_max_age_days: this.serverSettings.cleanup_max_age_days || '0',
     cleanup_max_size_mb: this.serverSettings.cleanup_max_size_mb || '0',
