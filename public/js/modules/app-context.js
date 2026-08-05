@@ -1306,12 +1306,22 @@ _startPerfDiagnostics() {
   // Count frames via rAF — skip sampling when the window is hidden/backgrounded
   // because Chromium throttles rAF to ~1 FPS in background tabs, which would
   // cause false CRITICAL alerts even when the app is perfectly healthy.
+  //
+  // (#5456) Sample in short bursts instead of running rAF forever. A frame
+  // loop that never stops keeps the renderer requesting a frame on every
+  // vsync for the whole session, so the compositor and GPU never get to go
+  // idle and any running CSS animation is re-evaluated on every one of those
+  // frames. Measuring the frame rate does need rAF, but it does not need it
+  // 100% of the time — three seconds out of every fifteen is plenty for an
+  // average and a trend, and leaves the renderer alone the rest of the time.
+  const BURST_MS = 3000;
+  let burstStart = 0;
   const countFrame = (now) => {
-    rafId = requestAnimationFrame(countFrame);
     if (document.hidden) {
       // Reset so the first sample after becoming visible starts clean
       frameCount = 0;
       lastSampleTime = now;
+      rafId = requestAnimationFrame(countFrame);
       return;
     }
     frameCount++;
@@ -1323,8 +1333,20 @@ _startPerfDiagnostics() {
       frameCount = 0;
       lastSampleTime = now;
     }
+    if (now - burstStart >= BURST_MS) {
+      rafId = null;   // burst over — stop asking for frames until the next one
+      return;
+    }
+    rafId = requestAnimationFrame(countFrame);
   };
-  rafId = requestAnimationFrame(countFrame);
+  const startBurst = () => {
+    if (rafId) return;
+    frameCount = 0;
+    burstStart = performance.now();
+    lastSampleTime = burstStart;
+    rafId = requestAnimationFrame(countFrame);
+  };
+  startBurst();
 
   // Periodic evaluation
   reportTimer = setInterval(() => {
@@ -1374,7 +1396,15 @@ _startPerfDiagnostics() {
     }
   }, REPORT_INTERVAL);
 
-  this._perfDiag = { rafId, reportTimer, samples };
+  // Take the next reading (#5456) — the frame loop is idle between bursts.
+  const burstTimer = setInterval(startBurst, REPORT_INTERVAL);
+
+  this._perfDiag = { reportTimer, burstTimer, samples, stop: () => {
+    clearInterval(reportTimer);
+    clearInterval(burstTimer);
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+  } };
 },
 
 // Toggle visual HUD overlay: app._perfHUD(true)

@@ -1394,14 +1394,45 @@ async _populateAudioDevices() {
 
 // ── Mic Level Meter ──────────────────────────────────────
 
+// (#5456) This used to start a requestAnimationFrame loop at app startup and
+// never stop it, so every client ran a frame loop for its entire session even
+// though the meter lives inside the settings modal and is off screen almost
+// all of the time. A permanently scheduled rAF keeps the renderer asking the
+// compositor for a new frame on every vsync, which is why an audio-only call
+// could sit there burning CPU on Rendering/Painting and keeping the GPU busy
+// with nothing on screen that moves. Now the loop only runs while the meter is
+// actually visible, and it only touches the DOM when the value really changed.
 _startMicMeter() {
+  const fill = this._micMeterFill;
+  if (!fill) return;
+
+  if (typeof IntersectionObserver === 'function') {
+    if (this._micMeterObserver) return;
+    this._micMeterObserver = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) this._runMicMeter();
+      else this._stopMicMeter();
+    });
+    this._micMeterObserver.observe(fill);
+    return;
+  }
+  this._runMicMeter();
+},
+
+_runMicMeter() {
   if (this._micMeterRAF) return;
   const fill = this._micMeterFill;
   if (!fill) return;
 
+  let lastWidth = null;
   const tick = () => {
     const level = (this.voice && this.voice.inVoice) ? this.voice.currentMicLevel : 0;
-    fill.style.width = level + '%';
+    // Whole percents only — the bar is a few hundred pixels wide, so finer
+    // steps cost a layout + paint per frame and change nothing visually.
+    const width = Math.round(level) + '%';
+    if (width !== lastWidth) {
+      fill.style.width = width;
+      lastWidth = width;
+    }
     this._micMeterRAF = requestAnimationFrame(tick);
   };
   this._micMeterRAF = requestAnimationFrame(tick);
