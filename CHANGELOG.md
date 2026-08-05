@@ -11,6 +11,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.41.0] — 2026-08-05
+
+### Added
+- **A Security section in admin settings, starting with the Referrer-Policy header (#5475).** Haven used to hardcode how much of your page address browsers share with other sites. It is now a setting under Settings → Security, with the safe choices listed first and plain-language descriptions of what each one shares. Six of the eight standard policies are offered; the two that would send your full page address to other sites are deliberately left out, because Haven invite links live in that address. Thanks to @Bo0sted.
+- **Braid Layout v1.5 (#5477).** The in-call controls that stock Haven keeps in the right sidebar (camera, screen share, soundboard, listen together, and the settings panel with the stream quality pickers) now live in a dock at the bottom of the left sidebar, so a call has everything in reach without opening the People panel. The server strip handles any number of servers on one row instead of stacking them vertically, switching between Braid and the classic layout is one click in both directions (or Ctrl+Shift+B), and Mod Mode's drag handles no longer leak into the strip. Thanks to @Amnibro.
+- **Channel creators and channel moderators can invite people to private channels (#5466).** Previously this was admin-only, which meant the person who made a private channel could not add anyone to it.
+
+### Changed
+- **Twitter/X video embeds now play without any setup.** X refuses to serve its videos to anyone whose browser says where the request came from, and Haven's old default said exactly that, so every X video embed showed a still frame and a dead play button on every Haven server. The default is now Same-Origin, which sends nothing to other sites while still working normally inside your own server, so it shares strictly less than before. If some other site turns out to want a referrer and one of its images stops loading, Settings → Security has the old value at the top of the list, labelled as the pre-3.41.0 default.
+- **Read-only channels hide the message box instead of showing one that rejects you (#5468).** The composer is now hidden per channel when a read-only override applies.
+- **The desktop app banner can be dismissed, and no longer appears inside the desktop app itself.** Its X button now closes it for good rather than bringing it back on the next load.
+- **The update banner clears itself once the server is up to date**, instead of sitting there after you have already updated.
+
+### Fixed
+- **Web clients were kicking themselves out of voice every 60 seconds (#5463, #5444).** Haven watches for its own timers stalling, because that usually means the computer slept and the connection is dead. Chrome slows a background tab's timers to one tick per minute once the tab has been idle for a while, which looked exactly like a sleep, so the app dropped and rebuilt its connection once a minute for as long as the tab sat in the background. Everyone in the call heard a leave sound followed by a join sound each time. That signal is now only trusted while the tab is actually on screen; locking your PC, which is the case the check exists for, still works because Windows does not mark the page hidden. Tabbing away from a live call and back also no longer cycles the connection. Reported by @AlexT2803, whose logs pinned down the exact 60 second cadence.
+- **Haven Desktop burned CPU and GPU while sitting in an audio-only voice call (#5456).** Two frame loops started when the app opened and never stopped: the microphone level meter from the settings panel, which kept writing to the page on every frame even with settings closed, and the built-in performance counter. A frame loop that never ends keeps the renderer drawing on every screen refresh, which is what kept the GPU busy with nothing moving on screen. The meter now runs only while it is visible, and the counter samples in short bursts. Reported by Andalishious.
+- **File themes inherited the previous theme's effects, and an enabled theme could override the one you picked (#5476).** Switching from a built-in theme like FFX to a published file theme left the water and wave overlays running on top of it, which was very visible on a light theme. Separately, a published theme toggled on in Settings would win over whatever the theme picker had selected, so clicking a theme appeared to do nothing. Thanks to @Amnibro.
+- **The voice channel "..." menu no longer shifts the other users' icons** when it opens.
+- **The sidebar collapse button stays pinned to the panel edge.**
+- **Disconnects now record why they happened (#5463)**, so the log says something like "disconnected [ping timeout]" instead of just a name.
+
+### Security
+- **Updated adm-zip to 0.6.0 (CVE-2026-39244) (#5473).** A crafted ZIP file could make the old version try to allocate 4GB of memory. Haven uses that library to read Discord export files during an import. Thanks to @anupamme.
+
+---
+
 ## [3.40.0] — 2026-08-03
 
 ### Added
