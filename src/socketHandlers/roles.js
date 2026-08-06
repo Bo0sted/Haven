@@ -8,7 +8,7 @@ module.exports = function register(socket, ctx) {
     io, db, state, userHasPermission, getUserEffectiveLevel,
     getUserPermissions, getUserGlobalPermissions, getUserRoles, getUserHighestRole,
     emitOnlineUsers, broadcastChannelLists, getEnrichedChannels,
-    transferAdminRef, HAVEN_VERSION, logAudit
+    transferAdminRef, HAVEN_VERSION, logAudit, getAdminRoleDisplay
   } = ctx;
   const { channelUsers } = state;
   const _audit = (typeof logAudit === 'function') ? logAudit : () => {};
@@ -133,6 +133,42 @@ module.exports = function register(socket, ctx) {
     }));
 
     cb({ channelId: channel.id, channelName: channel.name, members: result });
+  });
+
+  // ── Admin role cosmetic display (admin only) ────────────
+  // The admin role is synthetic (there is no row for it in `roles`). These
+  // handlers persist a purely cosmetic override in server_settings under
+  // 'admin_role_display'. Nothing here affects is_admin, level or permissions.
+  socket.on('get-admin-role-display', (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    if (!socket.user.isAdmin) return cb({ error: 'Only the admin can view this' });
+    cb({ display: getAdminRoleDisplay() });
+  });
+
+  socket.on('update-admin-role-display', (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : () => {};
+    if (!socket.user.isAdmin) return cb({ error: 'Only the admin can edit this' });
+    if (!data || typeof data !== 'object') return cb({ error: 'Invalid request' });
+
+    // Validated like create/update-role; invalid fields fall back to the safe
+    // default rather than being rejected, since this is cosmetic only.
+    const name = isString(data.name, 1, 30) ? data.name.trim() : 'Admin';
+    const color = (isString(data.color, 4, 7) && /^#[0-9a-fA-F]{3,6}$/.test(data.color)) ? data.color : '#e74c3c';
+    const icon = (isString(data.icon, 1, 512) && /^\/uploads\//i.test(data.icon)) ? data.icon : null;
+    const visible = data.visible !== false;
+
+    db.prepare("INSERT OR REPLACE INTO server_settings (key, value) VALUES ('admin_role_display', ?)")
+      .run(JSON.stringify({ name, color, icon, visible }));
+
+    // Refresh every live display: member lists re-read getUserHighestRole and
+    // clients re-fetch role-driven UI on roles-updated.
+    for (const [code] of channelUsers) { emitOnlineUsers(code); }
+    io.emit('roles-updated');
+
+    cb({ success: true, display: { name, color, icon, visible } });
+    _audit({ actor: socket.user, action: 'admin_role_display_update',
+      target_type: 'server', target_id: null, target_name: 'admin_role_display',
+      details: { name, color, icon, visible } });
   });
 
   // ── Create role ─────────────────────────────────────────
