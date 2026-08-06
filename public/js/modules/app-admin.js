@@ -7,6 +7,10 @@ const ALL_PERMS = [
   'view_all_members', 'view_channel_members', 'manage_emojis', 'manage_stickers', 'manage_soundboard', 'manage_music_queue', 'promote_user',
   'manage_roles', 'manage_server', 'delete_channel', 'read_only_override', 'view_audit_log'
 ];
+// Permissions only the server owner (admin) may grant. Highlighted in the
+// role editors and locked for non-admins; mirrors adminOnlyPerms in
+// socketHandlers/roles.js.
+const ADMIN_ONLY_PERMS = ['transfer_admin', 'manage_roles', 'manage_server', 'delete_channel'];
 //Similarly flavored solution to perm labels
 const PERM_LABELS = {
   get edit_own_messages() { return t('permissions.edit_own_messages'); },
@@ -3741,6 +3745,16 @@ _renderRoleSidebar() {
   });
 },
 
+// Whether the current user may toggle permission `p` on a role. A non-admin
+// can only add or remove permissions they personally hold; admin-only perms
+// and perms they lack are locked. Mirrors the server rule in update-role
+// (socketHandlers/roles.js), which preserves any locked perm the role already
+// has rather than deleting it — so the UI disables those toggles instead of
+// letting the user check/uncheck them and be silently overridden.
+_canControlRolePerm(p) {
+  return !!(this.user && this.user.isAdmin) || (!ADMIN_ONLY_PERMS.includes(p) && this._hasPerm(p));
+},
+
 _renderRoleDetail() {
   const panel = document.getElementById('role-detail-panel');
   const role = this._allRoles.find(r => r.id === this._selectedRoleId);
@@ -3790,12 +3804,16 @@ _renderRoleDetail() {
         </div>
       </div>
       <h5 class="settings-section-subtitle" style="margin-top:12px;">${t('settings.admin.role_form.permissions')}</h5>
-      ${allPerms.map(p => `
-        <label class="toggle-row">
+      <p class="perm-admin-note">${t('settings.admin.role_form.admin_only_note')}</p>
+      ${allPerms.map(p => {
+        const locked = !this._canControlRolePerm(p);
+        const adminOnly = ADMIN_ONLY_PERMS.includes(p);
+        return `
+        <label class="toggle-row${adminOnly ? ' perm-admin-only' : ''}"${locked ? ' style="opacity:.55" title="You can only change permissions you hold"' : ''}>
           <span>${permLabels[p] || p.replace(/_/g, ' ')}</span>
-          <input type="checkbox" class="role-perm-checkbox" data-perm="${p}" ${rolePerms.includes(p) ? 'checked' : ''}>
-        </label>
-      `).join('')}
+          <input type="checkbox" class="role-perm-checkbox" data-perm="${p}" ${rolePerms.includes(p) ? 'checked' : ''}${locked ? ' disabled' : ''}>
+        </label>`;
+      }).join('')}
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-sm btn-accent" id="role-members-btn">👥 Members</button>
         <button class="btn-sm" id="duplicate-role-btn">📋 Duplicate</button>
@@ -3979,6 +3997,38 @@ _renderRoleDetail() {
   document.getElementById('role-members-btn')?.addEventListener('click', () => {
     this._openRoleMembersModal(role);
   });
+
+  // Role hierarchy gate: a non-admin may only edit roles strictly below their
+  // own level. Roles at or above them are shown read-only (every field and
+  // mutating action disabled) — mirrors the server guard in update-role and
+  // the RAC's grantable-roles lock. Runs last so it overrides the Save button
+  // being re-shown above. Viewing members stays available (read-only).
+  this._applyRoleEditGate(panel, role, {
+    actionButtonIds: ['save-role-btn', 'delete-role-btn', 'duplicate-role-btn'],
+    keepEnabledIds: ['role-members-btn'],
+    formSelector: '.role-detail-form'
+  });
+},
+
+// Disables the whole role editor for a non-admin when `role.level` is at or
+// above the caller's level, and prepends a read-only note. Shared by both role
+// editors so the rule stays in one place.
+_applyRoleEditGate(panel, role, { actionButtonIds = [], keepEnabledIds = [], formSelector }) {
+  const isAdmin = !!(this.user && this.user.isAdmin);
+  const myLevel = (this.user && this.user.effectiveLevel) || 0;
+  if (isAdmin || role.level < myLevel) return;
+
+  panel.querySelectorAll('input, select, textarea, button').forEach(el => { el.disabled = true; });
+  keepEnabledIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+  actionButtonIds.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+
+  const form = formSelector ? panel.querySelector(formSelector) : panel;
+  if (form && !form.querySelector('.role-readonly-note')) {
+    const note = document.createElement('p');
+    note.className = 'role-readonly-note';
+    note.textContent = t('settings.admin.role_form.readonly_note', { level: myLevel });
+    form.insertBefore(note, form.firstChild);
+  }
 },
 
 _openRoleMembersModal(role) {
@@ -4341,13 +4391,17 @@ _renderChannelRolesRoleDetail() {
         <span>${t('settings.admin.role_form.auto_assign')}</span>
       </label>
       <label class="cr-role-label" style="margin-top:4px">${t('settings.admin.role_form.permissions')}</label>
+      <p class="perm-admin-note">${t('settings.admin.role_form.admin_only_note')}</p>
       <div class="cr-role-perms">
-        ${allPerms.map(p => `
-          <label class="cr-perm-toggle">
-            <input type="checkbox" class="cr-perm-cb" data-perm="${p}" ${rolePerms.includes(p) ? 'checked' : ''}>
+        ${allPerms.map(p => {
+          const locked = !this._canControlRolePerm(p);
+          const adminOnly = ADMIN_ONLY_PERMS.includes(p);
+          return `
+          <label class="cr-perm-toggle${adminOnly ? ' perm-admin-only' : ''}"${locked ? ' style="opacity:.55" title="You can only change permissions you hold"' : ''}>
+            <input type="checkbox" class="cr-perm-cb" data-perm="${p}" ${rolePerms.includes(p) ? 'checked' : ''}${locked ? ' disabled' : ''}>
             <span>${permLabels[p] || p.replace(/_/g, ' ')}</span>
-          </label>
-        `).join('')}
+          </label>`;
+        }).join('')}
       </div>
       <div class="cr-role-btns">
         <button class="btn-sm btn-accent" id="cr-save-role-btn">${t('settings.admin.roles_save')}</button>
@@ -4397,6 +4451,13 @@ _renderChannelRolesRoleDetail() {
         this._refreshChannelRoles();
       });
     });
+  });
+
+  // Same hierarchy gate as the main role editor: read-only for a non-admin
+  // when the role is at or above their level.
+  this._applyRoleEditGate(panel, role, {
+    actionButtonIds: ['cr-save-role-btn', 'cr-delete-role-btn'],
+    formSelector: '.cr-role-form'
   });
 },
 
@@ -4766,7 +4827,7 @@ _renderRacConfig() {
   const callerPerms = this._racData.callerPerms || [];
   const callerIsAdmin = this._racData.callerIsAdmin;
   const allPerms = ALL_PERMS;
-  const adminOnlyPerms = ['transfer_admin', 'manage_roles', 'manage_server', 'delete_channel'];
+  const adminOnlyPerms = ADMIN_ONLY_PERMS;
   const permLabels = PERM_LABELS;
   const maxLevel = callerIsAdmin ? 99 : (this._racData.callerLevel - 1);
   const isParentChannel = channelId && this._racData.channels.some(c => c.parentId === channelId);
