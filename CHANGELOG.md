@@ -11,6 +11,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.43.0] — 2026-08-07
+
+### Added
+- **Haven fetches remote images itself now, and clients never contact other sites.** Previously an image link in a message was loaded straight from wherever it was hosted, in every viewer's browser. That handed the owner of that link the IP address and browser details of everyone who scrolled past it, without anyone clicking anything and with nothing on screen to suggest a request had been made. Haven now fetches each image once, caches it on disk for 30 days, and serves it from your own server. Covers inline images, markdown images, link-preview thumbnails and revealed hidden images. A pleasant side effect, and the reason Discord does the same: an embed keeps working after the original link expires or the host goes offline, so old conversations stop rotting. On by default, with a size shown in Settings → Security and a switch to turn it off if bandwidth is tight. Thanks to @MutantRabbit767 for pushing on this.
+- **Link-preview videos no longer phone home on their own.** The poster image comes from the cache and the video itself does not preload, so the remote host is contacted only if someone actually presses play. Video is still streamed from the source rather than proxied; that is a deliberate limit, since relaying video needs range requests and considerably more bandwidth.
+- **Protections are on out of the box.** Auto-mod, allowlist link mode, the 24-hour hold on links from new accounts, and the image proxy all default to on, for new installs and existing ones alike. The two settings that can genuinely break something stay off and must be chosen deliberately: relay-only voice, which needs a TURN server, and automatic IP bans, which can catch bystanders on shared connections. If you turn any of this off, it stays off.
+
+### Fixed
+- **Moderators with the ban permission can ban from the sidebar.** The ⛔ option in the member gear menu was gated on being an admin, even though the server has always accepted the `ban_user` permission. Moderators could ban from the admin members list but not from the sidebar they actually work in, which made it look like their permission was not working.
+- **The "also ban IP" option can finally be granted to a role.** `ban_ip` was accepted by the server but missing from the role editor's permission list, so there was no way to tick it for anyone. That made the IP-ban checkbox on the ban dialog admin-only in practice, no matter what a moderator's role said. The permission now appears in the role editor, and the checkbox correctly reads server-wide permissions rather than only channel-scoped ones.
+
 ## [3.42.0] — 2026-08-07
 
 ### Added

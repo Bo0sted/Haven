@@ -1420,12 +1420,12 @@
       </div>
 
       <div class="download-card fade-in">
-        <h2>&#x2B21; Haven Server &mdash; v3.42.0</h2>
+        <h2>&#x2B21; Haven Server &mdash; v3.43.0</h2>
         <p class="download-version">Latest stable release &middot; Windows, macOS &amp; Linux &middot; ~5 MB</p>
 
         <div class="download-btn-group">
-          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.42.0.zip" class="btn btn-primary download-main">
-            <span class="icon">&#x2B07;</span> Download v3.42.0 (.zip)
+          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.43.0.zip" class="btn btn-primary download-main">
+            <span class="icon">&#x2B07;</span> Download v3.43.0 (.zip)
           </a>
           <div class="download-alt-links">
             <a href="https://github.com/ancsemi/Haven" target="_blank">&#9965; View on GitHub</a>
@@ -1442,7 +1442,11 @@
           <div class="version-list">
             <div class="version-list-inner">
               <div class="version-item">
-                <div><span class="v-name">v3.42.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Auto-Mod arrives, link previews stop leaking your members&#39; IP addresses, and IP bans actually hold.</strong> A new Settings &rarr; Auto-Mod section lets you approve the domains people may link to and reject everything else the moment it is sent, across messages, edits, DMs, profiles and channel topics, with warn/mute/ban escalation and an optional hold on links from brand-new accounts. Link previews now obey the same list, which closes a quiet problem: Haven loads preview images straight from the other site in every viewer&#39;s browser, so a hostile link used to collect the IP address of everyone who scrolled past it without a single click. IP bans had two real defects, both fixed: the web gate and the connection gate disagreed about what an address is, so a ban blocked someone&#39;s web requests while their live connection kept working, and behind a reverse proxy Haven recorded the proxy&#39;s address for every visitor, which meant &quot;also ban IP&quot; would have banned the proxy and locked out the whole server. Bans now accept CIDR ranges and disconnect anyone already connected. Also adds relay-only voice, which hides member IP addresses in calls (Haven voice is peer-to-peer, so by default everyone in a call can see everyone else&#39;s address), and fixes message rate limiting that was counted per browser tab instead of per person.</div>
+                <div><span class="v-name">v3.43.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Haven now loads images for your members instead of sending them to other sites, and the protections added in 3.42.0 are on by default.</strong> An image link in a message used to be fetched straight from wherever it was hosted, in every viewer&#39;s browser, which quietly handed that site the IP address of everyone who scrolled past. Haven fetches each image once, caches it, and serves it from your own server, so nobody&#39;s browser talks to anyone else. Old embeds also stop breaking when the original link expires. Auto-mod, the domain allowlist, the 24-hour hold on links from brand-new accounts, and the image cache all now default to on; the two settings that can actually break something, relay-only voice and automatic IP bans, stay off until you choose them. Also fixes two permission bugs: moderators holding the ban permission can now ban from the sidebar rather than only the admin members list, and the &quot;also ban IP&quot; permission can finally be granted to a role at all, having been missing from the role editor entirely. Thanks to @MutantRabbit767.</div>
+                <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.43.0.zip">Download &rarr;</a>
+              </div>
+              <div class="version-item">
+                <div><span class="v-name">v3.42.0</span> &mdash; <strong>Auto-Mod arrives, link previews stop leaking your members&#39; IP addresses, and IP bans actually hold.</strong> A new Settings &rarr; Auto-Mod section lets you approve the domains people may link to and reject everything else the moment it is sent, across messages, edits, DMs, profiles and channel topics, with warn/mute/ban escalation and an optional hold on links from brand-new accounts. Link previews now obey the same list, which closes a quiet problem: Haven loads preview images straight from the other site in every viewer&#39;s browser, so a hostile link used to collect the IP address of everyone who scrolled past it without a single click. IP bans had two real defects, both fixed: the web gate and the connection gate disagreed about what an address is, so a ban blocked someone&#39;s web requests while their live connection kept working, and behind a reverse proxy Haven recorded the proxy&#39;s address for every visitor, which meant &quot;also ban IP&quot; would have banned the proxy and locked out the whole server. Bans now accept CIDR ranges and disconnect anyone already connected. Also adds relay-only voice, which hides member IP addresses in calls (Haven voice is peer-to-peer, so by default everyone in a call can see everyone else&#39;s address), and fixes message rate limiting that was counted per browser tab instead of per person.</div>
                 <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.42.0.zip">Download &rarr;</a>
               </div>
               <div class="version-item">
