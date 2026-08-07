@@ -1420,12 +1420,12 @@
       </div>
 
       <div class="download-card fade-in">
-        <h2>&#x2B21; Haven Server &mdash; v3.41.0</h2>
+        <h2>&#x2B21; Haven Server &mdash; v3.42.0</h2>
         <p class="download-version">Latest stable release &middot; Windows, macOS &amp; Linux &middot; ~5 MB</p>
 
         <div class="download-btn-group">
-          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.41.0.zip" class="btn btn-primary download-main">
-            <span class="icon">&#x2B07;</span> Download v3.41.0 (.zip)
+          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.42.0.zip" class="btn btn-primary download-main">
+            <span class="icon">&#x2B07;</span> Download v3.42.0 (.zip)
           </a>
           <div class="download-alt-links">
             <a href="https://github.com/ancsemi/Haven" target="_blank">&#9965; View on GitHub</a>
@@ -1442,7 +1442,11 @@
           <div class="version-list">
             <div class="version-list-inner">
               <div class="version-item">
-                <div><span class="v-name">v3.41.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Twitter/X videos play again, web users stop getting dropped from voice every minute, and the desktop app stops burning CPU in calls.</strong> X refuses to serve its videos to anyone whose browser says where the request came from, and Haven's old default said exactly that, so every X embed showed a still frame and a dead play button. That default changed, and how much your address is shared is now a proper setting under Settings &rarr; Security. Web clients were also kicking themselves out of voice once a minute: Chrome slows a background tab's timers down, Haven mistook that for the computer waking from sleep, and rebuilt the connection every 60 seconds, which everyone in the call heard as a leave sound and a join sound. Haven Desktop had two frame loops that started at launch and never stopped, keeping the renderer drawing on every screen refresh through an audio-only call. Also fixes file themes inheriting the previous theme's effects, adds an in-call control dock and a one-click layout switch to the optional Braid Layout, lets channel creators invite to their own private channels, and updates adm-zip for CVE-2026-39244. Thanks to @Amnibro, @Bo0sted, @anupamme and @AlexT2803 (#5444, #5456, #5463, #5466, #5468, #5473, #5475, #5476, #5477).</div>
+                <div><span class="v-name">v3.42.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Auto-Mod arrives, link previews stop leaking your members&#39; IP addresses, and IP bans actually hold.</strong> A new Settings &rarr; Auto-Mod section lets you approve the domains people may link to and reject everything else the moment it is sent, across messages, edits, DMs, profiles and channel topics, with warn/mute/ban escalation and an optional hold on links from brand-new accounts. Link previews now obey the same list, which closes a quiet problem: Haven loads preview images straight from the other site in every viewer&#39;s browser, so a hostile link used to collect the IP address of everyone who scrolled past it without a single click. IP bans had two real defects, both fixed: the web gate and the connection gate disagreed about what an address is, so a ban blocked someone&#39;s web requests while their live connection kept working, and behind a reverse proxy Haven recorded the proxy&#39;s address for every visitor, which meant &quot;also ban IP&quot; would have banned the proxy and locked out the whole server. Bans now accept CIDR ranges and disconnect anyone already connected. Also adds relay-only voice, which hides member IP addresses in calls (Haven voice is peer-to-peer, so by default everyone in a call can see everyone else&#39;s address), and fixes message rate limiting that was counted per browser tab instead of per person.</div>
+                <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.42.0.zip">Download &rarr;</a>
+              </div>
+              <div class="version-item">
+                <div><span class="v-name">v3.41.0</span> &mdash; <strong>Twitter/X videos play again, web users stop getting dropped from voice every minute, and the desktop app stops burning CPU in calls.</strong> X refuses to serve its videos to anyone whose browser says where the request came from, and Haven's old default said exactly that, so every X embed showed a still frame and a dead play button. That default changed, and how much your address is shared is now a proper setting under Settings &rarr; Security. Web clients were also kicking themselves out of voice once a minute: Chrome slows a background tab's timers down, Haven mistook that for the computer waking from sleep, and rebuilt the connection every 60 seconds, which everyone in the call heard as a leave sound and a join sound. Haven Desktop had two frame loops that started at launch and never stopped, keeping the renderer drawing on every screen refresh through an audio-only call. Also fixes file themes inheriting the previous theme's effects, adds an in-call control dock and a one-click layout switch to the optional Braid Layout, lets channel creators invite to their own private channels, and updates adm-zip for CVE-2026-39244. Thanks to @Amnibro, @Bo0sted, @anupamme and @AlexT2803 (#5444, #5456, #5463, #5466, #5468, #5473, #5475, #5476, #5477).</div>
                 <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.41.0.zip">Download &rarr;</a>
               </div>
               <div class="version-item">
