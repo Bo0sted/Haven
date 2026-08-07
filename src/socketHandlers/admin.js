@@ -8,7 +8,7 @@ module.exports = function register(socket, ctx) {
     io, db, state, userHasPermission, getUserEffectiveLevel,
     getUserPermissions, getUserRoles, getUserHighestRole,
     emitOnlineUsers, broadcastChannelLists, generateChannelCode,
-    logAudit, fireWebhookEvent, onReferrerPolicyChange
+    logAudit, fireWebhookEvent, onReferrerPolicyChange, automod
   } = ctx;
   const { channelUsers } = state;
 
@@ -50,9 +50,56 @@ module.exports = function register(socket, ctx) {
       'registration_captcha_enabled', 'turnstile_site_key', 'turnstile_secret_key', // opt-in Cloudflare Turnstile on registration
       'registration_rate_limit_enabled', 'registration_rate_limit_per_hour', // opt-in global new-account velocity cap
       'channel_creator_role', // (#5461) role auto-granted to a non-admin who creates a channel
-      'referrer_policy' // Referrer-Policy header, admin-configurable under Settings → Security
+      'referrer_policy', // Referrer-Policy header, admin-configurable under Settings → Security
+      // (v3.42.0) Auto-moderation + voice privacy
+      'automod_enabled', 'automod_link_mode', 'automod_link_exempt_level',
+      'automod_link_min_account_hours', 'automod_scan_edits', 'automod_scan_profile',
+      'automod_scan_dms', 'automod_block_ip_urls', 'automod_block_punycode',
+      'automod_block_obfuscated', 'automod_preview_allowlist_only', 'automod_escalation',
+      'automod_ban_ip', 'automod_log_channel',
+      'voice_force_relay'
     ];
     if (!allowedKeys.includes(key)) return;
+
+    // ── Auto-mod validation (v3.42.0) ─────────────────────
+    const automodBools = [
+      'automod_enabled', 'automod_scan_edits', 'automod_scan_profile', 'automod_scan_dms',
+      'automod_block_ip_urls', 'automod_block_punycode', 'automod_block_obfuscated',
+      'automod_preview_allowlist_only', 'automod_ban_ip'
+    ];
+    if (automodBools.includes(key) && !['true', 'false'].includes(value)) return;
+    if (key === 'automod_link_mode' && !['off', 'allowlist', 'blocklist'].includes(value)) return;
+    if (key === 'automod_link_exempt_level') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 100) return; }
+    if (key === 'automod_link_min_account_hours') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 8760) return; }
+    if (key === 'automod_log_channel' && value && !/^[a-f0-9]{8}$/i.test(value)) return;
+    if (key === 'automod_escalation') {
+      // Thresholds must be coherent or the escalation ladder misbehaves in
+      // ways that are very hard to debug from the outside: a ban threshold
+      // below the mute threshold would ban before it ever mutes.
+      try {
+        const c = JSON.parse(value);
+        const num = (v, lo, hi) => Number.isFinite(Number(v)) && Number(v) >= lo && Number(v) <= hi;
+        if (!num(c.windowHours, 1, 8760)) return;
+        if (!num(c.muteMinutes, 1, 43200)) return;
+        for (const k of ['warnAt', 'muteAt', 'banAt']) { if (!num(c[k], 0, 1000)) return; }
+        if (c.muteAt && c.warnAt && Number(c.muteAt) < Number(c.warnAt)) return;
+        if (c.banAt && c.muteAt && Number(c.banAt) < Number(c.muteAt)) return;
+      } catch { return; }
+    }
+
+    // Relay-only voice hard-requires TURN. Enabling it without a TURN server
+    // configured would leave every client unable to connect at all, so refuse
+    // and say why rather than silently breaking voice for the whole server.
+    if (key === 'voice_force_relay') {
+      if (!['true', 'false'].includes(value)) return;
+      if (value === 'true') {
+        const turn = db.prepare("SELECT value FROM server_settings WHERE key = 'turn_url'").get();
+        const envTurn = (process.env.TURN_URL || '').trim();
+        if (!((turn && turn.value && turn.value.trim()) || envTurn)) {
+          return socket.emit('error-msg', 'Set a TURN server under Voice & Connectivity first — relay-only voice cannot work without one.');
+        }
+      }
+    }
 
     // (#5461) '' / 'default' = the highest-level channel-scoped role (the
     // pre-5461 hardcoded behavior); 'none' = don't auto-assign anything;
@@ -202,6 +249,10 @@ module.exports = function register(socket, ctx) {
     }
 
     io.emit('server-setting-changed', { key, value });
+
+    // Automod caches its settings for 15s on the hot path; drop the cache so
+    // an admin toggle takes effect on the very next message. (v3.42.0)
+    if (key.startsWith('automod_')) { try { automod.invalidate(); } catch { /* module optional */ } }
 
     // Audit: log the setting change. Skip per-user UI prefs that the
     // organize modal syncs constantly to avoid log spam.
@@ -961,5 +1012,140 @@ module.exports = function register(socket, ctx) {
       });
     }
     cb({ ok: true, username: target.username, tempPassword: tempPw });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // Auto-moderation: domain policy + activity feed (v3.42.0)
+  // ══════════════════════════════════════════════════════════
+
+  function _canManageAutomod() {
+    return socket.user.isAdmin || userHasPermission(socket.user.id, 'manage_server');
+  }
+
+  function _emitDomains() {
+    const rows = db.prepare(`
+      SELECT d.domain, d.mode, d.include_subdomains, d.note, d.created_at,
+             COALESCE(u.display_name, u.username) AS added_by_name
+      FROM automod_domains d LEFT JOIN users u ON d.added_by = u.id
+      ORDER BY d.mode ASC, d.domain ASC
+    `).all();
+    rows.forEach(r => { r.created_at = utcStamp(r.created_at); });
+    socket.emit('automod-domain-list', rows);
+  }
+
+  socket.on('get-automod-domains', () => {
+    if (!_canManageAutomod()) return socket.emit('automod-domain-list', []);
+    try { _emitDomains(); } catch { socket.emit('automod-domain-list', []); }
+  });
+
+  socket.on('add-automod-domain', (data) => {
+    if (!data || typeof data !== 'object') return;
+    if (!_canManageAutomod()) return socket.emit('error-msg', 'Only admins can manage the link policy');
+
+    // Accept whatever the admin pastes — a bare domain, a full URL, something
+    // with a trailing slash — and reduce it to the same canonical host form
+    // the message-path checker produces. Storing "https://YouTube.com/" as a
+    // literal string would mean it never matched anything.
+    const raw = typeof data.domain === 'string' ? data.domain.trim() : '';
+    if (!raw || raw.length > 253) return socket.emit('error-msg', 'Enter a domain');
+
+    let host = '';
+    try {
+      const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'http://' + raw);
+      host = automod.normalizeHost(u.hostname);
+    } catch { return socket.emit('error-msg', 'That does not look like a domain'); }
+
+    if (!host || !host.includes('.') || /\s/.test(host)) {
+      return socket.emit('error-msg', 'That does not look like a domain');
+    }
+
+    const mode = data.mode === 'deny' ? 'deny' : 'allow';
+    const includeSubs = data.includeSubdomains === false ? 0 : 1;
+    const note = typeof data.note === 'string' ? data.note.trim().slice(0, 200) : '';
+
+    try {
+      db.prepare(
+        'INSERT OR REPLACE INTO automod_domains (domain, mode, include_subdomains, note, added_by) VALUES (?, ?, ?, ?, ?)'
+      ).run(host, mode, includeSubs, note, socket.user.id);
+      automod.invalidate();
+      socket.emit('error-msg', `${mode === 'deny' ? 'Blocked' : 'Allowed'} ${host}${includeSubs ? ' and its subdomains' : ''}`);
+      logAudit({ actor: socket.user, action: 'automod_domain_add',
+        target_type: 'domain', target_name: host, details: { mode, includeSubs, note } });
+      _emitDomains();
+    } catch (err) {
+      console.error('add-automod-domain error:', err);
+      socket.emit('error-msg', 'Failed to save that domain');
+    }
+  });
+
+  socket.on('remove-automod-domain', (data) => {
+    if (!data || typeof data !== 'object') return;
+    if (!_canManageAutomod()) return socket.emit('error-msg', 'Only admins can manage the link policy');
+    const host = automod.normalizeHost(typeof data.domain === 'string' ? data.domain : '');
+    if (!host) return;
+    try {
+      const info = db.prepare('DELETE FROM automod_domains WHERE domain = ?').run(host);
+      automod.invalidate();
+      if (info.changes > 0) {
+        socket.emit('error-msg', `Removed ${host}`);
+        logAudit({ actor: socket.user, action: 'automod_domain_remove',
+          target_type: 'domain', target_name: host });
+      }
+      _emitDomains();
+    } catch (err) {
+      console.error('remove-automod-domain error:', err);
+      socket.emit('error-msg', 'Failed to remove that domain');
+    }
+  });
+
+  // Recent automod activity, newest first. Doubles as the "is my config too
+  // strict?" feedback loop: an admin who sees legitimate domains piling up
+  // here can allow them straight from the same panel.
+  socket.on('get-automod-log', (data) => {
+    if (!_canManageAutomod()) return socket.emit('automod-log', { entries: [], hostCounts: [] });
+    const limit = (data && Number.isInteger(data.limit) && data.limit > 0 && data.limit <= 500) ? data.limit : 100;
+    try {
+      const entries = db.prepare(`
+        SELECT i.id, i.rule, i.host, i.excerpt, i.created_at, i.user_id,
+               COALESCE(u.display_name, u.username, '[deleted user]') AS username,
+               c.code AS channel_code, c.name AS channel_name
+        FROM automod_infractions i
+        LEFT JOIN users u ON i.user_id = u.id
+        LEFT JOIN channels c ON i.channel_id = c.id
+        ORDER BY i.created_at DESC LIMIT ?
+      `).all(limit);
+      entries.forEach(e => { e.created_at = utcStamp(e.created_at); });
+
+      // Most-blocked hosts in the last week, so a domain that everyone keeps
+      // trying to share is easy to spot and allow in one click.
+      const hostCounts = db.prepare(`
+        SELECT host, COUNT(*) AS hits FROM automod_infractions
+        WHERE host IS NOT NULL AND created_at >= datetime('now', '-7 days')
+        GROUP BY host ORDER BY hits DESC LIMIT 15
+      `).all();
+
+      socket.emit('automod-log', { entries, hostCounts });
+    } catch (err) {
+      console.error('get-automod-log error:', err);
+      socket.emit('automod-log', { entries: [], hostCounts: [] });
+    }
+  });
+
+  // Clear a user's strike history without unbanning them. Lets an admin undo
+  // an escalation caused by an over-tight allowlist rather than waiting for
+  // the rolling window to expire.
+  socket.on('clear-automod-strikes', (data) => {
+    if (!data || typeof data !== 'object') return;
+    if (!_canManageAutomod()) return socket.emit('error-msg', 'Only admins can clear strikes');
+    if (!isInt(data.userId)) return;
+    try {
+      const info = db.prepare('DELETE FROM automod_infractions WHERE user_id = ?').run(data.userId);
+      socket.emit('error-msg', `Cleared ${info.changes} automod strike${info.changes === 1 ? '' : 's'}`);
+      logAudit({ actor: socket.user, action: 'automod_strikes_clear',
+        target_type: 'user', target_id: data.userId, details: { cleared: info.changes } });
+    } catch (err) {
+      console.error('clear-automod-strikes error:', err);
+      socket.emit('error-msg', 'Failed to clear strikes');
+    }
   });
 };

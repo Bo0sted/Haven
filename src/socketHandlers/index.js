@@ -11,6 +11,8 @@ const { DATA_DIR, UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = require('../paths');
 const HAVEN_VERSION = require('../../package.json').version;
 
 const { sanitizeText, utcStamp, isString, isInt, isValidUploadPath, VALID_ROLE_PERMS } = require('./helpers');
+const { socketClientIp } = require('../clientIp');
+const automod = require('../automod');
 const { resolveSpotifyToYouTube, searchYouTube, fetchYouTubePlaylist, extractYouTubeVideoId, resolveMusicMetadata } = require('./musicResolver');
 const createPermissions = require('./permissions');
 
@@ -34,6 +36,24 @@ function setupSocketHandlers(io, db, opts = {}) {
   const invalidateIpBanCache = (typeof opts.invalidateIpBanCache === 'function') ? opts.invalidateIpBanCache : () => {};
   const onReferrerPolicyChange = (typeof opts.onReferrerPolicyChange === 'function') ? opts.onReferrerPolicyChange : () => {};
 
+  // ── Client IP + ban matching (v3.42.0) ───────────────────
+  // Both delegate to the same helpers the HTTP layer uses so the two gates
+  // can never disagree about who a client is or whether they are banned.
+  // server.js passes its cached matcher in; the fallback keeps this module
+  // usable standalone (tests, older callers) at the cost of a query per check.
+  const clientIp = (socket) => socketClientIp(socket);
+  const isIpBanned = (typeof opts.isIpBanned === 'function')
+    ? opts.isIpBanned
+    : (ip) => {
+        try {
+          const { normalizeIp, ipMatches } = require('../clientIp');
+          const norm = normalizeIp(ip);
+          if (!norm) return false;
+          return db.prepare('SELECT ip FROM ip_bans').all()
+            .some(r => r.ip && (r.ip.includes('/') ? ipMatches(norm, r.ip) : normalizeIp(r.ip) === norm));
+        } catch { return false; }
+      };
+
   // ── Permission helpers (shared across all connections) ───
   const {
     getChannelRoleChain, getUserEffectiveLevel, getPermissionThresholds,
@@ -48,6 +68,7 @@ function setupSocketHandlers(io, db, opts = {}) {
   const musicQueues         = new Map(); // code → [{ id, url, title, userId, username, resolvedFrom }]
   const activeScreenSharers = new Map(); // code → Set<userId>
   const activeWebcamUsers   = new Map(); // code → Set<userId>
+  const userFloodBuckets    = new Map(); // `${userId}:${bucket}` → number[] (send timestamps)
   const streamViewers       = new Map(); // "code:sharerId" → Set<viewerUserId>
   const slowModeTracker     = new Map(); // "slow:{userId}:{channelId}" → timestamp
   const pendingTempDelete   = new Map(); // code → timeout handle (grace-period before deleting temp-voice channel)
@@ -1262,7 +1283,10 @@ function setupSocketHandlers(io, db, opts = {}) {
   const MAX_CONN_PER_MIN = 15;
 
   io.use((socket, next) => {
-    const ip = socket.handshake.address;
+    // Real client IP, not the proxy's. socket.handshake.address is the raw TCP
+    // peer and ignores `trust proxy`, so behind nginx/Cloudflare every user
+    // shared one bucket here and this limiter effectively did nothing. (v3.42.0)
+    const ip = clientIp(socket);
     const now = Date.now();
     if (!connTracker.has(ip)) {
       connTracker.set(ip, { count: 0, resetTime: now + 60000 });
@@ -1281,10 +1305,15 @@ function setupSocketHandlers(io, db, opts = {}) {
   // server.js. (v3.20.0)
   io.use((socket, next) => {
     try {
-      const ip = socket.handshake.address;
-      if (ip) {
-        const row = db.prepare('SELECT 1 FROM ip_bans WHERE ip = ? LIMIT 1').get(ip);
-        if (row) return next(new Error('Your IP has been banned from this server'));
+      const ip = clientIp(socket);
+      // Delegates to the same cache + matcher the HTTP gate uses, so the two
+      // can no longer disagree. The old code compared the raw handshake
+      // address against the stored string: a ban on "1.2.3.4" never matched
+      // the "::ffff:1.2.3.4" a dual-stack listener reports, so HTTP was
+      // blocked while the socket connected anyway. CIDR entries also work
+      // now, which matters for IPv6 where one subscriber holds a whole /64.
+      if (ip && isIpBanned(ip)) {
+        return next(new Error('Your IP has been banned from this server'));
       }
     } catch { /* table may not exist on very old DBs — fail open */ }
     next();
@@ -1304,7 +1333,8 @@ function setupSocketHandlers(io, db, opts = {}) {
     socket.user = user;
 
     try {
-      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, password_version, is_guest FROM users WHERE id = ?').get(user.id);
+      // created_at feeds the automod new-account link gate (v3.42.0).
+      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, password_version, is_guest, created_at FROM users WHERE id = ?').get(user.id);
       if (!uRow || uRow.username !== user.username) {
         return next(new Error('Session expired'));
       }
@@ -1317,6 +1347,7 @@ function setupSocketHandlers(io, db, opts = {}) {
       socket.user.avatar = uRow.avatar || null;
       socket.user.avatar_shape = uRow.avatar_shape || 'circle';
       socket.user.isGuest = !!uRow.is_guest;
+      socket.user.createdAt = uRow.created_at || null;
 
       const anyAdmin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
       if (!anyAdmin && uRow.username.toLowerCase() === ADMIN_USERNAME && !uRow.is_admin) {
@@ -1352,7 +1383,11 @@ function setupSocketHandlers(io, db, opts = {}) {
     // Record IP for future "ban IP" lookups. Kept to the 5 most-recent
     // distinct IPs per user — older entries are pruned to bound storage.
     try {
-      const ip = socket.handshake.address;
+      // Normalised, proxy-aware address. Storing the raw handshake address
+      // here was actively dangerous: behind a reverse proxy it recorded the
+      // proxy's IP for every account, so a moderator ticking "also ban IP"
+      // would have banned the proxy and locked every user out. (v3.42.0)
+      const ip = clientIp(socket);
       if (ip) {
         db.prepare(`INSERT INTO user_ips (user_id, ip, last_seen) VALUES (?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(user_id, ip) DO UPDATE SET last_seen = CURRENT_TIMESTAMP`)
@@ -1372,6 +1407,11 @@ function setupSocketHandlers(io, db, opts = {}) {
     const now = Date.now();
     for (const [ip, entry] of connTracker) {
       if (now > entry.resetTime + 120000) connTracker.delete(ip);
+    }
+    // Flood buckets outlive their sockets now that they are keyed by user, so
+    // drop any whose newest timestamp has aged out of the widest window.
+    for (const [key, stamps] of userFloodBuckets) {
+      if (!stamps.length || now - stamps[stamps.length - 1] > 120000) userFloodBuckets.delete(key);
     }
   }, 5 * 60 * 1000);
 
@@ -1438,8 +1478,11 @@ function setupSocketHandlers(io, db, opts = {}) {
       }
     }
 
-    // ── Per-socket flood protection ───────────────────────
-    const floodBuckets = { message: [], event: [] };
+    // ── Per-user flood protection ─────────────────────────
+    // These buckets used to live per-socket, which meant the limit scaled with
+    // however many connections you opened: two tabs bought twice the send
+    // rate, and reconnecting reset the window outright. Keying on user id
+    // instead makes the cap mean what it says. (v3.42.0)
     const FLOOD_LIMITS = {
       message: { max: 10, windowMs: 10000 },
       event:   { max: 60, windowMs: 10000 },
@@ -1447,11 +1490,15 @@ function setupSocketHandlers(io, db, opts = {}) {
 
     function floodCheck(bucket) {
       const limit = FLOOD_LIMITS[bucket];
+      const key = `${socket.user.id}:${bucket}`;
       const now = Date.now();
-      const timestamps = floodBuckets[bucket].filter(t => now - t < limit.windowMs);
-      floodBuckets[bucket] = timestamps;
-      if (timestamps.length >= limit.max) return true;
+      const timestamps = (userFloodBuckets.get(key) || []).filter(t => now - t < limit.windowMs);
+      if (timestamps.length >= limit.max) {
+        userFloodBuckets.set(key, timestamps);
+        return true;
+      }
       timestamps.push(now);
+      userFloodBuckets.set(key, timestamps);
       return false;
     }
 
@@ -1473,6 +1520,155 @@ function setupSocketHandlers(io, db, opts = {}) {
       }
       next();
     });
+
+    // ── Auto-moderation enforcement (v3.42.0) ─────────────
+    //
+    // Single choke point for every surface that accepts user text. Returns
+    // true when the caller must abort (the content was rejected), false when
+    // it is clear to proceed.
+    //
+    // Blocking happens at send time rather than post-and-delete. That is the
+    // whole point: Haven inline-renders image URLs and unfurls og:image
+    // straight from the third-party host, so a message that reaches other
+    // clients for even a moment has already leaked their IP addresses to
+    // whoever posted it. There is no safe window in which to clean up.
+    function enforceAutomod(text, opts = {}) {
+      let verdict;
+      try {
+        verdict = automod.checkText(text, {
+          userId: socket.user.id,
+          isAdmin: socket.user.isAdmin,
+          effectiveLevel: getUserEffectiveLevel(socket.user.id, opts.channelId || null),
+          createdAt: opts.createdAt || socket.user.createdAt,
+          surface: opts.surface || 'message'
+        });
+      } catch (err) {
+        // Never let an automod fault take chat down with it.
+        console.error('automod check failed:', err);
+        return false;
+      }
+      if (!verdict || verdict.ok) return false;
+
+      socket.emit('error-msg', verdict.message);
+
+      let outcome = { count: 1, action: 'none' };
+      try {
+        outcome = automod.recordInfraction(socket.user.id, verdict, opts.channelId || null);
+      } catch (err) { console.error('automod infraction record failed:', err); }
+
+      logAudit({
+        actor: socket.user, action: 'automod_block',
+        target_type: 'user', target_id: socket.user.id, target_name: socket.user.displayName,
+        details: { rule: verdict.rule, host: verdict.host || null, surface: opts.surface || 'message',
+                   channelId: opts.channelId || null, strikes: outcome.count, escalated: outcome.action }
+      });
+
+      applyAutomodEscalation(outcome, verdict);
+      mirrorAutomodToLogChannel(verdict, outcome);
+      return true;
+    }
+
+    // mutes.muted_by and bans.banned_by are both NOT NULL REFERENCES users(id),
+    // so an automated action still needs a real account to attribute to.
+    // Rather than rebuild two moderation tables to allow NULL, attribute to
+    // the longest-standing admin; the "Auto-mod:" reason prefix is what
+    // actually tells a reader it was not a human decision.
+    function _automodActorId() {
+      try {
+        const row = db.prepare('SELECT id FROM users WHERE is_admin = 1 ORDER BY id ASC LIMIT 1').get();
+        return row ? row.id : null;
+      } catch { return null; }
+    }
+
+    // Carry out warn / mute / ban once the strike count crosses a threshold.
+    // Kept here rather than in automod.js because it needs the socket layer:
+    // live disconnects, presence broadcasts and the ban tables.
+    function applyAutomodEscalation(outcome, verdict) {
+      if (!outcome || outcome.action === 'none' || outcome.action === 'warn') return;
+
+      // Never let automod act on staff. A misconfigured allowlist should not
+      // be able to mute the person who has to fix it.
+      if (socket.user.isAdmin) return;
+
+      const reason = `Auto-mod: ${verdict.rule}${verdict.host ? ` (${verdict.host})` : ''}`.slice(0, 200);
+      const actorId = _automodActorId();
+      // No admin account to attribute to (shouldn't happen on a real server).
+      // Blocking already worked; skip escalation rather than self-attributing
+      // the punishment to the person being punished.
+      if (!actorId) {
+        console.warn('automod: no admin account to attribute escalation to, skipping');
+        return;
+      }
+
+      if (outcome.action === 'mute') {
+        try {
+          db.prepare(
+            "INSERT INTO mutes (user_id, muted_by, reason, expires_at) VALUES (?, ?, ?, datetime('now', ?))"
+          ).run(socket.user.id, actorId, reason, `+${outcome.muteMinutes} minutes`);
+          socket.emit('muted', { duration: outcome.muteMinutes, reason });
+          logAudit({ actor: socket.user, action: 'automod_mute', target_type: 'user',
+            target_id: socket.user.id, target_name: socket.user.displayName,
+            details: { minutes: outcome.muteMinutes, strikes: outcome.count } });
+        } catch (err) { console.error('automod mute failed:', err); }
+        return;
+      }
+
+      if (outcome.action === 'ban') {
+        try {
+          db.prepare('INSERT OR REPLACE INTO bans (user_id, banned_by, reason) VALUES (?, ?, ?)')
+            .run(socket.user.id, actorId, reason);
+
+          if (automod.settings().automod_ban_ip === 'true') {
+            const { normalizeIp } = require('../clientIp');
+            const ips = db.prepare('SELECT ip FROM user_ips WHERE user_id = ? ORDER BY last_seen DESC LIMIT 3').all(socket.user.id);
+            const stmt = db.prepare('INSERT OR REPLACE INTO ip_bans (ip, banned_by, reason) VALUES (?, ?, ?)');
+            let banned = 0;
+            for (const r of ips) {
+              const norm = normalizeIp(r.ip);
+              if (!norm) continue;
+              stmt.run(norm, actorId, reason);
+              banned++;
+            }
+            if (banned) invalidateIpBanCache();
+          }
+
+          for (const [, s] of io.sockets.sockets) {
+            if (s.user && s.user.id === socket.user.id) { s.emit('banned', { reason }); s.disconnect(true); }
+          }
+          for (const [code] of channelUsers) emitOnlineUsers(code);
+
+          logAudit({ actor: socket.user, action: 'automod_ban', target_type: 'user',
+            target_id: socket.user.id, target_name: socket.user.displayName,
+            details: { strikes: outcome.count, windowHours: outcome.windowHours } });
+          console.log(`🛡️  Auto-mod banned "${socket.user.username}" after ${outcome.count} strikes`);
+        } catch (err) { console.error('automod ban failed:', err); }
+      }
+    }
+
+    // Optional mirror into a moderator channel so staff see automod activity
+    // without having to open the admin panel.
+    function mirrorAutomodToLogChannel(verdict, outcome) {
+      const code = (automod.settings().automod_log_channel || '').trim();
+      if (!code) return;
+      try {
+        const ch = db.prepare('SELECT id FROM channels WHERE code = ?').get(code);
+        if (!ch) return;
+        const summary = `🛡️ Blocked ${verdict.rule} from **${socket.user.displayName}**` +
+          (verdict.host ? ` — \`${verdict.host}\`` : '') +
+          ` (strike ${outcome.count}${outcome.action !== 'none' && outcome.action !== 'warn' ? `, ${outcome.action}` : ''})`;
+        const result = db.prepare(
+          'INSERT INTO messages (channel_id, user_id, content) VALUES (?, NULL, ?)'
+        ).run(ch.id, summary);
+        io.to(`channel:${code}`).emit('new-message', {
+          channelCode: code,
+          message: {
+            id: result.lastInsertRowid, content: summary, created_at: new Date().toISOString(),
+            username: 'Auto-Mod', user_id: 0, reply_to: null, replyContext: null,
+            reactions: [], edited_at: null, system: true
+          }
+        });
+      } catch (err) { console.error('automod log mirror failed:', err); }
+    }
 
     // ── Slash command processor (per-socket) ──────────────
     function processSlashCommand(cmd, arg, username, channelId, channelCode) {
@@ -1586,6 +1782,9 @@ function setupSocketHandlers(io, db, opts = {}) {
       transferAdminRef,
       // Audit log
       logAudit,
+      // Auto-moderation (v3.42.0)
+      automod,
+      enforceAutomod,
       onReferrerPolicyChange,
       // IP-ban cache invalidator (server.js HTTP-side cache)
       invalidateIpBanCache,

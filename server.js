@@ -135,19 +135,34 @@ app.set('trust proxy', _trustProxy);
 // can't consume server resources. Cached for 30s so we aren't hitting SQLite
 // on every static asset request from a normal page load. Cache is invalidated
 // from the moderation socket handlers whenever the table changes.
-let _ipBanCache = { set: new Set(), expires: 0 };
+// Entries are split into exact addresses (fast Set lookup, the common case)
+// and CIDR ranges (linear scan, expected to stay small). Both sides are run
+// through normalizeIp so a ban written as "1.2.3.4" also stops the socket
+// path, which sees "::ffff:1.2.3.4" on a dual-stack listener. Before v3.42.0
+// those two never compared equal and bans silently only half-applied.
+const _clientIp = require('./src/clientIp');
+let _ipBanCache = { set: new Set(), cidrs: [], expires: 0 };
 function _refreshIpBanCache() {
   try {
     const { getDb } = require('./src/database');
     const rows = getDb().prepare('SELECT ip FROM ip_bans').all();
-    _ipBanCache = { set: new Set(rows.map(r => r.ip)), expires: Date.now() + 30000 };
-  } catch { _ipBanCache = { set: new Set(), expires: Date.now() + 30000 }; }
+    const set = new Set(), cidrs = [];
+    for (const r of rows) {
+      if (!r.ip) continue;
+      if (r.ip.includes('/')) cidrs.push(r.ip);
+      else set.add(_clientIp.normalizeIp(r.ip));
+    }
+    _ipBanCache = { set, cidrs, expires: Date.now() + 30000 };
+  } catch { _ipBanCache = { set: new Set(), cidrs: [], expires: Date.now() + 30000 }; }
 }
 function invalidateIpBanCache() { _ipBanCache.expires = 0; }
 function isIpBanned(ip) {
   if (!ip) return false;
   if (Date.now() > _ipBanCache.expires) _refreshIpBanCache();
-  return _ipBanCache.set.has(ip);
+  const norm = _clientIp.normalizeIp(ip);
+  if (!norm) return false;
+  if (_ipBanCache.set.has(norm)) return true;
+  return _ipBanCache.cidrs.some(c => _clientIp.ipMatches(norm, c));
 }
 app.use((req, res, next) => {
   if (isIpBanned(req.ip)) {
@@ -561,7 +576,7 @@ app.get('/api/ice-servers', (req, res) => {
   try {
     const { getDb } = require('./src/database');
     const rows = getDb().prepare(
-      "SELECT key, value FROM server_settings WHERE key IN ('stun_urls','turn_url','turn_username','turn_password')"
+      "SELECT key, value FROM server_settings WHERE key IN ('stun_urls','turn_url','turn_username','turn_password','voice_force_relay')"
     ).all();
     rows.forEach(r => { dbSettings[r.key] = r.value; });
   } catch { /* DB not ready — fall back to env/defaults below */ }
@@ -630,6 +645,29 @@ app.get('/api/ice-servers', (req, res) => {
     const trimmed = [...stuns.slice(0, keepStun), ...turns];
     iceServers.length = 0;
     iceServers.push(...trimmed);
+  }
+
+  // ── Relay-only mode (v3.42.0) ───────────────────────────
+  // Haven voice is a peer-to-peer WebRTC mesh, so in the default configuration
+  // every participant in a call learns every other participant's public IP
+  // from the ICE candidate exchange. No click, no prompt, nothing the user
+  // can see. Sitting idle in a voice channel is enough to collect addresses
+  // from anyone who joins.
+  //
+  // iceTransportPolicy 'relay' makes the browser discard host and
+  // server-reflexive candidates entirely, so peers only ever see the TURN
+  // server's address. That costs bandwidth (all media flows through TURN) and
+  // hard-requires a working TURN server, which is why the settings handler
+  // refuses to turn this on until turn_url is set. Belt-and-braces here too:
+  // if TURN somehow vanished since the toggle was flipped, serve normal ICE
+  // rather than handing clients a config that cannot connect at all.
+  const wantsRelay = dbSettings.voice_force_relay === 'true';
+  const hasTurn = iceServers.some(s => /^turns?:/i.test(String(s.urls)));
+  if (wantsRelay && hasTurn) {
+    return res.json({ iceServers, iceTransportPolicy: 'relay' });
+  }
+  if (wantsRelay && !hasTurn) {
+    console.warn('⚠️  voice_force_relay is on but no TURN server is configured — serving normal ICE so voice keeps working');
   }
 
   res.json({ iceServers });
@@ -2575,6 +2613,20 @@ app.get('/api/link-preview', async (req, res) => {
     return res.status(400).json({ error: err.message || 'Invalid URL' });
   }
 
+  // ── Auto-mod domain gate (v3.42.0) ──────────────────────
+  // This is the control that closes the passive IP leak, and it matters more
+  // than the click-through case. Haven renders og:image and bare image URLs
+  // straight from the third-party host in every viewer's browser, so a hostile
+  // link hands the attacker the IP and User-Agent of everyone who merely
+  // scrolls past the message. Refusing to unfurl a non-allowlisted host means
+  // no client is ever told to fetch from it.
+  try {
+    const automod = require('./src/automod');
+    if (!automod.previewAllowed(url)) {
+      return res.status(403).json({ error: 'Link previews are not enabled for that domain' });
+    }
+  } catch { /* automod unavailable — fall through rather than break previews */ }
+
   // Use a real browser UA — many sites (Twitter/X, Instagram, etc.) serve
   // JS-only pages to unknown bots, omitting the OG meta tags we need.
   const PREVIEW_UA = 'Mozilla/5.0 (compatible; HavenBot/2.1; +https://github.com/ancsemi/Haven)';
@@ -4255,6 +4307,10 @@ initFcm(DATA_DIR);
 app.set('io', io);   // expose to auth routes (session invalidation on password change)
 activityRef.engine = setupSocketHandlers(io, db, {
   invalidateIpBanCache,
+  // Share the cached ban matcher so the socket gate and the HTTP gate agree
+  // on both normalization and CIDR handling, and the socket path stops
+  // querying SQLite on every single connection. (v3.42.0)
+  isIpBanned,
   // Keep the Referrer-Policy cache in sync when an admin changes it.
   onReferrerPolicyChange: (v) => { if (VALID_REFERRER_POLICIES.includes(v)) currentReferrerPolicy = v; }
 }).activity;

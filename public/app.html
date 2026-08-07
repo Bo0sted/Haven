@@ -2098,6 +2098,84 @@
               </optgroup>
             </select>
           </label>
+          <small class="settings-group-label" style="margin-top:14px;display:block">🎙️ <span data-i18n="settings.admin.voice_privacy_group">Voice privacy</span></small>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.voice_relay_desc">Haven voice is peer-to-peer, so by default everyone in a call can see everyone else's IP address. It is how the connection is made, it needs no clicking, and nobody is told it happened. Relay-only mode routes all voice through your TURN server instead, so participants only ever see the TURN server's address. This needs a TURN server configured under Voice &amp; Connectivity, and it uses your server's bandwidth for every call.</small>
+          <label class="toggle-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.voice_relay_label">Relay-only voice (hide member IPs)</span>
+            <input type="checkbox" id="voice-force-relay">
+          </label>
+        </div>
+        <div class="admin-settings" id="section-automod" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+          <h5 class="settings-section-subtitle">🛡️ <span data-i18n="settings.admin.automod_title">Auto-Mod</span></h5>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.automod_desc">Checks the links in messages, edits, DMs, profiles and channel topics against a domain policy you control. Blocked content is rejected before it is saved, so it never reaches anyone else. This matters more than it sounds: Haven renders linked images and link previews directly from the other site, so a hostile link exposes the IP address of everyone who scrolls past it, not just whoever clicks.</small>
+          <label class="toggle-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.automod_enabled">Enabled</span>
+            <input type="checkbox" id="automod-enabled">
+          </label>
+          <div id="automod-body" style="margin-top:8px">
+            <label class="select-row">
+              <span data-i18n="settings.admin.automod_mode_label">Link policy</span>
+              <select id="automod-link-mode">
+                <option value="off">Off — allow every link</option>
+                <option value="allowlist">Allowlist — block everything not listed</option>
+                <option value="blocklist">Blocklist — allow everything except listed</option>
+              </select>
+            </label>
+            <small class="settings-hint" data-i18n="settings.admin.automod_mode_hint">Allowlist is the strict option and the one that stops links you have never seen before. Blocklist only stops domains you already know about.</small>
+
+            <small class="settings-group-label" style="margin-top:14px;display:block">🌐 <span data-i18n="settings.admin.automod_domains_group">Domains</span></small>
+            <div class="whitelist-add-row" style="margin-top:6px">
+              <input type="text" id="automod-domain-input" placeholder="example.com" maxlength="253">
+              <select id="automod-domain-mode" style="max-width:110px">
+                <option value="allow">Allow</option>
+                <option value="deny">Block</option>
+              </select>
+              <button class="btn-sm btn-accent" id="automod-domain-add">Add</button>
+            </div>
+            <label class="toggle-row" style="margin-top:6px">
+              <span data-i18n="settings.admin.automod_include_subs">Include subdomains</span>
+              <input type="checkbox" id="automod-include-subdomains" checked>
+            </label>
+            <div id="automod-domain-list" class="whitelist-list" style="margin-top:8px"></div>
+
+            <small class="settings-group-label" style="margin-top:14px;display:block">⚙️ <span data-i18n="settings.admin.automod_rules_group">Rules</span></small>
+            <label class="select-row" style="margin-top:6px">
+              <span data-i18n="settings.admin.automod_min_age">New accounts can't post links for (hours)</span>
+              <input type="number" id="automod-min-account-hours" min="0" max="8760" step="1" style="max-width:90px">
+            </label>
+            <small class="settings-hint" data-i18n="settings.admin.automod_min_age_hint">0 disables this. Applies even to allowed domains, and is the single most effective rule against register-post-link-get-banned-repeat.</small>
+            <label class="select-row" style="margin-top:8px">
+              <span data-i18n="settings.admin.automod_exempt_level">Skip filtering at role level</span>
+              <input type="number" id="automod-exempt-level" min="0" max="100" step="1" style="max-width:90px">
+            </label>
+            <small class="settings-hint" data-i18n="settings.admin.automod_exempt_hint">Members at or above this level are never filtered. Admins are always exempt.</small>
+            <label class="toggle-row" style="margin-top:8px"><span data-i18n="settings.admin.automod_scan_edits">Check message edits</span><input type="checkbox" id="automod-scan-edits"></label>
+            <label class="toggle-row"><span data-i18n="settings.admin.automod_scan_dms">Check direct messages</span><input type="checkbox" id="automod-scan-dms"></label>
+            <label class="toggle-row"><span data-i18n="settings.admin.automod_scan_profile">Check profiles and channel topics</span><input type="checkbox" id="automod-scan-profile"></label>
+            <label class="toggle-row"><span data-i18n="settings.admin.automod_block_ip_urls">Block links to raw IP addresses</span><input type="checkbox" id="automod-block-ip-urls"></label>
+            <label class="toggle-row"><span data-i18n="settings.admin.automod_block_punycode">Block lookalike (internationalized) domains</span><input type="checkbox" id="automod-block-punycode"></label>
+            <label class="toggle-row"><span data-i18n="settings.admin.automod_block_obfuscated">Block disguised links (hxxp://, evil[.]com)</span><input type="checkbox" id="automod-block-obfuscated"></label>
+            <label class="toggle-row"><span data-i18n="settings.admin.automod_preview_allowlist">Only preview allowed domains</span><input type="checkbox" id="automod-preview-allowlist-only"></label>
+            <small class="settings-hint" data-i18n="settings.admin.automod_preview_hint">Strongly recommended. Link previews load images straight from the other site in every viewer's browser, which hands that site everyone's IP address without a single click.</small>
+
+            <small class="settings-group-label" style="margin-top:14px;display:block">⚖️ <span data-i18n="settings.admin.automod_escalation_group">Escalation</span></small>
+            <small class="settings-hint" style="display:block" data-i18n="settings.admin.automod_escalation_hint">Counts blocked attempts within a rolling window. Set any threshold to 0 to disable that step. Note that a muted member cannot send anything at all, so they stop collecting strikes until the mute runs out — if you want a fast automatic ban, set the ban threshold close to the mute threshold, or turn muting off.</small>
+            <label class="select-row" style="margin-top:6px"><span data-i18n="settings.admin.automod_window">Window (hours)</span><input type="number" id="automod-window-hours" min="1" max="8760" step="1" style="max-width:90px"></label>
+            <label class="select-row"><span data-i18n="settings.admin.automod_warn_at">Warn after</span><input type="number" id="automod-warn-at" min="0" max="1000" step="1" style="max-width:90px"></label>
+            <label class="select-row"><span data-i18n="settings.admin.automod_mute_at">Mute after</span><input type="number" id="automod-mute-at" min="0" max="1000" step="1" style="max-width:90px"></label>
+            <label class="select-row"><span data-i18n="settings.admin.automod_mute_mins">Mute length (minutes)</span><input type="number" id="automod-mute-minutes" min="1" max="43200" step="1" style="max-width:90px"></label>
+            <label class="select-row"><span data-i18n="settings.admin.automod_ban_at">Ban after</span><input type="number" id="automod-ban-at" min="0" max="1000" step="1" style="max-width:90px"></label>
+            <label class="toggle-row" style="margin-top:6px"><span data-i18n="settings.admin.automod_ban_ip">Auto-bans also ban the IP</span><input type="checkbox" id="automod-ban-ip"></label>
+            <small class="settings-hint" data-i18n="settings.admin.automod_ban_ip_hint">⚠️ Leave off unless you understand the risk. Shared and mobile-carrier addresses mean an IP ban can catch people who did nothing.</small>
+            <label class="select-row" style="margin-top:8px"><span data-i18n="settings.admin.automod_log_channel">Log to channel</span><input type="text" id="automod-log-channel" placeholder="channel code (optional)" maxlength="8" style="max-width:130px"></label>
+
+            <small class="settings-group-label" style="margin-top:14px;display:block">📊 <span data-i18n="settings.admin.automod_activity_group">Recent activity</span></small>
+            <div class="settings-btn-grid" style="margin-top:6px">
+              <button class="btn-sm btn-accent" id="automod-refresh-log">🔄 <span data-i18n="settings.admin.automod_refresh">Refresh</span></button>
+            </div>
+            <div id="automod-top-hosts" style="margin-top:8px"></div>
+            <div id="automod-log-list" class="whitelist-list" style="margin-top:8px"></div>
+          </div>
         </div>
         <div class="admin-settings" id="section-whitelist" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🛡️ <span data-i18n="settings.admin.whitelist_title">Whitelist</span></h5>

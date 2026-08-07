@@ -170,6 +170,21 @@ class VoiceManager {
           this._adminIceServersLoaded = true;
           console.log(`🧊 ICE servers loaded (${data.iceServers.length} servers${data.iceServers.some(s => String(s.urls).includes('turn:')) ? ', TURN enabled' : ''})`);
         }
+        // Relay-only mode (v3.42.0). The server sends this when the admin has
+        // enabled voice_force_relay and a TURN server is actually configured.
+        // It makes the browser drop host and srflx candidates, so peers in a
+        // call never learn each other's real IP addresses. Also suppress the
+        // STUN health probe below, which exists to pick good srflx servers and
+        // is meaningless (and would log spurious failures) when srflx
+        // candidates are being discarded on purpose.
+        if (data.iceTransportPolicy === 'relay') {
+          this.rtcConfig.iceTransportPolicy = 'relay';
+          this._relayOnly = true;
+          console.log('🧊 Relay-only voice: peer IP addresses stay hidden behind TURN');
+        } else {
+          delete this.rtcConfig.iceTransportPolicy;
+          this._relayOnly = false;
+        }
       }
     } catch (err) {
       console.warn('Could not fetch ICE servers, using defaults:', err && err.message);
@@ -192,6 +207,9 @@ class VoiceManager {
       // those with probe results.
       await new Promise(r => setTimeout(r, 250));
       if (this._adminIceServersLoaded) return;
+      // Relay-only deliberately discards srflx candidates, which is exactly
+      // what this probe measures. Probing would report every STUN server dead.
+      if (this._relayOnly) return;
 
       const probeOne = (url, timeoutMs = 2500) => new Promise(resolve => {
         let settled = false;

@@ -316,6 +316,9 @@ _applyServerSettings() {
     if (refPol && this.serverSettings.referrer_policy) {
       refPol.value = this.serverSettings.referrer_policy;
     }
+    // Auto-mod controls apply immediately rather than through the Save flow,
+    // so they only need populating here. (v3.42.0)
+    if (typeof this._applyAutomodSettings === 'function') this._applyAutomodSettings();
     const nameInput = document.getElementById('server-name-input');
     if (nameInput && this.serverSettings.server_name !== undefined) {
       nameInput.value = this.serverSettings.server_name || '';
@@ -5453,6 +5456,204 @@ _setupAuditLog() {
       console.error('Audit log export failed:', err);
     }
   });
+},
+
+/* ── Auto-Mod (v3.42.0) ──────────────────────────────── */
+
+// Wire the whole panel. Called once from the settings-modal setup.
+_initAutomodPanel() {
+  const on = (id, evt, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(evt, fn);
+  };
+  const setKey = (key, value) => this.socket.emit('update-server-setting', { key, value });
+
+  on('automod-enabled', 'change', (e) => {
+    setKey('automod_enabled', e.target.checked ? 'true' : 'false');
+    this._syncAutomodVisibility();
+  });
+  on('automod-link-mode', 'change', (e) => setKey('automod_link_mode', e.target.value));
+
+  // Simple boolean toggles, all handled identically.
+  [
+    ['automod-scan-edits', 'automod_scan_edits'],
+    ['automod-scan-dms', 'automod_scan_dms'],
+    ['automod-scan-profile', 'automod_scan_profile'],
+    ['automod-block-ip-urls', 'automod_block_ip_urls'],
+    ['automod-block-punycode', 'automod_block_punycode'],
+    ['automod-block-obfuscated', 'automod_block_obfuscated'],
+    ['automod-preview-allowlist-only', 'automod_preview_allowlist_only'],
+    ['automod-ban-ip', 'automod_ban_ip']
+  ].forEach(([id, key]) => on(id, 'change', (e) => setKey(key, e.target.checked ? 'true' : 'false')));
+
+  on('automod-min-account-hours', 'change', (e) => setKey('automod_link_min_account_hours', String(parseInt(e.target.value, 10) || 0)));
+  on('automod-exempt-level', 'change', (e) => setKey('automod_link_exempt_level', String(parseInt(e.target.value, 10) || 0)));
+  on('automod-log-channel', 'change', (e) => setKey('automod_log_channel', e.target.value.trim()));
+
+  // The five escalation fields are one JSON setting, so any change resends
+  // the whole object. Server-side validation rejects incoherent ladders
+  // (ban before mute, etc.), which surfaces as an error toast.
+  const pushEscalation = () => {
+    const num = (id, fallback) => {
+      const v = parseInt(document.getElementById(id)?.value, 10);
+      return Number.isFinite(v) ? v : fallback;
+    };
+    setKey('automod_escalation', JSON.stringify({
+      windowHours: num('automod-window-hours', 24),
+      warnAt: num('automod-warn-at', 1),
+      muteAt: num('automod-mute-at', 3),
+      muteMinutes: num('automod-mute-minutes', 60),
+      banAt: num('automod-ban-at', 5)
+    }));
+  };
+  ['automod-window-hours', 'automod-warn-at', 'automod-mute-at', 'automod-mute-minutes', 'automod-ban-at']
+    .forEach(id => on(id, 'change', pushEscalation));
+
+  on('voice-force-relay', 'change', (e) => setKey('voice_force_relay', e.target.checked ? 'true' : 'false'));
+
+  const addDomain = () => {
+    const input = document.getElementById('automod-domain-input');
+    const domain = (input?.value || '').trim();
+    if (!domain) return;
+    this.socket.emit('add-automod-domain', {
+      domain,
+      mode: document.getElementById('automod-domain-mode')?.value === 'deny' ? 'deny' : 'allow',
+      includeSubdomains: document.getElementById('automod-include-subdomains')?.checked !== false
+    });
+    if (input) input.value = '';
+  };
+  on('automod-domain-add', 'click', addDomain);
+  on('automod-domain-input', 'keydown', (e) => { if (e.key === 'Enter') addDomain(); });
+  on('automod-refresh-log', 'click', () => this.socket.emit('get-automod-log', { limit: 100 }));
+
+  this.socket.on('automod-domain-list', (rows) => this._renderAutomodDomains(rows));
+  this.socket.on('automod-log', (data) => this._renderAutomodLog(data));
+},
+
+// Grey out the rest of the panel when automod is off, so it is obvious that
+// none of the settings below are doing anything.
+_syncAutomodVisibility() {
+  const body = document.getElementById('automod-body');
+  if (!body) return;
+  const enabled = document.getElementById('automod-enabled')?.checked;
+  body.style.opacity = enabled ? '1' : '0.45';
+  body.style.pointerEvents = enabled ? '' : 'none';
+},
+
+_applyAutomodSettings() {
+  const s = this.serverSettings || {};
+  const bool = (id, key, dflt) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = (s[key] !== undefined ? s[key] : dflt) === 'true';
+  };
+  const num = (id, key, dflt) => {
+    const el = document.getElementById(id);
+    if (el) el.value = s[key] !== undefined ? s[key] : dflt;
+  };
+
+  bool('automod-enabled', 'automod_enabled', 'false');
+  const mode = document.getElementById('automod-link-mode');
+  if (mode) mode.value = s.automod_link_mode || 'off';
+
+  bool('automod-scan-edits', 'automod_scan_edits', 'true');
+  bool('automod-scan-dms', 'automod_scan_dms', 'true');
+  bool('automod-scan-profile', 'automod_scan_profile', 'true');
+  bool('automod-block-ip-urls', 'automod_block_ip_urls', 'true');
+  bool('automod-block-punycode', 'automod_block_punycode', 'true');
+  bool('automod-block-obfuscated', 'automod_block_obfuscated', 'true');
+  bool('automod-preview-allowlist-only', 'automod_preview_allowlist_only', 'true');
+  bool('automod-ban-ip', 'automod_ban_ip', 'false');
+  bool('voice-force-relay', 'voice_force_relay', 'false');
+
+  num('automod-min-account-hours', 'automod_link_min_account_hours', '0');
+  num('automod-exempt-level', 'automod_link_exempt_level', '50');
+  const logCh = document.getElementById('automod-log-channel');
+  if (logCh) logCh.value = s.automod_log_channel || '';
+
+  try {
+    const c = JSON.parse(s.automod_escalation || '{}');
+    const put = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    put('automod-window-hours', c.windowHours ?? 24);
+    put('automod-warn-at', c.warnAt ?? 1);
+    put('automod-mute-at', c.muteAt ?? 3);
+    put('automod-mute-minutes', c.muteMinutes ?? 60);
+    put('automod-ban-at', c.banAt ?? 5);
+  } catch { /* malformed JSON — leave the fields alone */ }
+
+  this._syncAutomodVisibility();
+},
+
+_renderAutomodDomains(rows) {
+  const el = document.getElementById('automod-domain-list');
+  if (!el) return;
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<p class="muted-text">No domains configured yet.</p>';
+    return;
+  }
+  el.innerHTML = rows.map(r => `
+    <div class="whitelist-item">
+      <span class="whitelist-username">
+        <strong style="color:${r.mode === 'deny' ? 'var(--danger, #e5534b)' : 'var(--accent, #5865f2)'}">
+          ${r.mode === 'deny' ? 'BLOCK' : 'ALLOW'}
+        </strong>
+        ${this._escapeHtml(r.domain)}${r.include_subdomains ? ' <span class="muted-text">+ subdomains</span>' : ''}
+        ${r.note ? `<span class="muted-text"> — ${this._escapeHtml(r.note)}</span>` : ''}
+      </span>
+      <button class="btn-sm btn-danger-sm automod-domain-remove-btn" data-domain="${this._escapeHtml(r.domain)}">✕</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('.automod-domain-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      this.socket.emit('remove-automod-domain', { domain: btn.dataset.domain });
+    });
+  });
+},
+
+_renderAutomodLog(data) {
+  const hostsEl = document.getElementById('automod-top-hosts');
+  const listEl = document.getElementById('automod-log-list');
+  const entries = (data && data.entries) || [];
+  const hostCounts = (data && data.hostCounts) || [];
+
+  // Most-blocked hosts get a one-click "allow" so a legitimate domain that
+  // everyone keeps trying to share is trivial to fix. This is the feedback
+  // loop that stops an over-tight allowlist from quietly frustrating people.
+  if (hostsEl) {
+    hostsEl.innerHTML = hostCounts.length
+      ? `<small class="settings-hint">Most-blocked domains this week — click to allow:</small>
+         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+           ${hostCounts.map(h => `
+             <button class="btn-sm automod-allow-host" data-host="${this._escapeHtml(h.host)}"
+                     title="Allow ${this._escapeHtml(h.host)}">
+               ${this._escapeHtml(h.host)} <span class="muted-text">${h.hits}</span>
+             </button>`).join('')}
+         </div>`
+      : '';
+    hostsEl.querySelectorAll('.automod-allow-host').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.socket.emit('add-automod-domain', { domain: btn.dataset.host, mode: 'allow', includeSubdomains: true });
+        this.socket.emit('get-automod-log', { limit: 100 });
+      });
+    });
+  }
+
+  if (!listEl) return;
+  if (entries.length === 0) {
+    listEl.innerHTML = '<p class="muted-text">Nothing blocked yet.</p>';
+    return;
+  }
+  listEl.innerHTML = entries.map(e => `
+    <div class="whitelist-item" style="align-items:flex-start">
+      <span class="whitelist-username" style="display:flex;flex-direction:column;gap:2px">
+        <span><strong>${this._escapeHtml(e.username)}</strong>
+          <span class="muted-text">${this._escapeHtml(e.rule)}</span>
+          ${e.channel_name ? `<span class="muted-text">in #${this._escapeHtml(e.channel_name)}</span>` : ''}
+        </span>
+        ${e.host ? `<span class="muted-text">${this._escapeHtml(e.host)}</span>` : ''}
+        <span class="muted-text">${this._formatTimestamp ? this._formatTimestamp(e.created_at) : this._escapeHtml(e.created_at)}</span>
+      </span>
+    </div>
+  `).join('');
 },
 
 // ═══════════════════════════════════════════════════════

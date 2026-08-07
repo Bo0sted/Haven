@@ -151,6 +151,37 @@ function initDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_user_ips_last_seen ON user_ips(user_id, last_seen);
 
+    -- ── Auto-moderation (v3.42.0) ──────────────────────────
+    -- Domain policy for posted links. mode is 'allow' or 'deny'; deny always
+    -- wins over allow so a single bad subdomain can be carved out of an
+    -- otherwise-trusted parent. Domains are stored normalized (lowercase, no
+    -- scheme, no leading "www.", no trailing dot) by src/automod.js so that
+    -- comparisons never have to guess at formatting.
+    CREATE TABLE IF NOT EXISTS automod_domains (
+      domain             TEXT PRIMARY KEY,
+      mode               TEXT NOT NULL DEFAULT 'allow',
+      include_subdomains INTEGER NOT NULL DEFAULT 1,
+      note               TEXT DEFAULT '',
+      added_by           INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- One row per blocked action. Drives warn -> mute -> ban escalation via a
+    -- rolling time window, and doubles as the admin-facing "what has automod
+    -- been doing" feed. Kept separate from audit_log because it is written on
+    -- a hot path and pruned on its own schedule.
+    CREATE TABLE IF NOT EXISTS automod_infractions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      rule       TEXT NOT NULL,
+      channel_id INTEGER,
+      host       TEXT,
+      excerpt    TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_automod_inf_user ON automod_infractions(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_automod_inf_created ON automod_infractions(created_at DESC);
+
     CREATE TABLE IF NOT EXISTS server_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -395,10 +426,62 @@ function initDatabase() {
   insertSetting.run('turn_url', '');                     // optional turn: URI for relaying through hard NAT
   insertSetting.run('turn_username', '');                // static TURN username (used when turn_url is set)
   insertSetting.run('turn_password', '');                // static TURN credential
+  // (v3.42.0) Force every voice peer connection through the TURN relay.
+  // Haven voice is a peer-to-peer WebRTC mesh, so by default anyone who joins
+  // a voice channel with you learns your public IP from the ICE candidate
+  // exchange, with no click and no consent prompt. Relay-only hides it behind
+  // the TURN server. Requires turn_url to be configured; the settings handler
+  // refuses to enable it otherwise, because without TURN this breaks voice.
+  insertSetting.run('voice_force_relay', 'false');
+
+  // ── Auto-moderation (v3.42.0) ─────────────────────────
+  // Every value here is deliberately inert on upgrade: an existing server
+  // gets the tables and the settings rows but no behaviour change until an
+  // admin turns automod on.
+  insertSetting.run('automod_enabled', 'false');
+  insertSetting.run('automod_link_mode', 'off');              // 'off' | 'allowlist' | 'blocklist'
+  insertSetting.run('automod_link_exempt_level', '50');       // effective level that bypasses link filtering
+  insertSetting.run('automod_link_min_account_hours', '0');   // accounts younger than this post no links at all
+  insertSetting.run('automod_scan_edits', 'true');            // otherwise: post clean, edit in the payload
+  insertSetting.run('automod_scan_profile', 'true');          // display name / status text / bio
+  insertSetting.run('automod_scan_dms', 'true');              // mass-DM spam is worse than a channel post
+  insertSetting.run('automod_block_ip_urls', 'true');
+  insertSetting.run('automod_block_punycode', 'true');        // homoglyph lookalike domains
+  insertSetting.run('automod_block_obfuscated', 'true');      // hxxp:// and evil[.]com defanging
+  insertSetting.run('automod_preview_allowlist_only', 'true'); // closes the passive IP leak via og:image
+  insertSetting.run('automod_escalation', '{"windowHours":24,"warnAt":1,"muteAt":3,"muteMinutes":60,"banAt":5}');
+  insertSetting.run('automod_ban_ip', 'false');               // escalated bans also ban recent IPs
+  insertSetting.run('automod_log_channel', '');               // channel code to mirror automod actions into
+  insertSetting.run('automod_seeded', 'false');               // starter allowlist planted once, see below
 
   // Unique server fingerprint — used by the multi-server sidebar to detect "self"
   const crypto = require('crypto');
   insertSetting.run('server_fingerprint', crypto.randomUUID());
+
+  // ── Migration: starter link allowlist (v3.42.0) ───────
+  // Planted exactly once, guarded by automod_seeded, so an admin who prunes
+  // this list does not find it silently regrown on the next restart. These
+  // are the domains a general-purpose community server actually needs before
+  // allowlist mode becomes usable; anything else is the admin's call.
+  try {
+    const seeded = db.prepare("SELECT value FROM server_settings WHERE key = 'automod_seeded'").get();
+    if (!seeded || seeded.value !== 'true') {
+      const addDomain = db.prepare(
+        "INSERT OR IGNORE INTO automod_domains (domain, mode, include_subdomains, note) VALUES (?, 'allow', 1, 'Seeded default')"
+      );
+      const starter = [
+        'youtube.com', 'youtu.be', 'twitch.tv', 'x.com', 'twitter.com', 'bsky.app',
+        'reddit.com', 'github.com', 'gitlab.com', 'stackoverflow.com', 'wikipedia.org',
+        'imgur.com', 'giphy.com', 'tenor.com', 'spotify.com', 'soundcloud.com',
+        'steamcommunity.com', 'steampowered.com', 'last.fm', 'archive.org'
+      ];
+      const seedAll = db.transaction((list) => { for (const d of list) addDomain.run(d); });
+      seedAll(starter);
+      db.prepare("INSERT OR REPLACE INTO server_settings (key, value) VALUES ('automod_seeded', 'true')").run();
+    }
+  } catch (err) {
+    console.error('automod starter allowlist seed failed:', err.message);
+  }
 
   // ── Migration: pinned_messages table ──────────────────
   db.exec(`
