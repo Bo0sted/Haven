@@ -407,6 +407,7 @@
     "kick_user": "Kick Users",
     "mute_user": "Mute Users",
     "ban_user": "Ban Users",
+    "ban_ip": "Ban IP Addresses",
     "rename_channel": "Rename Channels",
     "rename_sub_channel": "Rename Sub-channels",
     "set_channel_topic": "Set Channel Topic",
