@@ -1,7 +1,11 @@
 //Shared permission list instead of declaring the same multiple times
 const ALL_PERMS = [
   'edit_own_messages', 'delete_own_messages', 'delete_message', 'delete_lower_messages',
-  'pin_message', 'archive_messages', 'kick_user', 'mute_user', 'ban_user',
+  // ban_ip was accepted by the server but missing from this list, so the role
+  // editor never rendered a checkbox for it. That made it ungrantable: the
+  // "also ban IP" option on the ban dialog could only ever appear for admins,
+  // no matter what a moderator's role said. (v3.43.0)
+  'pin_message', 'archive_messages', 'kick_user', 'mute_user', 'ban_user', 'ban_ip',
   'rename_channel', 'rename_sub_channel', 'set_channel_topic', 'manage_sub_channels',
   'create_channel', 'create_temp_channel', 'upload_files', 'use_voice', 'use_tts', 'manage_webhooks', 'mention_everyone', 'view_history',
   'view_all_members', 'view_channel_members', 'manage_emojis', 'manage_stickers', 'manage_soundboard', 'manage_music_queue', 'promote_user',
@@ -18,6 +22,7 @@ const PERM_LABELS = {
   get kick_user() { return t('permissions.kick_user'); },
   get mute_user() { return t('permissions.mute_user'); },
   get ban_user() { return t('permissions.ban_user'); },
+  get ban_ip() { return t('permissions.ban_ip'); },
   get rename_channel() { return t('permissions.rename_channel'); },
   get rename_sub_channel() { return t('permissions.rename_sub_channel'); },
   get set_channel_topic() { return t('permissions.set_channel_topic'); },
@@ -5510,6 +5515,12 @@ _initAutomodPanel() {
     .forEach(id => on(id, 'change', pushEscalation));
 
   on('voice-force-relay', 'change', (e) => setKey('voice_force_relay', e.target.checked ? 'true' : 'false'));
+  on('media-proxy-enabled', 'change', (e) => {
+    setKey('media_proxy_enabled', e.target.checked ? 'true' : 'false');
+    // Re-read the token so images start (or stop) routing through the proxy
+    // without needing a reload.
+    setTimeout(() => this._loadMediaToken?.(), 300);
+  });
 
   const addDomain = () => {
     const input = document.getElementById('automod-domain-input');
@@ -5528,6 +5539,16 @@ _initAutomodPanel() {
 
   this.socket.on('automod-domain-list', (rows) => this._renderAutomodDomains(rows));
   this.socket.on('automod-log', (data) => this._renderAutomodLog(data));
+  this.socket.on('media-cache-stats', (s) => {
+    const el = document.getElementById('media-cache-stats');
+    if (!el) return;
+    const mb = ((s?.bytes || 0) / 1048576).toFixed(1);
+    el.innerHTML = `Cached: ${s?.items || 0} image(s), ${mb} MB` +
+      (this.user?.isAdmin ? ' <button class="btn-sm" id="media-cache-clear" style="margin-left:6px">Clear</button>' : '');
+    const clearBtn = document.getElementById('media-cache-clear');
+    if (clearBtn) clearBtn.addEventListener('click', () => this.socket.emit('clear-media-cache'));
+  });
+  this.socket.emit('get-media-cache-stats');
 },
 
 // Grey out the rest of the panel when automod is off, so it is obvious that
@@ -5564,6 +5585,7 @@ _applyAutomodSettings() {
   bool('automod-preview-allowlist-only', 'automod_preview_allowlist_only', 'true');
   bool('automod-ban-ip', 'automod_ban_ip', 'false');
   bool('voice-force-relay', 'voice_force_relay', 'false');
+  bool('media-proxy-enabled', 'media_proxy_enabled', 'true');
 
   num('automod-min-account-hours', 'automod_link_min_account_hours', '0');
   num('automod-exempt-level', 'automod_link_exempt_level', '50');

@@ -57,7 +57,8 @@ module.exports = function register(socket, ctx) {
       'automod_scan_dms', 'automod_block_ip_urls', 'automod_block_punycode',
       'automod_block_obfuscated', 'automod_preview_allowlist_only', 'automod_escalation',
       'automod_ban_ip', 'automod_log_channel',
-      'voice_force_relay'
+      'voice_force_relay',
+      'media_proxy_enabled' // (v3.43.0) server-side fetch + cache for remote images
     ];
     if (!allowedKeys.includes(key)) return;
 
@@ -68,6 +69,7 @@ module.exports = function register(socket, ctx) {
       'automod_preview_allowlist_only', 'automod_ban_ip'
     ];
     if (automodBools.includes(key) && !['true', 'false'].includes(value)) return;
+    if (key === 'media_proxy_enabled' && !['true', 'false'].includes(value)) return;
     if (key === 'automod_link_mode' && !['off', 'allowlist', 'blocklist'].includes(value)) return;
     if (key === 'automod_link_exempt_level') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 100) return; }
     if (key === 'automod_link_min_account_hours') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 8760) return; }
@@ -1032,6 +1034,29 @@ module.exports = function register(socket, ctx) {
     rows.forEach(r => { r.created_at = utcStamp(r.created_at); });
     socket.emit('automod-domain-list', rows);
   }
+
+  // Media cache size, so an admin can see what proxying costs them on disk
+  // before deciding whether to leave it on. (v3.43.0)
+  socket.on('get-media-cache-stats', () => {
+    if (!_canManageAutomod()) return;
+    try {
+      const s = require('../mediaProxy').stats();
+      socket.emit('media-cache-stats', { items: s.items, bytes: s.bytes });
+    } catch { socket.emit('media-cache-stats', { items: 0, bytes: 0 }); }
+  });
+
+  socket.on('clear-media-cache', () => {
+    if (!socket.user.isAdmin) return socket.emit('error-msg', 'Only admins can clear the media cache');
+    try {
+      require('../mediaProxy').clear();
+      socket.emit('error-msg', 'Media cache cleared');
+      logAudit({ actor: socket.user, action: 'media_cache_clear', target_type: 'server' });
+      socket.emit('media-cache-stats', { items: 0, bytes: 0 });
+    } catch (err) {
+      console.error('clear-media-cache error:', err);
+      socket.emit('error-msg', 'Failed to clear the media cache');
+    }
+  });
 
   socket.on('get-automod-domains', () => {
     if (!_canManageAutomod()) return socket.emit('automod-domain-list', []);

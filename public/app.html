@@ -2098,6 +2098,13 @@
               </optgroup>
             </select>
           </label>
+          <small class="settings-group-label" style="margin-top:14px;display:block">🖼️ <span data-i18n="settings.admin.media_proxy_group">Image privacy</span></small>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.media_proxy_desc">Haven fetches images from other sites itself and serves them from its own cache, so your members' browsers never contact those sites. With this off, anyone who posts an image link collects the IP address and browser details of everyone who scrolls past it, without a single click. It also means embeds keep working after the original link expires or the site goes down. Costs some bandwidth and disk on your server; each image is fetched once and cached for 30 days.</small>
+          <label class="toggle-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.media_proxy_label">Proxy and cache remote images</span>
+            <input type="checkbox" id="media-proxy-enabled">
+          </label>
+          <div id="media-cache-stats" class="settings-hint" style="margin-top:4px"></div>
           <small class="settings-group-label" style="margin-top:14px;display:block">🎙️ <span data-i18n="settings.admin.voice_privacy_group">Voice privacy</span></small>
           <small class="settings-hint" style="display:block" data-i18n="settings.admin.voice_relay_desc">Haven voice is peer-to-peer, so by default everyone in a call can see everyone else's IP address. It is how the connection is made, it needs no clicking, and nobody is told it happened. Relay-only mode routes all voice through your TURN server instead, so participants only ever see the TURN server's address. This needs a TURN server configured under Voice &amp; Connectivity, and it uses your server's bandwidth for every call.</small>
           <label class="toggle-row" style="margin-top:8px">
