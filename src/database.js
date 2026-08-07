@@ -438,10 +438,15 @@ function initDatabase() {
   // Every value here is deliberately inert on upgrade: an existing server
   // gets the tables and the settings rows but no behaviour change until an
   // admin turns automod on.
-  insertSetting.run('automod_enabled', 'false');
-  insertSetting.run('automod_link_mode', 'off');              // 'off' | 'allowlist' | 'blocklist'
+  // (v3.43.0) On by default. The protections that cannot break a server are
+  // enabled out of the box, because "secure only if the admin finds the
+  // setting" is how the incident these were written for happened in the first
+  // place. The two that CAN break things stay off: voice_force_relay (needs a
+  // TURN server) and automod_ban_ip (shared/CGNAT addresses catch bystanders).
+  insertSetting.run('automod_enabled', 'true');
+  insertSetting.run('automod_link_mode', 'allowlist');        // 'off' | 'allowlist' | 'blocklist'
   insertSetting.run('automod_link_exempt_level', '50');       // effective level that bypasses link filtering
-  insertSetting.run('automod_link_min_account_hours', '0');   // accounts younger than this post no links at all
+  insertSetting.run('automod_link_min_account_hours', '24');  // accounts younger than this post no links at all
   insertSetting.run('automod_scan_edits', 'true');            // otherwise: post clean, edit in the payload
   insertSetting.run('automod_scan_profile', 'true');          // display name / status text / bio
   insertSetting.run('automod_scan_dms', 'true');              // mass-DM spam is worse than a channel post
@@ -453,6 +458,12 @@ function initDatabase() {
   insertSetting.run('automod_ban_ip', 'false');               // escalated bans also ban recent IPs
   insertSetting.run('automod_log_channel', '');               // channel code to mirror automod actions into
   insertSetting.run('automod_seeded', 'false');               // starter allowlist planted once, see below
+
+  // (v3.43.0) Server-side media proxy. Remote images are fetched by the server
+  // and cached on disk so clients never contact a third-party host. On by
+  // default: it costs bandwidth but nothing breaks without it, and leaving it
+  // off means every embedded image leaks the viewer's IP to whoever posted it.
+  insertSetting.run('media_proxy_enabled', 'true');
 
   // Unique server fingerprint — used by the multi-server sidebar to detect "self"
   const crypto = require('crypto');
@@ -481,6 +492,39 @@ function initDatabase() {
     }
   } catch (err) {
     console.error('automod starter allowlist seed failed:', err.message);
+  }
+
+  // ── Migration: turn the safe protections on, once (v3.43.0) ──
+  // The seeds above are INSERT OR IGNORE, so they only reach brand-new
+  // installs. A server that already ran 3.42.0 (where everything defaulted
+  // off) keeps its inert rows without this. Guarded by its own flag so an
+  // admin who later decides to switch automod off does not find it turned
+  // back on at the next restart.
+  try {
+    const done = db.prepare("SELECT value FROM server_settings WHERE key = 'automod_defaults_v343'").get();
+    if (!done || done.value !== 'true') {
+      const put = db.prepare('INSERT OR REPLACE INTO server_settings (key, value) VALUES (?, ?)');
+      const flip = db.transaction(() => {
+        put.run('automod_enabled', 'true');
+        put.run('automod_link_mode', 'allowlist');
+        put.run('automod_preview_allowlist_only', 'true');
+        put.run('automod_scan_edits', 'true');
+        put.run('automod_scan_dms', 'true');
+        put.run('automod_scan_profile', 'true');
+        put.run('automod_block_ip_urls', 'true');
+        put.run('automod_block_punycode', 'true');
+        put.run('automod_block_obfuscated', 'true');
+        put.run('media_proxy_enabled', 'true');
+        // Only set the new-account hold if the admin has not chosen a value.
+        const cur = db.prepare("SELECT value FROM server_settings WHERE key = 'automod_link_min_account_hours'").get();
+        if (!cur || cur.value === '0') put.run('automod_link_min_account_hours', '24');
+        put.run('automod_defaults_v343', 'true');
+      });
+      flip();
+      console.log('🛡️  Auto-mod protections enabled (v3.43.0 defaults). Settings → Auto-Mod to adjust.');
+    }
+  } catch (err) {
+    console.error('automod default migration failed:', err.message);
   }
 
   // ── Migration: pinned_messages table ──────────────────
