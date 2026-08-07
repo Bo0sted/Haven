@@ -2580,6 +2580,84 @@ async function validateUrlSafe(urlStr) {
   return parsed;
 }
 
+// ── Media proxy (v3.43.0) ─────────────────────────────────
+// Clients never fetch remote media directly any more; they ask Haven, Haven
+// fetches once and caches on disk. Closes the passive IP leak completely
+// rather than only for non-allowlisted domains, and keeps embeds working
+// after the origin expires.
+const mediaProxy = require('./src/mediaProxy');
+mediaProxy.loadIndex();
+
+function mediaProxyEnabled() {
+  try {
+    const { getDb } = require('./src/database');
+    const row = getDb().prepare("SELECT value FROM server_settings WHERE key = 'media_proxy_enabled'").get();
+    return !row || row.value !== 'false';
+  } catch { return true; }
+}
+app.set('mediaProxyEnabled', mediaProxyEnabled);
+
+// Hands the client its short-lived media token. Authenticated normally; the
+// token it returns is what <img> tags carry, since they cannot send headers.
+app.get('/api/media-token', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!mediaProxyEnabled()) return res.json({ enabled: false, token: null });
+  res.json({ enabled: true, token: mediaProxy.issueToken(user.id) });
+});
+
+// Per-user rate limit. Generous, because opening a busy channel legitimately
+// requests many images at once; the cache means repeats are nearly free.
+const _mediaRate = new Map();   // userId -> { count, resetAt }
+function _mediaRateOk(userId) {
+  const now = Date.now();
+  let e = _mediaRate.get(userId);
+  if (!e || now > e.resetAt) { e = { count: 0, resetAt: now + 60000 }; _mediaRate.set(userId, e); }
+  e.count++;
+  return e.count <= 600;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [uid, e] of _mediaRate) if (now > e.resetAt + 120000) _mediaRate.delete(uid);
+}, 5 * 60 * 1000).unref?.();
+
+app.get('/api/media-proxy', async (req, res) => {
+  if (!mediaProxyEnabled()) return res.status(404).json({ error: 'Media proxy disabled' });
+
+  const userId = mediaProxy.verifyToken((req.query.mt || '').trim());
+  if (!userId) return res.status(401).json({ error: 'Invalid or expired media token' });
+  if (!_mediaRateOk(userId)) return res.status(429).json({ error: 'Rate limited' });
+
+  const url = (req.query.url || '').trim();
+  if (!url || url.length > 2048) return res.status(400).json({ error: 'Missing or oversized url' });
+
+  // Serve straight from disk when we already hold it — no upstream request,
+  // so a link that has since expired or gone offline still renders.
+  const send = (item) => {
+    res.set('Content-Type', item.type);
+    res.set('Content-Length', String(item.size));
+    // Immutable: the cache key is a hash of the source URL, so a given proxy
+    // URL always resolves to the same bytes.
+    res.set('Cache-Control', 'public, max-age=604800, immutable');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Cross-Origin-Resource-Policy', 'same-origin');
+    return res.sendFile(item.path);
+  };
+
+  const cached = mediaProxy.get(url);
+  if (cached) return send(cached);
+
+  try {
+    const item = await mediaProxy.fetchAndCache(url, validateUrlSafe);
+    return send(item);
+  } catch (err) {
+    // A transparent 1x1 would silently hide broken images; a status code lets
+    // the client fall back to its own placeholder.
+    return res.status(502).json({ error: String(err.message || 'fetch failed').slice(0, 120) });
+  }
+});
+
 app.get('/api/link-preview', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;

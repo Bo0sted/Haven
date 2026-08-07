@@ -1571,13 +1571,20 @@ _fetchLinkPreviews(containerEl) {
           const count = Math.min(data.images.length, 4);
           media += `<div class="link-preview-gallery" data-count="${count}">`;
           data.images.slice(0, 4).forEach(imgUrl => {
-            media += `<img class="link-preview-gallery-img" src="${this._escapeHtml(imgUrl)}" alt="" loading="lazy">`;
+            media += `<img class="link-preview-gallery-img" ${this._imgSrcAttr(imgUrl)} alt="" loading="lazy">`;
           });
           media += '</div>';
         } else if (isInlineVideo) {
-          media += `<video class="lp-video" controls preload="metadata" playsinline${data.image ? ` poster="${this._escapeHtml(data.image)}"` : ''}><source src="${this._escapeHtml(data.video)}" type="${this._escapeHtml(data.videoType || 'video/mp4')}"></video>`;
+          // Video is NOT proxied — streaming it through Haven would need Range
+          // support and a lot of bandwidth. Instead the poster comes from the
+          // proxy and preload drops to "none" when proxying is on, so the
+          // remote host is contacted only if the viewer actually presses play.
+          // That turns a silent leak into a deliberate act.
+          const vidPreload = (this._mediaProxyEnabled === false) ? 'metadata' : 'none';
+          const posterAttr = data.image ? ` poster="${this._escapeHtml(this._proxyMediaUrl(data.image) || '')}"` : '';
+          media += `<video class="lp-video" controls preload="${vidPreload}" playsinline${posterAttr}><source src="${this._escapeHtml(data.video)}" type="${this._escapeHtml(data.videoType || 'video/mp4')}"></video>`;
         } else if (data.image) {
-          media += `<a class="lp-media" href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer nofollow"><img class="lp-image" src="${this._escapeHtml(data.image)}" alt="" loading="lazy">${data.video ? '<span class="lp-play"></span>' : ''}</a>`;
+          media += `<a class="lp-media" href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer nofollow"><img class="lp-image" ${this._imgSrcAttr(data.image)} alt="" loading="lazy">${data.video ? '<span class="lp-play"></span>' : ''}</a>`;
         }
 
         // Engagement stats (Bluesky / X) — skip any the source didn't provide.

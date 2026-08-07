@@ -573,7 +573,7 @@ _formatContent(str) {
     const idx = mdLinks.length;
     mdLinks.push((this._isImageHidden && this._isImageHidden(safeUrl))
       ? this._hiddenImagePlaceholder(safeUrl)
-      : `<img src="${safeUrl}" class="chat-image" alt="${alt || 'image'}">`);
+      : `<img ${this._imgSrcAttr(safeUrl)} class="chat-image" alt="${alt || 'image'}">`);
     return `\x00MDLINK_${idx}\x00`;
   });
   // [text](url)
@@ -599,7 +599,7 @@ _formatContent(str) {
           /^https:\/\/(media|c)\.tenor\.com\//i.test(safeUrl)) {
         autoLinks.push((this._isImageHidden && this._isImageHidden(safeUrl))
           ? this._hiddenImagePlaceholder(safeUrl)
-          : `<img src="${safeUrl}" class="chat-image" alt="image" loading="lazy">`);
+          : `<img ${this._imgSrcAttr(safeUrl)} class="chat-image" alt="image" loading="lazy">`);
       } else {
         autoLinks.push(`<a href="${safeUrl}" target="_blank" rel="noopener noreferrer nofollow">${safeUrl}</a>`);
       }
@@ -3765,6 +3765,72 @@ _startEditMessage(msgEl, msgId) {
 },
 
 // ═══════════════════════════════════════════════════════
+// MEDIA PROXY (v3.43.0)
+// ═══════════════════════════════════════════════════════
+//
+// Remote images are fetched by the Haven server and served from its cache, so
+// the browser never contacts a third-party host. Before this, simply scrolling
+// past a message containing an image URL sent your IP address and browser
+// details to whoever owned that URL.
+//
+// The rule this code enforces: NEVER emit a raw external src. If the media
+// token has not arrived yet, the URL is parked in data-mp-src and filled in
+// once the token lands. Failing closed means a slow token fetch costs a moment
+// of blank image, not a silent leak.
+
+async _loadMediaToken() {
+  try {
+    const r = await fetch('/api/media-token', {
+      headers: { 'Authorization': `Bearer ${this.token}` }
+    });
+    if (!r.ok) throw new Error('media token request failed');
+    const d = await r.json();
+    this._mediaProxyEnabled = d.enabled !== false;
+    this._mediaToken = d.token || null;
+  } catch {
+    // Older server, or the endpoint is unavailable. Fall back to direct
+    // loading so images do not silently break on a mismatched version.
+    this._mediaProxyEnabled = false;
+    this._mediaToken = null;
+  }
+  this._flushPendingMedia();
+},
+
+// Returns a URL safe to put in a src attribute, or null when proxying is on
+// but the token has not arrived yet (caller must defer).
+_proxyMediaUrl(url) {
+  if (typeof url !== 'string' || !url) return url;
+  // Local paths, data: URIs and blobs never leave the origin.
+  if (!/^https?:\/\//i.test(url)) return url;
+  if (this._mediaProxyEnabled === false) return url;
+  try {
+    if (new URL(url, location.href).origin === location.origin) return url;
+  } catch { return url; }
+  if (!this._mediaToken) return null;   // enabled but not ready — defer
+  return `/api/media-proxy?url=${encodeURIComponent(url)}&mt=${encodeURIComponent(this._mediaToken)}`;
+},
+
+// Builds the src attribute for an <img>, deferring when necessary. Returns an
+// already-escaped attribute string.
+_imgSrcAttr(url) {
+  const p = this._proxyMediaUrl(url);
+  return p !== null
+    ? `src="${this._escapeHtml(p)}"`
+    : `data-mp-src="${this._escapeHtml(url)}"`;
+},
+
+// Fill in any images that rendered before the token was available.
+_flushPendingMedia() {
+  document.querySelectorAll('[data-mp-src]').forEach(el => {
+    const raw = el.getAttribute('data-mp-src');
+    const p = this._proxyMediaUrl(raw);
+    if (p === null) return;            // still not ready
+    el.removeAttribute('data-mp-src');
+    el.setAttribute('src', p);
+  });
+},
+
+// ═══════════════════════════════════════════════════════
 // ADMIN MODERATION UI
 // ═══════════════════════════════════════════════════════
 
@@ -3847,8 +3913,17 @@ _showAdminActionModal(action, userId, username) {
   const banIpGroup = document.getElementById('admin-ban-ip-group');
   const banIpCheckbox = document.getElementById('admin-ban-ip-checkbox');
   if (banIpGroup) {
-    const canBanIp = !!(this.user && this.user.isAdmin) ||
-                     !!(this.user && Array.isArray(this.user.permissions) && this.user.permissions.includes('ban_ip'));
+    // ban_ip is a server-wide permission, so it arrives in globalPermissions;
+    // checking only `permissions` (the channel-scoped set) meant the option
+    // stayed hidden for moderators who genuinely held it. (v3.43.0)
+    const _has = (p) => {
+      if (!this.user) return false;
+      if (this.user.isAdmin) return true;
+      const scoped = Array.isArray(this.user.permissions) ? this.user.permissions : [];
+      const global = Array.isArray(this.user.globalPermissions) ? this.user.globalPermissions : [];
+      return scoped.includes('*') || global.includes('*') || scoped.includes(p) || global.includes(p);
+    };
+    const canBanIp = _has('ban_ip');
     banIpGroup.style.display = (action === 'ban' && canBanIp) ? 'block' : 'none';
     if (banIpCheckbox) banIpCheckbox.checked = false;
   }

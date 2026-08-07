@@ -253,6 +253,13 @@ class HavenApp {
   // ── Initialization ────────────────────────────────────
 
   _init() {
+    // Kick this off before anything can render a message. Until it resolves,
+    // _imgSrcAttr parks remote images in data-mp-src rather than emitting a
+    // raw external src, so there is no window in which an image leaks. (v3.43.0)
+    this._mediaProxyEnabled = true;   // assume on: fail closed, not open
+    this._mediaToken = null;
+    this._loadMediaToken?.();
+
     this.socket = io({
       auth: { token: this.token },
       reconnectionDelay: 1500,
