@@ -42,8 +42,8 @@ if [ "$NODE_VER" -lt 18 ]; then
     echo -e "${YELLOW}  [!] Node.js 18+ recommended. You have v${NODE_VER}.${NC}"
 fi
 
-if [ "$NODE_VER" -ge 25 ]; then
-    echo -e "${YELLOW}  [!] Node.js v${NODE_VER} is newer than Haven has been tested with.${NC}"
+if [ "$NODE_VER" -ge 27 ]; then
+    echo -e "${YELLOW}  [!] Node.js v${NODE_VER} detected. Haven is tested on Node 18-26.${NC}"
     echo "  Continuing — native modules are verified functionally below."
 elif [ "$NODE_VER" -ge 24 ]; then
     echo "  [*] Node.js v${NODE_VER} — verifying native modules load (below)."
@@ -65,7 +65,7 @@ if ! node -e "require('better-sqlite3')" &> /dev/null; then
     if ! node -e "require('better-sqlite3')" &> /dev/null; then
         echo -e "${RED}  [ERROR] better-sqlite3 cannot load on Node $(node -v).${NC}"
         echo "  Fix options:"
-        echo "    - Install Node 22 LTS (https://nodejs.org/), or"
+        echo "    - Install Node 26 LTS (https://nodejs.org/), or"
         echo "    - Install C++ build tools and re-run:"
         echo "        Ubuntu/Debian:  sudo apt install build-essential python3"
         echo "        Fedora:         sudo dnf group install 'Development Tools'"
