@@ -9,7 +9,7 @@ const { setEnvValue, isWritableKey } = require('../envStore');
 module.exports = function register(socket, ctx) {
   const { io, db, state, getChannelRoleChain, userHasPermission,
           emitOnlineUsers, broadcastVoiceUsers, generateToken,
-          touchVoiceActivity, DATA_DIR, logAudit, getAdminRoleDisplay } = ctx;
+          touchVoiceActivity, enforceAutomod, DATA_DIR, logAudit, getAdminRoleDisplay } = ctx;
   const { channelUsers, voiceUsers } = state;
   const _audit = (typeof logAudit === 'function') ? logAudit : () => {};
 
@@ -24,6 +24,11 @@ module.exports = function register(socket, ctx) {
     if (!/^[a-zA-Z0-9_ ]+$/.test(newName)) {
       return socket.emit('error-msg', 'Letters, numbers, underscores, and spaces only');
     }
+
+    // The charset above already rules out dots, so a display name cannot carry
+    // a working URL. Run it through automod anyway so the deny-list can be
+    // used to reserve impersonation-prone names (e.g. "Admin", "Moderator").
+    if (enforceAutomod(newName, { surface: 'profile' })) return;
 
     // Reject if another user on this server already uses this display name
     // (case-insensitive). Mentions resolve by login username, but allowing
@@ -159,6 +164,10 @@ module.exports = function register(socket, ctx) {
     const status = validStatuses.includes(data.status) ? data.status : 'online';
     const statusText = isString(data.statusText, 0, 128) ? data.statusText.trim() : '';
 
+    // A status line is displayed next to the name in every member list, so a
+    // link parked there is as good as posting it in every channel at once.
+    if (statusText && enforceAutomod(statusText, { surface: 'profile' })) return;
+
     try {
       db.prepare('UPDATE users SET status = ?, status_text = ? WHERE id = ?')
         .run(status, statusText, socket.user.id);
@@ -269,6 +278,7 @@ module.exports = function register(socket, ctx) {
   socket.on('set-bio', (data) => {
     if (!data || typeof data.bio !== 'string') return;
     const bio = sanitizeText(data.bio.trim().slice(0, 190));
+    if (bio && enforceAutomod(bio, { surface: 'profile' })) return;
     try {
       db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(bio, socket.user.id);
       socket.emit('bio-updated', { bio });

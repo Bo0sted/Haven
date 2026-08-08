@@ -7,7 +7,7 @@ const { utcStamp, isString, isInt, sanitizeText } = require('./helpers');
 module.exports = function register(socket, ctx) {
   const { io, db, state, userHasPermission, getUserEffectiveLevel, getChannelRoleChain,
           sendPushNotifications, fireWebhookCallbacks, fireWebhookEvent, processSlashCommand,
-          touchVoiceActivity, floodCheck, UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = ctx;
+          touchVoiceActivity, floodCheck, enforceAutomod, UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = ctx;
   const { slowModeTracker } = state;
 
   const UPLOAD_PATH_RE = /\/uploads\/((?!(?:deleted-attachments|stickers)\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+)/g;
@@ -687,6 +687,12 @@ module.exports = function register(socket, ctx) {
     ).get(channel.id, socket.user.id);
     if (!member) return socket.emit('error-msg', 'Not a member of this channel');
 
+    // ── Auto-mod link policy (v3.42.0) ────────────────────
+    // Runs before the message is persisted or broadcast. A blocked message
+    // never reaches another client, which is the only way to stop the passive
+    // IP leak from inline images and link-preview og:image fetches.
+    if (enforceAutomod(content, { surface: channel.is_dm ? 'dm' : 'message', channelId: channel.id })) return;
+
     if (channel.read_only === 1 && !socket.user.isAdmin && !userHasPermission(socket.user.id, 'read_only_override', channel.id)) {
       return socket.emit('error-msg', 'This channel is read-only');
     }
@@ -1013,6 +1019,10 @@ module.exports = function register(socket, ctx) {
 
     const newContent = sanitizeText(data.content.trim());
     if (!newContent) return;
+
+    // Edits get the same link policy as sends. Without this the filter is
+    // trivially bypassed: post something harmless, then edit the payload in.
+    if (enforceAutomod(newContent, { surface: 'edit', channelId: channel.id })) return;
 
     if (/^\/uploads\/[\w\-]+\.(jpg|jpeg|png|gif|webp)$/i.test(newContent)) {
       const origMsg = db.prepare('SELECT original_name FROM messages WHERE id = ?').get(data.messageId);

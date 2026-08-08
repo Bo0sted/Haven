@@ -85,6 +85,11 @@ _showUserGearMenu(anchorEl, userId, username) {
   const canMod = this.user.isAdmin || this._canModerate();
   const canPromote = this._hasPerm('promote_user');
   const isAdmin = this.user.isAdmin;
+  // Ban was gated on isAdmin here, which meant a moderator holding ban_user
+  // could ban from the admin members list but not from the sidebar they
+  // actually work in. The server has always accepted ban_user; this menu was
+  // the only thing hiding it. (v3.43.0)
+  const canBan = isAdmin || this._hasPerm('ban_user');
 
   // Mirror of the right-click context menu's invite filter: any non-DM,
   // non-private channel the user can see (admins also see private channels).
@@ -102,7 +107,7 @@ _showUserGearMenu(anchorEl, userId, username) {
   if (canInvite) items += `<button class="gear-menu-item" data-action="add-to-channel">➕ ${t('users.gear_menu.add_to_channel')}</button>`;
   if (canMod) items += `<button class="gear-menu-item" data-action="kick">👢 ${t('users.gear_menu.kick')}</button>`;
   if (canMod) items += `<button class="gear-menu-item" data-action="mute">🔇 ${t('users.gear_menu.mute')}</button>`;
-  if (isAdmin) items += `<button class="gear-menu-item gear-menu-danger" data-action="ban">⛔ ${t('users.gear_menu.ban')}</button>`;
+  if (canBan) items += `<button class="gear-menu-item gear-menu-danger" data-action="ban">⛔ ${t('users.gear_menu.ban')}</button>`;
   if (isAdmin) items += `<button class="gear-menu-item gear-menu-danger" data-action="delete-user">🗑️ ${t('users.gear_menu.delete_user')}</button>`;
   // Admin password reset (#5300): gated on server setting AND target is not self.
   if (isAdmin && this.serverSettings?.admin_password_reset_enabled === 'true' && userId !== this.user?.id) {
@@ -295,7 +300,10 @@ _renderUserItem(u, scoreLookup) {
   // Show DM + Gear icon. Gear opens a dropdown with mod actions.
   const canModThis = (this.user.isAdmin || this._canModerate()) && u.id !== this.user.id;
   const canPromote = this._hasPerm('promote_user') && u.id !== this.user.id;
-  const hasGear = canModThis || canPromote;
+  // A moderator whose role grants ban_user but who sits below the level-25
+  // _canModerate() threshold still needs the gear to appear. (v3.43.0)
+  const canBanThis = this._hasPerm('ban_user') && u.id !== this.user.id;
+  const hasGear = canModThis || canPromote || canBanThis;
   const gearBtn = hasGear
     ? `<button class="user-action-btn user-gear-btn" data-uid="${u.id}" data-uname="${this._escapeHtml(u.username)}" title="${t('users.more_actions')}">⚙️</button>`
     : '';

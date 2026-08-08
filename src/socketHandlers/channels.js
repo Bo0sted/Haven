@@ -38,7 +38,7 @@ module.exports = function register(socket, ctx) {
     io, db, state, userHasPermission, getUserEffectiveLevel,
     broadcastChannelLists, getEnrichedChannels, emitOnlineUsers,
     handleVoiceLeave, broadcastVoiceUsers, generateChannelCode,
-    applyRoleChannelAccess, logAudit, fireWebhookEvent
+    applyRoleChannelAccess, logAudit, fireWebhookEvent, enforceAutomod
   } = ctx;
   const { channelUsers, voiceUsers, activeMusic, musicQueues } = state;
   const _audit = (typeof logAudit === 'function') ? logAudit : () => {};
@@ -1316,6 +1316,9 @@ module.exports = function register(socket, ctx) {
     }
     const { sanitizeText } = require('./helpers');
     const topic = isString(data.topic, 0, 256) ? sanitizeText(data.topic.trim()) : '';
+    // A channel topic sits above the message list for everyone in the channel,
+    // so it is a link-placement surface like any other. (v3.42.0)
+    if (topic && enforceAutomod(topic, { surface: 'channel', channelId: channel.id })) return;
     try {
       db.prepare('UPDATE channels SET topic = ? WHERE id = ?').run(topic, channel.id);
     } catch (err) {

@@ -11,6 +11,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.43.0] — 2026-08-07
+
+### Added
+- **Haven fetches remote images itself now, and clients never contact other sites.** Previously an image link in a message was loaded straight from wherever it was hosted, in every viewer's browser. That handed the owner of that link the IP address and browser details of everyone who scrolled past it, without anyone clicking anything and with nothing on screen to suggest a request had been made. Haven now fetches each image once, caches it on disk for 30 days, and serves it from your own server. Covers inline images, markdown images, link-preview thumbnails and revealed hidden images. A pleasant side effect, and the reason Discord does the same: an embed keeps working after the original link expires or the host goes offline, so old conversations stop rotting. On by default, with a size shown in Settings → Security and a switch to turn it off if bandwidth is tight. Thanks to @MutantRabbit767 for pushing on this.
+- **Link-preview videos no longer phone home on their own.** The poster image comes from the cache and the video itself does not preload, so the remote host is contacted only if someone actually presses play. Video is still streamed from the source rather than proxied; that is a deliberate limit, since relaying video needs range requests and considerably more bandwidth.
+- **Protections are on out of the box.** Auto-mod, allowlist link mode, the 24-hour hold on links from new accounts, and the image proxy all default to on, for new installs and existing ones alike. The two settings that can genuinely break something stay off and must be chosen deliberately: relay-only voice, which needs a TURN server, and automatic IP bans, which can catch bystanders on shared connections. If you turn any of this off, it stays off.
+
+### Fixed
+- **Moderators with the ban permission can ban from the sidebar.** The ⛔ option in the member gear menu was gated on being an admin, even though the server has always accepted the `ban_user` permission. Moderators could ban from the admin members list but not from the sidebar they actually work in, which made it look like their permission was not working.
+- **The "also ban IP" option can finally be granted to a role.** `ban_ip` was accepted by the server but missing from the role editor's permission list, so there was no way to tick it for anyone. That made the IP-ban checkbox on the ban dialog admin-only in practice, no matter what a moderator's role said. The permission now appears in the role editor, and the checkbox correctly reads server-wide permissions rather than only channel-scoped ones.
+
+## [3.42.0] — 2026-08-07
+
+### Added
+- **Auto-Mod: a configurable link policy for the whole server.** New section under Settings → Auto-Mod. Pick a mode (allowlist blocks everything you have not approved, blocklist only stops domains you name), manage the domain list from the same panel, and blocked content is rejected the moment it is sent, so it never reaches anyone else. It checks messages, edits, DMs, display names, status text, bios and channel topics, because a link parked in a profile reaches just as many people as one posted in a channel. Twenty common domains are added to the allowlist on first run to get you started, and the panel shows the most-blocked domains of the past week with one-click "allow" for anything caught by mistake. Off by default; existing servers see no change until an admin enables it.
+- **Link previews are now gated on the same domain policy.** This one is worth understanding even if you skip the rest: Haven renders linked images and preview thumbnails directly from the other site in every viewer's browser. That means a hostile link handed its author the IP address and browser details of everyone who scrolled past the message, with nobody clicking anything. With previews restricted to allowed domains, no client is ever told to fetch from a domain you have not approved.
+- **New accounts can be stopped from posting links for a set number of hours.** Applies even to allowed domains. This is the rule that breaks the register, post a link, get banned, register again loop, and it does it without needing to recognise the link.
+- **Warn, mute and ban escalation.** Blocked attempts accumulate as strikes over a rolling window, with configurable thresholds for each step and an optional matching IP ban. Admins are never escalated against, and strikes can be cleared per user.
+- **Relay-only voice, under Settings → Security.** Haven voice is peer-to-peer, which means that by default everyone in a call can see everyone else's IP address. It is simply how the connection gets made: no click, no prompt, no indication it happened. Turning this on routes voice through your TURN server so participants only ever see the TURN server's address. It needs a TURN server configured first and Haven will not let you enable it without one, since voice cannot work otherwise.
+- **IP bans accept CIDR ranges** (`203.0.113.0/24`, `2001:db8::/64`). An IPv6 subscriber is normally handed an entire /64, so banning one of their addresses accomplished nothing.
+
+### Fixed
+- **IP bans only half-applied.** The web gate and the voice/chat connection gate disagreed about what an address is: one saw `1.2.3.4`, the other saw the same address in its IPv6 form. Banning someone blocked their web requests while their live connection carried on working. Both now use one shared address format, and banning an IP disconnects anyone already connected from it, including everyone inside a banned range.
+- **IP bans behind a reverse proxy recorded the wrong address entirely.** If Haven runs behind nginx, Cloudflare or similar, every connection was logged under the proxy's address rather than the visitor's. Ticking "also ban IP" on a ban would therefore have banned the proxy and locked out every user on the server. Addresses now respect the same `TRUST_PROXY` setting the rest of Haven uses.
+- **The per-address connection limit did nothing behind a proxy,** for the same reason: every visitor shared a single bucket.
+- **Message rate limiting was per connection, not per person.** Two browser tabs bought twice the send rate, and reconnecting reset the limit outright. It now applies per account, so the cap means what it says.
+
 ## [3.41.0] — 2026-08-05
 
 ### Added

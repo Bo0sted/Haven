@@ -4077,6 +4077,16 @@ _setupUI() {
     this._renderWhitelist(list);
   });
 
+  // ── Auto-Mod panel (v3.42.0) ─────────────────────────────
+  // Wired here alongside the other admin-settings controls. Its settings
+  // apply immediately rather than through the Save flow, matching how the
+  // whitelist and tunnel controls already behave.
+  if (typeof this._initAutomodPanel === 'function') {
+    this._initAutomodPanel();
+    this.socket.emit('get-automod-domains');
+    this.socket.emit('get-automod-log', { limit: 100 });
+  }
+
   // ── Tunnel settings (immediate — not part of Save flow) ──
   const tunnelToggleBtn = document.getElementById('tunnel-toggle-btn');
   if (tunnelToggleBtn) {

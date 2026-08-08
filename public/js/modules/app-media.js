@@ -2968,7 +2968,11 @@ _revealHiddenImage(ph) {
   if (!src) return;
   this._unhideImage(src);
   const img = document.createElement('img');
-  img.src = src;
+  // Route through the media proxy like every other remote image, so revealing
+  // a hidden image does not turn into the one request that leaks your IP.
+  const proxied = this._proxyMediaUrl ? this._proxyMediaUrl(src) : src;
+  if (proxied === null) img.setAttribute('data-mp-src', src);
+  else img.src = proxied;
   img.className = 'chat-image';
   img.alt = 'image';
   ph.replaceWith(img);
