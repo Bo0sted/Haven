@@ -1825,13 +1825,23 @@ _setupUI() {
     if (!this.currentChannel) return;
     const msgArea = document.getElementById('message-area');
     if (!msgArea || msgArea.style.display === 'none') return;
+    // An in-progress message edit owns Escape (it cancels the edit) and its
+    // handler sits on the textarea in the bubble phase, so this capture-phase
+    // listener would otherwise scroll away from — or, on a trimmed window,
+    // re-render out of existence — the box being typed into. Editing an old
+    // message is exactly the scrolled-up case, so check it first.
+    if (document.querySelector('.edit-textarea')) return;
     // getClientRects().length is 0 for hidden/display:none nodes — same popup
     // detection the type-to-focus guard uses above.
+    // The PiP DM, thread and pins panels each own Escape for their own input;
+    // jumping the main channel behind them is never what was meant. Haven's
+    // context menu is .channel-ctx-menu — there is no .context-menu element.
     const somethingOpen = [...document.querySelectorAll(
       '.modal-overlay, #quick-switcher-overlay, #theme-popup, #search-container, ' +
       '#search-results-panel, #image-lightbox, .image-lightbox, #emoji-picker, ' +
-      '#gif-picker, .context-menu, #emoji-dropdown, #slash-dropdown, ' +
-      '#mention-dropdown, #channel-dropdown, #persona-dropdown, #gif-slash-picker'
+      '#gif-picker, .channel-ctx-menu, #emoji-dropdown, #slash-dropdown, ' +
+      '#mention-dropdown, #channel-dropdown, #persona-dropdown, #gif-slash-picker, ' +
+      '#dm-pip-panel, #thread-panel, #pins-pip-panel'
     )].some(el => el.getClientRects().length > 0);
     if (somethingOpen) return;
     this._jumpToLatest();
