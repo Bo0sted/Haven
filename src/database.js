@@ -559,6 +559,16 @@ function initDatabase() {
     db.exec("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL");
   }
 
+  // ── Migration: display_name_locked (#5482) ────────────────
+  // Set when a moderator sets someone's display name, cleared when it is
+  // reset back to their username. Without it the moderated user just renames
+  // themselves again a minute later and the moderation action means nothing.
+  try {
+    db.prepare("SELECT display_name_locked FROM users LIMIT 0").get();
+  } catch {
+    db.exec("ALTER TABLE users ADD COLUMN display_name_locked INTEGER DEFAULT 0");
+  }
+
   // ── Migration: avatar column ──────────────────────────────
   try {
     db.prepare("SELECT avatar FROM users LIMIT 0").get();

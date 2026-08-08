@@ -7,7 +7,7 @@ const { generateConnectToken } = require('../auth');
 const { setEnvValue, isWritableKey } = require('../envStore');
 
 module.exports = function register(socket, ctx) {
-  const { io, db, state, getChannelRoleChain, userHasPermission,
+  const { io, db, state, getChannelRoleChain, userHasPermission, getUserEffectiveLevel,
           emitOnlineUsers, broadcastVoiceUsers, generateToken,
           touchVoiceActivity, enforceAutomod, DATA_DIR, logAudit, getAdminRoleDisplay } = ctx;
   const { channelUsers, voiceUsers } = state;
@@ -23,6 +23,18 @@ module.exports = function register(socket, ctx) {
     }
     if (!/^[a-zA-Z0-9_ ]+$/.test(newName)) {
       return socket.emit('error-msg', 'Letters, numbers, underscores, and spaces only');
+    }
+
+    // (#5482) A moderator-set display name holds. Otherwise the whole
+    // Manage Display Names permission is decorative — the moderated user
+    // renames themselves straight back and nothing has been moderated.
+    // Cleared when a moderator resets them to their username. Admins are
+    // never locked, so nobody can end up permanently stuck with a name.
+    if (!socket.user.isAdmin) {
+      const lock = db.prepare('SELECT display_name_locked FROM users WHERE id = ?').get(socket.user.id);
+      if (lock && lock.display_name_locked) {
+        return socket.emit('error-msg', 'A moderator set your display name — you cannot change it yourself');
+      }
     }
 
     // The charset above already rules out dots, so a display name cannot carry
@@ -757,8 +769,22 @@ module.exports = function register(socket, ctx) {
     const targetId = parseInt(data.targetId, 10);
     if (!Number.isFinite(targetId) || targetId <= 0) return;
 
-    const target = db.prepare('SELECT id, username, display_name FROM users WHERE id = ?').get(targetId);
+    const target = db.prepare('SELECT id, username, display_name, is_admin FROM users WHERE id = ?').get(targetId);
     if (!target) return socket.emit('error-msg', 'User not found');
+
+    // (#5482) Renaming someone is a moderation action, so it respects rank the
+    // same way kick, ban and mute do. Without this, anyone holding the
+    // permission could rename the server owner.
+    if (!socket.user.isAdmin) {
+      if (target.is_admin) {
+        return socket.emit('error-msg', 'You cannot change an admin\'s display name');
+      }
+      const myLevel = getUserEffectiveLevel(socket.user.id);
+      const targetLevel = getUserEffectiveLevel(targetId);
+      if (targetLevel >= myLevel) {
+        return socket.emit('error-msg', 'You cannot change the display name of someone at or above your level');
+      }
+    }
 
     const raw = typeof data.displayName === 'string' ? data.displayName.trim().replace(/\s+/g, ' ') : '';
     const oldName = target.display_name || target.username;
@@ -771,6 +797,10 @@ module.exports = function register(socket, ctx) {
       if (!/^[a-zA-Z0-9_ ]+$/.test(raw)) {
         return socket.emit('error-msg', 'Letters, numbers, underscores, and spaces only');
       }
+      // (#5482) Same automod pass a self-rename gets. The deny-list is what
+      // reserves impersonation-prone names like "Admin" / "Moderator", and
+      // holding this permission is no reason to be able to hand one out.
+      if (enforceAutomod(raw, { surface: 'profile' })) return;
       try {
         const conflict = db.prepare(`
           SELECT id FROM users
@@ -793,8 +823,14 @@ module.exports = function register(socket, ctx) {
       newDisplayCol = null;
     }
 
+    // (#5482) Lock while a moderator-set name is in force; a reset to the
+    // username hands control back. Admins are never locked (see rename-user),
+    // so this can't strand anyone.
+    const locked = raw ? 1 : 0;
+
     try {
-      db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(newDisplayCol, targetId);
+      db.prepare('UPDATE users SET display_name = ?, display_name_locked = ? WHERE id = ?')
+        .run(newDisplayCol, locked, targetId);
     } catch (err) {
       console.error('Global rename error:', err);
       return socket.emit('error-msg', 'Failed to update display name');
