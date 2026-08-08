@@ -9514,6 +9514,29 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   color: var(--text-primary);
 }
 
+/* A link in a DM whose domain the server's link policy does not allow.
+   Rendered as plain text instead of an anchor, since an encrypted DM is
+   ciphertext to the server and can only be judged here. (#5483) */
+.blocked-link {
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+  word-break: break-all;
+}
+.blocked-link-badge {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--danger, #e5534b);
+  border-radius: var(--radius);
+  color: var(--danger, #e5534b);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
 /* Spoiler toggle on a queued image thumbnail */
 .image-queue-spoiler {
   position: absolute;

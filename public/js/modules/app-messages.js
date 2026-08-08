@@ -199,6 +199,19 @@ async _sendMessage() {
       }
     }
 
+    // Warn before encrypting: once this is ciphertext the server cannot judge
+    // it, and the recipient's client will render the link inert. Telling the
+    // sender here saves them wondering why it arrived greyed out. This is a
+    // courtesy, not a control. Anyone running a patched client skips it, which
+    // is exactly why the enforcement that matters lives on the receiving side.
+    // (#5483)
+    if (partner) {
+      const verdict = this._dmLinkBlocked?.(content);
+      if (verdict) {
+        this._showToast(`${verdict.message} It will show as blocked for them.`, 'warning');
+      }
+    }
+
     if (partner) {
       try {
         const encrypted = await this.e2e.encrypt(content, partner.userId, partner.publicKeyJwk);
@@ -355,6 +368,9 @@ _renderMessages(messages, lastReadMessageId) {
   this._decryptE2EImages(container);
   // Wire up decryption-on-click for E2E file attachments (#5310, #5308)
   this._decryptE2EFiles(container);
+  // DMs are ciphertext server-side, so their links can only be judged
+  // here, after decryption and before anyone can click. (#5483)
+  if (this._isDmContainer((container))) this._enforceDmLinkPolicy((container));
   // Wire burn-after-read placeholders + countdowns (#5280)
   this._wireBurnMessages?.(container);
   // Mark as read (last message ID)
@@ -494,6 +510,9 @@ _prependMessages(messages) {
     this._setupVideos(el);
     this._decryptE2EImages(el);
     this._decryptE2EFiles(el);
+    // DMs are ciphertext server-side, so their links can only be judged
+    // here, after decryption and before anyone can click. (#5483)
+    if (this._isDmContainer((el))) this._enforceDmLinkPolicy((el));
     this._wireBurnMessages?.(el);
   }
 },
@@ -556,6 +575,9 @@ _appendMessages(messages) {
   this._setupVideos(container);
   this._decryptE2EImages(container);
   this._decryptE2EFiles(container);
+  // DMs are ciphertext server-side, so their links can only be judged
+  // here, after decryption and before anyone can click. (#5483)
+  if (this._isDmContainer((container))) this._enforceDmLinkPolicy((container));
   this._wireBurnMessages?.(container);
 
   // Mark as read so the server-side read position advances
@@ -620,6 +642,9 @@ _appendMessage(message, forceScroll = false) {
   this._setupVideos(msgEl);
   this._decryptE2EImages(msgEl);
   this._decryptE2EFiles(msgEl);
+  // DMs are ciphertext server-side, so their links can only be judged
+  // here, after decryption and before anyone can click. (#5483)
+  if (this._isDmContainer((msgEl))) this._enforceDmLinkPolicy((msgEl));
   this._wireBurnMessages?.(msgEl);
   if (wasAtBottom) {
     this._scrollToBottom(true);

@@ -3765,6 +3765,115 @@ _startEditMessage(msgEl, msgId) {
 },
 
 // ═══════════════════════════════════════════════════════
+// CLIENT-SIDE LINK POLICY (#5483, v3.44.0)
+// ═══════════════════════════════════════════════════════
+//
+// End-to-end encrypted DMs are ciphertext by the time they reach the server,
+// so the send-message automod path cannot see their links at all. The setting
+// existed and did nothing for them, which is worse than not having it.
+//
+// The recipient's client CAN see them, after decryption and before rendering,
+// and that is the check worth having. A hostile sender can run a patched
+// client and skip any check on their own side, but they cannot reach into the
+// recipient's browser and switch this off. So the enforcement that protects
+// the person at risk is the one that runs where the risk lands.
+//
+// The rules themselves come from /js/automod-rules.js, the same file the
+// server requires, so the two cannot drift into disagreeing.
+
+// Is this container showing DM content? Either the popped-out DM renderer
+// marked its messages, or the channel currently in view is a DM.
+_isDmContainer(containerEl) {
+  try {
+    if (containerEl && containerEl.querySelector('[data-dm-render="1"]')) return true;
+    const ch = (this.channels || []).find(c => c.code === this.currentChannel);
+    return !!(ch && ch.is_dm);
+  } catch { return false; }
+},
+
+_initLinkPolicy() {
+  this._linkPolicy = null;
+  const apply = (p) => { this._linkPolicy = p && p.enabled ? p : null; };
+  this.socket.on('link-policy', apply);
+  this.socket.emit('get-link-policy', null, apply);
+},
+
+// Returns null when the text is fine, or { rule, host, url, message }.
+// Safe to call before the policy has loaded: no policy means no verdict.
+_checkLinkPolicy(text) {
+  if (!this._linkPolicy || !window.HavenAutomodRules) return null;
+  try {
+    return window.HavenAutomodRules.checkText(text, this._linkPolicy);
+  } catch { return null; }
+},
+
+// True when links in this text should be rendered inert rather than clickable.
+// Applied to DM content specifically, since that is the path the server cannot
+// inspect. Channel messages were already blocked at send time.
+_dmLinkBlocked(text) {
+  if (!this._linkPolicy || !this._linkPolicy.scanDms) return null;
+  return this._checkLinkPolicy(text);
+},
+
+// Neutralise disallowed links in an already-rendered DM message container.
+//
+// Scoped to DMs on purpose. Channel messages were checked at send time, so
+// running this there would only ever affect history that predates the current
+// policy, and silently breaking old links nobody complained about is not a
+// trade worth making.
+//
+// Anchors become plain text with a warning; images from disallowed hosts
+// become a click-to-reveal placeholder rather than loading. The media proxy
+// already stops the IP leak, so this is about the click, not the fetch.
+_enforceDmLinkPolicy(containerEl) {
+  if (!containerEl) return;
+  const policy = this._linkPolicy;
+  const R = window.HavenAutomodRules;
+  if (!policy || !policy.scanDms || !R) return;
+
+  const hostBlocked = (rawUrl) => {
+    if (!rawUrl) return false;
+    try {
+      const u = new URL(rawUrl, location.href);
+      if (u.origin === location.origin) return false;   // our own uploads / proxy
+      return !R.checkHost(u.hostname, policy).allowed;
+    } catch { return false; }
+  };
+
+  containerEl.querySelectorAll('.message-content a[href]').forEach(a => {
+    if (a.dataset.policyChecked) return;
+    a.dataset.policyChecked = '1';
+    if (!hostBlocked(a.href)) return;
+
+    let host = a.href;
+    try { host = new URL(a.href).hostname; } catch {}
+    const span = document.createElement('span');
+    span.className = 'blocked-link';
+    span.title = `Links to ${host} are not allowed on this server, so this was not made clickable.`;
+    span.textContent = a.textContent;
+    const badge = document.createElement('span');
+    badge.className = 'blocked-link-badge';
+    badge.textContent = ' ⚠ blocked link';
+    span.appendChild(badge);
+    a.replaceWith(span);
+  });
+
+  containerEl.querySelectorAll('.message-content img[data-mp-origin], .message-content img.chat-image').forEach(img => {
+    if (img.dataset.policyChecked) return;
+    img.dataset.policyChecked = '1';
+    const origin = img.dataset.mpOrigin || img.getAttribute('data-mp-src') || img.src;
+    if (!hostBlocked(origin)) return;
+    const ph = document.createElement('span');
+    ph.className = 'hidden-image';
+    ph.setAttribute('role', 'button');
+    ph.tabIndex = 0;
+    ph.dataset.hiddenSrc = origin;
+    ph.textContent = '⚠ Image from a blocked domain — click to load anyway';
+    img.replaceWith(ph);
+  });
+},
+
+// ═══════════════════════════════════════════════════════
 // MEDIA PROXY (v3.43.0)
 // ═══════════════════════════════════════════════════════
 //
@@ -3812,11 +3921,15 @@ _proxyMediaUrl(url) {
 
 // Builds the src attribute for an <img>, deferring when necessary. Returns an
 // already-escaped attribute string.
+// data-mp-origin keeps the original remote URL alongside the proxied src, so
+// the DM link policy can judge the real host rather than the proxy URL that
+// always points back at us. (#5483)
 _imgSrcAttr(url) {
   const p = this._proxyMediaUrl(url);
-  return p !== null
+  const origin = /^https?:\/\//i.test(url || '') ? ` data-mp-origin="${this._escapeHtml(url)}"` : '';
+  return (p !== null
     ? `src="${this._escapeHtml(p)}"`
-    : `data-mp-src="${this._escapeHtml(url)}"`;
+    : `data-mp-src="${this._escapeHtml(url)}"`) + origin;
 },
 
 // Fill in any images that rendered before the token was available.

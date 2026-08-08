@@ -259,6 +259,8 @@ class HavenApp {
     this._mediaProxyEnabled = true;   // assume on: fail closed, not open
     this._mediaToken = null;
     this._loadMediaToken?.();
+    // Link policy for decrypted DM content (#5483). Requested once the socket
+    // exists, below, since it travels over the authenticated connection.
 
     this.socket = io({
       auth: { token: this.token },
@@ -276,6 +278,7 @@ class HavenApp {
     this._setupAvatarUpload();
 
     this._setupSocketListeners();
+    this._initLinkPolicy?.();
     this._setupUI();
     this._setupThemes();
     this._setupServerBar();

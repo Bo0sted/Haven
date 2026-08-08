@@ -254,7 +254,9 @@ module.exports = function register(socket, ctx) {
 
     // Automod caches its settings for 15s on the hot path; drop the cache so
     // an admin toggle takes effect on the very next message. (v3.42.0)
-    if (key.startsWith('automod_')) { try { automod.invalidate(); } catch { /* module optional */ } }
+    if (key.startsWith('automod_')) {
+      try { automod.invalidate(); _broadcastLinkPolicy(); } catch { /* module optional */ }
+    }
 
     // Audit: log the setting change. Skip per-user UI prefs that the
     // organize modal syncs constantly to avoid log spam.
@@ -1024,6 +1026,19 @@ module.exports = function register(socket, ctx) {
     return socket.user.isAdmin || userHasPermission(socket.user.id, 'manage_server');
   }
 
+  // Push the refreshed policy to every connected client. Called whenever the
+  // domain lists or the automod settings change, so a client's copy cannot
+  // sit stale and quietly allow something the admin has just blocked.
+  function _broadcastLinkPolicy() {
+    try {
+      const s = automod.settings();
+      const payload = automod.enabled()
+        ? Object.assign(automod.policy(), { enabled: true, scanDms: s.automod_scan_dms === 'true' })
+        : { enabled: false, mode: 'off', allow: [], deny: [], scanDms: false };
+      io.emit('link-policy', payload);
+    } catch { /* non-critical */ }
+  }
+
   function _emitDomains() {
     const rows = db.prepare(`
       SELECT d.domain, d.mode, d.include_subdomains, d.note, d.created_at,
@@ -1056,6 +1071,31 @@ module.exports = function register(socket, ctx) {
       console.error('clear-media-cache error:', err);
       socket.emit('error-msg', 'Failed to clear the media cache');
     }
+  });
+
+  // ── Link policy for clients (#5483, v3.44.0) ────────────
+  // End-to-end encrypted DMs reach the server as ciphertext, so the
+  // send-message path cannot see their links at all. The recipient's client
+  // can, once it decrypts. It needs the policy to make the same judgement the
+  // server would, so it gets the same allow/deny lists the server evaluates.
+  //
+  // Available to every authenticated user, not just admins: this is the input
+  // to a protection that runs on their own machine, and the domain lists are
+  // not secret. Nothing here reveals anything a member could not learn by
+  // posting a link and seeing whether it was blocked.
+  socket.on('get-link-policy', (data, callback) => {
+    const cb = typeof callback === 'function' ? callback : null;
+    let payload;
+    try {
+      const s = automod.settings();
+      payload = automod.enabled()
+        ? Object.assign(automod.policy(), { enabled: true, scanDms: s.automod_scan_dms === 'true' })
+        : { enabled: false, mode: 'off', allow: [], deny: [], scanDms: false };
+    } catch {
+      payload = { enabled: false, mode: 'off', allow: [], deny: [], scanDms: false };
+    }
+    if (cb) cb(payload);
+    socket.emit('link-policy', payload);
   });
 
   socket.on('get-automod-domains', () => {
@@ -1093,6 +1133,7 @@ module.exports = function register(socket, ctx) {
         'INSERT OR REPLACE INTO automod_domains (domain, mode, include_subdomains, note, added_by) VALUES (?, ?, ?, ?, ?)'
       ).run(host, mode, includeSubs, note, socket.user.id);
       automod.invalidate();
+      _broadcastLinkPolicy();
       socket.emit('error-msg', `${mode === 'deny' ? 'Blocked' : 'Allowed'} ${host}${includeSubs ? ' and its subdomains' : ''}`);
       logAudit({ actor: socket.user, action: 'automod_domain_add',
         target_type: 'domain', target_name: host, details: { mode, includeSubs, note } });
@@ -1111,6 +1152,7 @@ module.exports = function register(socket, ctx) {
     try {
       const info = db.prepare('DELETE FROM automod_domains WHERE domain = ?').run(host);
       automod.invalidate();
+      _broadcastLinkPolicy();
       if (info.changes > 0) {
         socket.emit('error-msg', `Removed ${host}`);
         logAudit({ actor: socket.user, action: 'automod_domain_remove',
