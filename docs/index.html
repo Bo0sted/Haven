@@ -1420,12 +1420,12 @@
       </div>
 
       <div class="download-card fade-in">
-        <h2>&#x2B21; Haven Server &mdash; v3.43.0</h2>
+        <h2>&#x2B21; Haven Server &mdash; v3.44.0</h2>
         <p class="download-version">Latest stable release &middot; Windows, macOS &amp; Linux &middot; ~5 MB</p>
 
         <div class="download-btn-group">
-          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.43.0.zip" class="btn btn-primary download-main">
-            <span class="icon">&#x2B07;</span> Download v3.43.0 (.zip)
+          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.0.zip" class="btn btn-primary download-main">
+            <span class="icon">&#x2B07;</span> Download v3.44.0 (.zip)
           </a>
           <div class="download-alt-links">
             <a href="https://github.com/ancsemi/Haven" target="_blank">&#9965; View on GitHub</a>
@@ -1442,7 +1442,11 @@
           <div class="version-list">
             <div class="version-list-inner">
               <div class="version-item">
-                <div><span class="v-name">v3.43.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Haven now loads images for your members instead of sending them to other sites, and the protections added in 3.42.0 are on by default.</strong> An image link in a message used to be fetched straight from wherever it was hosted, in every viewer&#39;s browser, which quietly handed that site the IP address of everyone who scrolled past. Haven fetches each image once, caches it, and serves it from your own server, so nobody&#39;s browser talks to anyone else. Old embeds also stop breaking when the original link expires. Auto-mod, the domain allowlist, the 24-hour hold on links from brand-new accounts, and the image cache all now default to on; the two settings that can actually break something, relay-only voice and automatic IP bans, stay off until you choose them. Also fixes two permission bugs: moderators holding the ban permission can now ban from the sidebar rather than only the admin members list, and the &quot;also ban IP&quot; permission can finally be granted to a role at all, having been missing from the role editor entirely. Thanks to @MutantRabbit767.</div>
+                <div><span class="v-name">v3.44.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>The auto-mod setting for direct messages now actually does something, and screen sharing stops tripping over itself.</strong> DMs are end-to-end encrypted, so the server cannot read them and never could block a link inside one, but the setting was there implying otherwise. The check now runs in the recipient&#39;s app after it decrypts: disallowed links appear as plain text with a warning instead of something clickable, and images from those domains are not loaded. On the screen-sharing side, a watchdog that asked for a renegotiation when a stream dropped frames could loop forever, because each renegotiation reset the counter that was meant to stop it. That is now capped and backed off. Double-clicking the share button no longer starts two shares at once, audio is given priority over video during the bandwidth spike when a share ramps up to 1080p (the cause of the robotic warble), and screen audio that arrives before its video no longer gets stuck in the voice mixer. Thanks to @birdcrazy and @RCCore.</div>
+                <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.0.zip">Download &rarr;</a>
+              </div>
+              <div class="version-item">
+                <div><span class="v-name">v3.43.0</span> &mdash; <strong>Haven now loads images for your members instead of sending them to other sites, and the protections added in 3.42.0 are on by default.</strong> An image link in a message used to be fetched straight from wherever it was hosted, in every viewer&#39;s browser, which quietly handed that site the IP address of everyone who scrolled past. Haven fetches each image once, caches it, and serves it from your own server, so nobody&#39;s browser talks to anyone else. Old embeds also stop breaking when the original link expires. Auto-mod, the domain allowlist, the 24-hour hold on links from brand-new accounts, and the image cache all now default to on; the two settings that can actually break something, relay-only voice and automatic IP bans, stay off until you choose them. Also fixes two permission bugs: moderators holding the ban permission can now ban from the sidebar rather than only the admin members list, and the &quot;also ban IP&quot; permission can finally be granted to a role at all, having been missing from the role editor entirely. Thanks to @MutantRabbit767.</div>
                 <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.43.0.zip">Download &rarr;</a>
               </div>
               <div class="version-item">

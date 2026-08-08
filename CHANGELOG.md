@@ -11,6 +11,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.44.0] — 2026-08-08
+
+### Fixed
+- **The "check direct messages" auto-mod setting did nothing for encrypted DMs (#5483).** DMs are end-to-end encrypted, so the server receives ciphertext and genuinely cannot read the links inside. The toggle existed anyway, which quietly promised protection it could not deliver. The check now runs in the recipient's app instead, after it decrypts and before anything is clickable: a link to a domain you have not allowed renders as plain text with a warning rather than a working link, and images from those domains are replaced with a click-to-load placeholder. Senders are told before the message goes out. The rules themselves moved into one file that both the server and the browser load, so the two cannot drift into disagreeing about what a link points at. The setting's description now explains what it actually does, including that it depends on the recipient's app implementing it. Thanks to @birdcrazy for catching it.
+- **Screen sharing could get stuck in a renegotiation loop (#5426).** When a share dropped frames, a watchdog asked the sharer to renegotiate after about six seconds. The renegotiation delivered a new stream, which restarted the watchdog with a fresh counter, so the give-up limit that was supposed to stop this was never reached. On a connection that was dropping frames for bandwidth reasons rather than signalling reasons, each renegotiation interrupted the stream and caused the next stall. Requests are now capped at three per sharer per two minutes with a widening gap between them, and the cap is cleared when a sharer deliberately starts a new share. Diagnosed by @RCCore from WebRTC-internals captures.
+- **Double-clicking the screen-share button started two shares at once (#5426).** The join-voice button has had a guard against this for a while; the screen-share button did not, so a double-click or a laggy UI could put two SDP negotiations in flight against each other and leave the stream stalled with garbled audio.
+- **Audio is now given priority over video during a screen share (#5426).** When a share ramps up to 1080p the encoder takes the whole uplink for a moment, audio packets queue behind it, and the browser fills the gap with synthesised samples, which is the robotic warble people hear. Audio is a fraction of video's bandwidth, so prioritising it costs the picture almost nothing and keeps speech intelligible through the ramp.
+- **Screen-share audio arriving before its video ended up in the voice mixer permanently.** Track order is not guaranteed, and the code meant to hold early audio until its video showed up was never actually reached, so that audio was filed as voice and stayed there. It is now held briefly and re-checked, falling back to voice if no video follows so nobody's speech can go missing.
+
 ## [3.43.0] — 2026-08-07
 
 ### Added
