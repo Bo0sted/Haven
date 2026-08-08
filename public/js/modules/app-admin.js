@@ -7,6 +7,10 @@ const ALL_PERMS = [
   // no matter what a moderator's role said. (v3.43.0)
   'pin_message', 'archive_messages', 'kick_user', 'mute_user', 'ban_user', 'ban_ip',
   'rename_channel', 'rename_sub_channel', 'set_channel_topic', 'manage_sub_channels',
+  // (#5467) Editing an existing channel's settings is its own grant, separate
+  // from creating channels. Assign it channel-scoped to keep a moderator's
+  // reach inside the channels they actually run.
+  'manage_channel_settings',
   'create_channel', 'create_temp_channel', 'upload_files', 'use_voice', 'use_tts', 'manage_webhooks', 'mention_everyone', 'view_history',
   'view_all_members', 'view_channel_members', 'manage_emojis', 'manage_stickers', 'manage_soundboard', 'manage_music_queue', 'promote_user',
   'manage_roles', 'manage_server', 'delete_channel', 'read_only_override', 'view_audit_log'
@@ -27,6 +31,7 @@ const PERM_LABELS = {
   get rename_sub_channel() { return t('permissions.rename_sub_channel'); },
   get set_channel_topic() { return t('permissions.set_channel_topic'); },
   get manage_sub_channels() { return t('permissions.manage_sub_channels'); },
+  get manage_channel_settings() { return t('permissions.manage_channel_settings'); },
   get create_channel() { return t('permissions.create_channel'); },
   get create_temp_channel() { return t('permissions.create_temp_channel'); },
   get upload_files() { return t('permissions.upload_files'); },

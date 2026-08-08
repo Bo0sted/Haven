@@ -369,6 +369,7 @@
     "rename_sub_channel": "Renommer des sous-salons",
     "set_channel_topic": "Définir le sujet du salon",
     "manage_sub_channels": "Gérer les sous-salons",
+    "manage_channel_settings": "Gérer les paramètres du salon",
     "create_channel": "Créer des salons",
     "upload_files": "Envoyer des fichiers",
     "use_voice": "Utiliser la voix",

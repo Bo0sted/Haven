@@ -63,13 +63,31 @@ module.exports = function register(socket, ctx) {
 
   // (#5424) Organizing a parent's sub-channels is sub-channel management, not
   // server administration. A user may do it if they hold manage_sub_channels
-  // for that parent (channel-scoped roles cascade onto the parent), or the
-  // server-wide create_channel permission. parentId === null means top-level /
-  // server structure, which still requires create_channel (or admin).
+  // for that parent (channel-scoped roles cascade onto the parent), or
+  // create_channel. parentId === null means top-level / server structure,
+  // which still requires a server-wide create_channel (or admin).
+  // (#5467) That create_channel check is now scoped to the parent being
+  // reorganized. A server-wide grant still passes everywhere — server-scoped
+  // roles are checked regardless of channelId — but a grant made on one
+  // specific channel no longer reaches every other channel's structure.
   const _canManageSubsOf = (parentId) =>
     socket.user.isAdmin ||
     (!!parentId && userHasPermission(socket.user.id, 'manage_sub_channels', parentId)) ||
-    userHasPermission(socket.user.id, 'create_channel');
+    userHasPermission(socket.user.id, 'create_channel', parentId || null);
+
+  // (#5467) Editing an existing channel's configuration — feature toggles,
+  // slow mode, voice limits, notification type, AFK, self-destruct, code
+  // settings — is channel management, not server administration. It used to
+  // gate on the server-wide create_channel permission, so anyone trusted to
+  // create a channel could also silence voice, arm a self-destruct timer, or
+  // flip a channel read-only anywhere on the server. manage_channel_settings
+  // is the dedicated grant, and it is always checked against the channel
+  // being edited: a channel-scoped assignment stays inside that channel and
+  // its sub-channels (via the role chain), while a server-wide one applies
+  // everywhere as before.
+  const _canManageSettingsOf = (channelId) =>
+    socket.user.isAdmin ||
+    userHasPermission(socket.user.id, 'manage_channel_settings', channelId);
 
   // ── Get user's channels ─────────────────────────────────
   socket.on('get-channels', () => {
@@ -802,7 +820,7 @@ module.exports = function register(socket, ctx) {
       return socket.emit('error-msg', 'Sub-channel not found');
     }
 
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'manage_sub_channels', channel.parent_channel_id) && !userHasPermission(socket.user.id, 'create_channel')) {
+    if (!_canManageSubsOf(channel.parent_channel_id)) {
       return socket.emit('error-msg', 'You don\'t have permission to delete sub-channels');
     }
 
@@ -823,8 +841,6 @@ module.exports = function register(socket, ctx) {
   // ── Channel feature toggles ─────────────────────────────
   socket.on('toggle-channel-permission', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) return socket.emit('error-msg', 'You don\'t have permission to toggle channel permissions');
-
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
 
@@ -834,6 +850,7 @@ module.exports = function register(socket, ctx) {
 
     const channel = db.prepare('SELECT * FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) return socket.emit('error-msg', 'You don\'t have permission to toggle channel permissions');
 
     const colMap = { streams: 'streams_enabled', music: 'music_enabled', media: 'media_enabled', voice: 'voice_enabled', text: 'text_enabled', read_only: 'read_only', soundboard: 'soundboard_enabled' };
     const colName = colMap[permission];
@@ -910,7 +927,6 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-slow-mode', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) return socket.emit('error-msg', 'You don\'t have permission to set slow mode');
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     const interval = parseInt(data.interval);
@@ -919,6 +935,7 @@ module.exports = function register(socket, ctx) {
     }
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) return socket.emit('error-msg', 'You don\'t have permission to set slow mode');
     try {
       db.prepare('UPDATE channels SET slow_mode_interval = ? WHERE id = ?').run(interval, channel.id);
       broadcastChannelLists();
@@ -990,7 +1007,6 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-sort-alphabetical', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) return socket.emit('error-msg', 'You don\'t have permission to change sort settings');
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     let sortVal = 0;
@@ -1000,6 +1016,7 @@ module.exports = function register(socket, ctx) {
     else if (data.mode === 'dynamic') sortVal = 4;
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) return socket.emit('error-msg', 'You don\'t have permission to change sort settings');
     try {
       db.prepare('UPDATE channels SET sort_alphabetical = ? WHERE id = ?').run(sortVal, channel.id);
       broadcastChannelLists();
@@ -1011,9 +1028,6 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-voice-user-limit', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) {
-      return socket.emit('error-msg', 'You don\'t have permission to change the voice user limit');
-    }
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     const limit = typeof data.limit === 'number' ? data.limit : parseInt(data.limit);
@@ -1023,6 +1037,9 @@ module.exports = function register(socket, ctx) {
     const normalizedLimit = (limit === 1) ? 0 : limit;
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) {
+      return socket.emit('error-msg', 'You don\'t have permission to change the voice user limit');
+    }
     try {
       db.prepare('UPDATE channels SET voice_user_limit = ? WHERE id = ?').run(normalizedLimit, channel.id);
       broadcastChannelLists();
@@ -1035,9 +1052,6 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-voice-bitrate', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) {
-      return socket.emit('error-msg', 'You don\'t have permission to change voice bitrate');
-    }
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     const bitrate = typeof data.bitrate === 'number' ? data.bitrate : parseInt(data.bitrate);
@@ -1047,6 +1061,9 @@ module.exports = function register(socket, ctx) {
     }
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) {
+      return socket.emit('error-msg', 'You don\'t have permission to change voice bitrate');
+    }
     try {
       db.prepare('UPDATE channels SET voice_bitrate = ? WHERE id = ?').run(bitrate, channel.id);
       broadcastChannelLists();
@@ -1060,13 +1077,13 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-channel-expiry', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) {
-      return socket.emit('error-msg', 'You don\'t have permission to set self-destruct timers');
-    }
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) {
+      return socket.emit('error-msg', 'You don\'t have permission to set self-destruct timers');
+    }
     // #5390 — second mode: 'clear' wipes messages periodically instead of
     // deleting the whole channel. Anything other than 'clear' is treated
     // as the legacy 'delete' behaviour so unknown values fail closed
@@ -1100,15 +1117,15 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-notification-type', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) {
-      return socket.emit('error-msg', 'You don\'t have permission to change channel notification type');
-    }
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     const type = typeof data.type === 'string' ? data.type : '';
     if (!['default', 'announcement'].includes(type)) return socket.emit('error-msg', 'Invalid notification type');
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found');
+    if (!_canManageSettingsOf(channel.id)) {
+      return socket.emit('error-msg', 'You don\'t have permission to change channel notification type');
+    }
     try {
       db.prepare('UPDATE channels SET notification_type = ? WHERE id = ?').run(type, channel.id);
       broadcastChannelLists();
@@ -1122,9 +1139,6 @@ module.exports = function register(socket, ctx) {
 
   socket.on('set-channel-afk', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) {
-      return socket.emit('error-msg', 'You don\'t have permission to change AFK settings');
-    }
     const code = typeof data.code === 'string' ? data.code.trim() : '';
     if (!code || !/^[a-f0-9]{8}$/i.test(code)) return;
     const subCode = typeof data.subCode === 'string' ? data.subCode.trim() : '';
@@ -1132,6 +1146,9 @@ module.exports = function register(socket, ctx) {
     if (!Number.isFinite(timeout) || timeout < 0 || timeout > 1440) return;
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0 AND parent_channel_id IS NULL').get(code);
     if (!channel) return socket.emit('error-msg', 'Channel not found or is a sub-channel');
+    if (!_canManageSettingsOf(channel.id)) {
+      return socket.emit('error-msg', 'You don\'t have permission to change AFK settings');
+    }
     if (subCode) {
       if (!/^[a-f0-9]{8}$/i.test(subCode)) return;
       const sub = db.prepare('SELECT id FROM channels WHERE code = ? AND parent_channel_id = ?').get(subCode, channel.id);
@@ -1331,13 +1348,13 @@ module.exports = function register(socket, ctx) {
   // ── Channel code settings ───────────────────────────────
   socket.on('update-channel-code-settings', (data) => {
     if (!data || typeof data !== 'object') return;
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'create_channel')) {
-      return socket.emit('error-msg', 'You don\'t have permission to change channel code settings');
-    }
     const channelId = typeof data.channelId === 'number' ? data.channelId : null;
     if (!channelId) return;
     const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
     if (!channel || channel.is_dm) return;
+    if (!_canManageSettingsOf(channel.id)) {
+      return socket.emit('error-msg', 'You don\'t have permission to change channel code settings');
+    }
     const validVisibility = ['public', 'private'];
     const validMode = ['static', 'dynamic'];
     const validRotationType = ['time', 'joins'];

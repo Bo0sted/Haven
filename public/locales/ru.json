@@ -390,6 +390,7 @@
     "rename_sub_channel": "Переименовывать подканалы",
     "set_channel_topic": "Устанавливать тему канала",
     "manage_sub_channels": "Управлять подканалами",
+    "manage_channel_settings": "Управлять настройками канала",
     "create_channel": "Создавать каналы",
     "create_temp_channel": "Создавать временные каналы",
     "upload_files": "Загружать файлы",

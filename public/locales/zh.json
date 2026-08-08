@@ -369,6 +369,7 @@
     "rename_sub_channel": "重命名子频道",
     "set_channel_topic": "设置频道话题",
     "manage_sub_channels": "管理子频道",
+    "manage_channel_settings": "管理频道设置",
     "create_channel": "创建频道",
     "upload_files": "上传文件",
     "use_voice": "使用语音聊天",

@@ -397,7 +397,7 @@ function initDatabase() {
   insertSetting.run('whitelist_enabled', 'false');     // whitelist toggle
   insertSetting.run('server_name', 'HAVEN');           // displayed in sidebar header + server bar
   insertSetting.run('server_icon', '');                // path to uploaded server icon image
-  insertSetting.run('permission_thresholds', '{"create_channel":50}');    // JSON: { permission: minLevel } — auto-grant perms at level
+  insertSetting.run('permission_thresholds', '{"create_channel":50,"manage_channel_settings":50}');    // JSON: { permission: minLevel } — auto-grant perms at level
   insertSetting.run('server_code', '');                // server-wide invite code (joins all channels)
   insertSetting.run('default_join_channels', '');       // (#5345) JSON array of channel IDs that server-code/vanity-code joiners get added to (empty = all public)
   insertSetting.run('registration_token_enabled', 'false'); // (#5344) require a token on the registration form
@@ -1258,6 +1258,68 @@ function initDatabase() {
     db.prepare('SELECT subcommands_json FROM bot_commands LIMIT 0').get();
   } catch {
     db.exec('ALTER TABLE bot_commands ADD COLUMN subcommands_json TEXT DEFAULT NULL');
+  }
+
+  // ── Migration: split manage_channel_settings out of create_channel (#5467) ──
+  // Editing an existing channel's settings used to ride on create_channel, so
+  // anyone who could make a channel could also reconfigure every other channel
+  // on the server. The two are now separate permissions. This backfill copies
+  // create_channel to manage_channel_settings everywhere it is currently
+  // granted, so no existing server loses a delegation on upgrade — admins who
+  // want the narrower behaviour untick the new permission afterward.
+  //
+  // Guarded by a marker key: without it, every restart would re-grant the
+  // permission an admin had deliberately removed.
+  try {
+    const marker = db.prepare(
+      "SELECT value FROM server_settings WHERE key = 'perm_split_manage_channel_settings'"
+    ).get();
+    if (!marker) {
+      const backfill = db.transaction(() => {
+        db.prepare(`
+          INSERT OR IGNORE INTO role_permissions (role_id, permission, allowed)
+          SELECT role_id, 'manage_channel_settings', 1 FROM role_permissions
+          WHERE permission = 'create_channel' AND allowed = 1
+        `).run();
+
+        // Per-user overrides carry their own scope (role_id / channel_id), and
+        // explicit denies matter as much as grants — copy both verbatim.
+        db.prepare(`
+          INSERT INTO user_role_perms (user_id, role_id, channel_id, permission, allowed)
+          SELECT user_id, role_id, channel_id, 'manage_channel_settings', allowed
+          FROM user_role_perms urp
+          WHERE urp.permission = 'create_channel'
+            AND NOT EXISTS (
+              SELECT 1 FROM user_role_perms x
+              WHERE x.user_id = urp.user_id
+                AND x.permission = 'manage_channel_settings'
+                AND COALESCE(x.channel_id, -1) = COALESCE(urp.channel_id, -1)
+            )
+        `).run();
+
+        // Level thresholds auto-grant permissions above a given role level.
+        // Haven ships create_channel at 50, which is what the default
+        // "Server Mod" role sits at — mirror it so those mods keep working.
+        const row = db.prepare(
+          "SELECT value FROM server_settings WHERE key = 'permission_thresholds'"
+        ).get();
+        if (row) {
+          const thresholds = JSON.parse(row.value);
+          if (thresholds.create_channel && !thresholds.manage_channel_settings) {
+            thresholds.manage_channel_settings = thresholds.create_channel;
+            db.prepare("UPDATE server_settings SET value = ? WHERE key = 'permission_thresholds'")
+              .run(JSON.stringify(thresholds));
+          }
+        }
+
+        db.prepare(
+          "INSERT OR IGNORE INTO server_settings (key, value) VALUES ('perm_split_manage_channel_settings', '1')"
+        ).run();
+      });
+      backfill();
+    }
+  } catch (e) {
+    console.warn('manage_channel_settings backfill failed:', e.message);
   }
 
   // ── Migration: chat threads (thread_id on messages) ─────

@@ -43,10 +43,11 @@ async switchChannel(code) {
   document.getElementById('channel-code-display').textContent = isDm ? '' : displayCode;
   document.getElementById('copy-code-btn').style.display = (isDm || isMaskedCode) ? 'none' : 'inline-flex';
 
-  // Show channel code settings gear for admins / users with create_channel on non-DM channels
+  // Show channel code settings gear for admins / users who can manage this
+  // channel's settings, on non-DM channels (#5467)
   const codeSettingsBtn = document.getElementById('channel-code-settings-btn');
   if (codeSettingsBtn) {
-    codeSettingsBtn.style.display = (!isDm && (this.user.isAdmin || this._hasPerm('create_channel'))) ? 'inline-flex' : 'none';
+    codeSettingsBtn.style.display = (!isDm && (this.user.isAdmin || this._hasPerm('manage_channel_settings'))) ? 'inline-flex' : 'none';
   }
 
   // Show the header actions box
@@ -373,10 +374,22 @@ _openChannelCtxMenu(code, btnEl) {
   // Show/hide admin-only items (also allow users with create_channel perm)
   const isAdmin = this.user && this.user.isAdmin;
   const canManageChannels = isAdmin || this._hasPerm('create_channel');
+  // (#5467) Channel Functions is gated on its own permission now, so a
+  // moderator who runs one channel can configure it without also holding
+  // create_channel. The check here is deliberately unscoped — the client only
+  // ever sees a flat permission list — so the server re-checks against the
+  // specific channel on every action.
+  const canManageSettings = isAdmin || this._hasPerm('manage_channel_settings');
   const isMod = isAdmin || this._canModerate();
   menu.querySelectorAll('.admin-only').forEach(el => {
     el.style.display = canManageChannels ? '' : 'none';
   });
+  const cfnCtxBtn = menu.querySelector('[data-action="channel-functions"]');
+  if (cfnCtxBtn) cfnCtxBtn.style.display = canManageSettings ? '' : 'none';
+  if (!canManageChannels && canManageSettings) {
+    const adminSeps = menu.querySelectorAll('hr.channel-ctx-sep.admin-only');
+    if (adminSeps[0]) adminSeps[0].style.display = '';
+  }
   // Webhook button: also accessible to users with manage_webhooks permission
   const webhooksCtxBtn = menu.querySelector('[data-action="webhooks"]');
   const canManageWebhooks = canManageChannels || this._hasPerm('manage_webhooks');
@@ -462,7 +475,7 @@ _openChannelCtxMenu(code, btnEl) {
     promoteBtn.style.display = (canManageChannels && ch.parent_channel_id) ? '' : 'none';
   }
   // Update Channel Functions panel with current channel values
-  if (canManageChannels) this._updateChannelFunctionsPanel(ch);
+  if (canManageSettings) this._updateChannelFunctionsPanel(ch);
   // Update mute label
   const muted = JSON.parse(localStorage.getItem('haven_muted_channels') || '[]');
   const muteBtn = menu.querySelector('[data-action="mute"]');
@@ -616,10 +629,17 @@ _updateChannelFunctionsPanel(ch) {
   this._setCfnBadge('read-only', isReadOnly, isReadOnly ? 'ON' : 'OFF');
   const interval = ch.slow_mode_interval || 0;
   this._setCfnBadge('slow-mode', interval > 0, interval > 0 ? `${interval}s` : 'OFF');
+  // (#5467) Cleanup protection and welcome messages are still admin-only on
+  // the server. Now that the panel opens for manage_channel_settings holders
+  // too, hide the rows they can't act on instead of letting the click bounce
+  // back as a permission error.
+  const isAdmin = !!this.user?.isAdmin;
+  const cleanupRow = document.querySelector('.cfn-row[data-fn="cleanup-exempt"]');
+  if (cleanupRow) cleanupRow.style.display = isAdmin ? '' : 'none';
   this._setCfnBadge('cleanup-exempt', ch.cleanup_exempt === 1, ch.cleanup_exempt === 1 ? 'ON' : 'OFF');
   // Welcome messages — text channels only, hide the row for DMs.
   const welcomeRow = document.querySelector('.cfn-row[data-fn="welcome"]');
-  if (welcomeRow) welcomeRow.style.display = ch.is_dm ? 'none' : '';
+  if (welcomeRow) welcomeRow.style.display = (ch.is_dm || !isAdmin) ? 'none' : '';
   this._setCfnBadge('welcome', ch.show_welcome === 1, ch.show_welcome === 1 ? 'ON' : 'OFF');
   // Streams and music greyed when voice is disabled (they depend on voice)
   const streamsRow = document.querySelector('.cfn-row[data-fn="streams"]');
@@ -643,9 +663,12 @@ _updateChannelFunctionsPanel(ch) {
   this._setCfnBadge('announcement', isAnnouncement, isAnnouncement ? 'ON' : 'OFF');
   // (#5389) Default role badge — show role name when set, else "None".
   // Hide for DMs since DMs have no role concept.
+  // (#5467) Setting a channel's default role hands out a role, so the server
+  // gates it on manage_roles — hide the row for anyone who lacks that.
+  const canSetDefaultRole = isAdmin || this._hasPerm('manage_roles');
   const defaultRoleRow = document.querySelector('.cfn-row[data-fn="default-role"]');
   if (defaultRoleRow) {
-    defaultRoleRow.style.display = ch.is_dm ? 'none' : '';
+    defaultRoleRow.style.display = (ch.is_dm || !canSetDefaultRole) ? 'none' : '';
     if (!ch.is_dm) {
       const drId = ch.default_role_id || null;
       const role = drId && Array.isArray(this._allRoles)

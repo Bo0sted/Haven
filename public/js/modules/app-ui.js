@@ -4854,7 +4854,7 @@ _setupServerBar() {
 
   // ── Channel Code Settings Modal ─────────────────────
   document.getElementById('channel-code-settings-btn')?.addEventListener('click', () => {
-    if (!this.currentChannel || (!this.user.isAdmin && !this._hasPerm('create_channel'))) return;
+    if (!this.currentChannel || (!this.user.isAdmin && !this._hasPerm('manage_channel_settings'))) return;
     const channel = this.channels.find(c => c.code === this.currentChannel);
     if (!channel || channel.is_dm) return;
 

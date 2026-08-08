@@ -412,6 +412,7 @@
     "rename_sub_channel": "Rename Sub-channels",
     "set_channel_topic": "Set Channel Topic",
     "manage_sub_channels": "Manage Sub-channels",
+    "manage_channel_settings": "Manage Channel Settings",
     "create_channel": "Create Channels",
     "create_temp_channel": "Create Temporary Channels",
     "upload_files": "Upload Files",
