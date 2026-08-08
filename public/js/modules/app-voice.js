@@ -458,6 +458,22 @@ _updateVoiceBar() {
 async _toggleScreenShare() {
   if (!this.voice.inVoice) return;
 
+  // Spam-click guard, mirroring the one _joinVoice has had for a while.
+  // Without it a double-click (or a laggy UI registering two triggers) ran
+  // shareScreen twice, which fired _createPeer twice within ~120ms and put two
+  // voice-offer SDP negotiations in flight against each other. The resulting
+  // glare shows up as a stalled stream and garbled audio. Reported with
+  // WebRTC-internals evidence by @RCCore. (#5426)
+  if (this._togglingScreenShare) return;
+  this._togglingScreenShare = true;
+  try {
+    await this._doToggleScreenShare();
+  } finally {
+    this._togglingScreenShare = false;
+  }
+},
+
+async _doToggleScreenShare() {
   // Block screen share if streams are disabled in this channel
   const _ssCh = this.channels.find(c => c.code === this.voice.currentChannel);
   if (_ssCh && _ssCh.streams_enabled === 0) {
@@ -1281,11 +1297,39 @@ _startStreamStallWatchdog(tileId, userId) {
     } else if (stalls === 4 && userId && userId !== this.user.id &&
                this.voice && this.voice.inVoice) {
       // ~6s. Re-attaching didn't help, so the problem is upstream of us.
-      console.warn('[Stream] Still no frames for', tileId, '— requesting renegotiate');
-      this.socket.emit('request-screen-renegotiate', {
-        code: this.voice.currentChannel,
-        sharerId: userId
-      });
+      //
+      // The budget below is the fix for the loop @RCCore identified (#5426).
+      // A renegotiation delivers a new stream, which re-arms this watchdog
+      // with stalls back at 0, so the `stalls >= 12` give-up further down was
+      // unreachable: every request reset the counter that was supposed to
+      // stop the requests. On a link that is dropping frames for bandwidth
+      // reasons rather than signalling reasons, each renegotiation interrupts
+      // the buffer and causes the very stall that triggers the next one.
+      //
+      // The budget lives on `this` keyed by sharer, so it survives re-arms,
+      // and it backs off rather than hammering at a fixed interval.
+      if (!this._renegBudget) this._renegBudget = {};
+      const now = Date.now();
+      const b = this._renegBudget[userId] || { count: 0, nextAllowed: 0, windowStart: now };
+      if (now - b.windowStart > 120000) { b.count = 0; b.windowStart = now; }
+
+      if (b.count >= 3) {
+        console.warn('[Stream] Renegotiate budget spent for', userId,
+          '— not asking again this window. The stream is likely bandwidth-starved, not stuck.');
+      } else if (now < b.nextAllowed) {
+        // Backing off; say nothing and let the next tick reconsider.
+      } else {
+        b.count++;
+        b.nextAllowed = now + (5000 * b.count);   // 5s, 10s, 15s
+        this._renegBudget[userId] = b;
+        console.warn('[Stream] Still no frames for', tileId, '— requesting renegotiate',
+          `(${b.count}/3 this window)`);
+        this.socket.emit('request-screen-renegotiate', {
+          code: this.voice.currentChannel,
+          sharerId: userId
+        });
+      }
+      this._renegBudget[userId] = b;
     } else if (stalls >= 12) {
       // ~18s of nothing after both recovery attempts. Stop burning a timer;
       // a fresh share or rejoin will re-arm this.

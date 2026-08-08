@@ -1376,6 +1376,13 @@ _setupUI() {
     this.notifications.playDirect('stream_start');
   };
 
+  // Clear the per-sharer renegotiation budget when they deliberately start a
+  // new share, so the loop guard from #5426 does not carry a spent budget
+  // over from a previous stream.
+  this.voice.onScreenShareRestart = (userId) => {
+    if (this._renegBudget) delete this._renegBudget[userId];
+  };
+
   // Wire up AFK auto-move
   this.voice.onAfkMove = (channelCode) => {
     this._showToast('Moved to AFK sub-channel due to inactivity', 'info');

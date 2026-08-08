@@ -707,6 +707,10 @@ class VoiceManager {
       this.screenSharers.add(data.userId);
       // New share — the previous one's delivery says nothing about this one.
       this._screenDelivered.delete(data.userId);
+      // A deliberate new share deserves a clean renegotiation budget; the
+      // cap exists to stop a loop on one stuck share, not to punish someone
+      // who stopped and started again. (#5426)
+      if (this.onScreenShareRestart) this.onScreenShareRestart(data.userId);
       // Play stream start notification sound
       if (this.onScreenShareStarted) {
         this.onScreenShareStarted(data.userId, data.username);
@@ -1722,7 +1726,35 @@ class VoiceManager {
           sender.setParameters(params).catch(() => {});
         }
       }
+      // Protect audio from the video ramp-up. (#5426)
+      this._prioritiseAudioSenders(connection);
     } catch (e) { /* setParameters not supported — adaptive bitrate remains */ }
+  }
+
+  // Mark every audio sender on this connection as high network priority.
+  //
+  // When a screen share negotiates up to 1080p the encoder ramps hard, and on
+  // a constrained uplink that burst takes the whole pipe for a moment. Audio
+  // packets queue behind it, arrive late, and NetEq fills the gap with
+  // concealment — which is the robotic warble people describe. @RCCore caught
+  // this in a WebRTC-internals dump: packetsLost jumping 4 -> 249 and
+  // concealedSamples going from 0 to over 100k as the share started.
+  //
+  // Audio is a few tens of kbps against several thousand for video, so giving
+  // it priority costs the video almost nothing and keeps speech intelligible
+  // through the ramp. Both the DSCP marking and the send-queue ordering follow
+  // from networkPriority.
+  _prioritiseAudioSenders(connection) {
+    try {
+      for (const sender of connection.getSenders()) {
+        if (!sender.track || sender.track.kind !== 'audio') continue;
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+        params.encodings[0].networkPriority = 'high';
+        params.encodings[0].priority = 'high';   // older Chromium spelling
+        sender.setParameters(params).catch(() => {});
+      }
+    } catch { /* unsupported — audio still flows, just without the hint */ }
   }
 
   /**
@@ -1978,6 +2010,28 @@ class VoiceManager {
         const streamHasVideo = sourceStream && sourceStream.getVideoTracks().length > 0;
         const knownAsScreen = sourceStream && knownScreenStreamIds.has(sourceStream.id);
         const isScreenAudio = knownAsScreen || (peerIsSharing && streamHasVideo);
+
+        // Track order across an m-section is not guaranteed: the audio of a
+        // screen share can arrive before its video, in which case none of the
+        // signals above have fired yet and this would be filed as voice
+        // permanently. deferredAudio existed for exactly this and was drained
+        // in the video branch, but nothing ever pushed into it, so the case
+        // was unreachable. Park it briefly instead, and fall back to voice if
+        // no video shows up — never silently drop someone's speech. (#5426)
+        const mayBeScreenAudio = !isScreenAudio && peerIsSharing && !streamHasVideo &&
+                                 sourceStream && sourceStream.id !== voiceStreamId;
+        if (mayBeScreenAudio) {
+          deferredAudio.push({ track, sourceStream });
+          setTimeout(() => {
+            const idx = deferredAudio.findIndex(d => d.track === track);
+            if (idx === -1) return;              // the video branch claimed it
+            deferredAudio.splice(idx, 1);
+            if (track.readyState !== 'live') return;
+            remoteAudioStream.addTrack(track);
+            this._playAudio(userId, remoteAudioStream);
+          }, 1500);
+          return;
+        }
 
         if (isScreenAudio) {
           this._playScreenAudio(userId, sourceStream);
