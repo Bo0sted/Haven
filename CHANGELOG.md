@@ -11,6 +11,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.44.1] — 2026-08-08
+
+### Fixed
+- **YouTube embeds showed "Error 153" instead of playing.** Since 3.41.0 Haven has told browsers not to say which page a request came from when they load something on another site, which is what stopped X from refusing to play its videos. YouTube wants the opposite: with nothing to identify the page hosting it, its player refuses to start. The two embeds Haven creates (chat links and the Listen Together player) now pass along just the server address, with no page path and no invite code, which is enough for YouTube and still keeps invite links out of it. Reported by @BolVerK.
+- **Thread replies skipped every message check (#5483).** The thread handler grew up beside the normal one and never picked up its checks, so a reply in a thread ignored the link policy, went through even while the sender was muted, ignored a channel being read-only, and had no length limit. Caught by @birdcrazy.
+- **Popped-out DMs did not show the link warnings (#5483).** The check that decides whether a view is a DM was looking for a marker that does not exist in the page, so a DM popped out over a normal channel was never recognised as a DM and its links were left clickable. Full-screen DMs were unaffected. Also caught by @birdcrazy.
+
 ## [3.44.0] — 2026-08-08
 
 ### Fixed
