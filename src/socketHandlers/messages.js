@@ -1806,6 +1806,33 @@ module.exports = function register(socket, ctx) {
     ).get(channel.id, socket.user.id);
     if (!tMember && !socket.user.isAdmin) return;
 
+    // ── Moderation controls (#5483) ───────────────────────
+    // This handler grew up alongside send-message but never picked up the
+    // checks that live there, so a thread reply was a way around all of them.
+    // @birdcrazy noticed links posting freely in threads; the mute bypass and
+    // the missing length cap were sitting in the same gap.
+    const tMaxRow = db.prepare("SELECT value FROM server_settings WHERE key = 'max_message_chars'").get();
+    const tMax = parseInt(tMaxRow?.value) || 2000;
+    if (content.length > tMax) {
+      return socket.emit('error-msg', `Message too long (max ${tMax} characters)`);
+    }
+
+    const tMute = db.prepare(
+      'SELECT expires_at FROM mutes WHERE user_id = ? AND expires_at > datetime(\'now\') ORDER BY expires_at DESC LIMIT 1'
+    ).get(socket.user.id);
+    if (tMute) {
+      const remaining = Math.ceil((new Date(tMute.expires_at + 'Z') - Date.now()) / 60000);
+      return socket.emit('error-msg', `You are muted for ${remaining} more minute${remaining !== 1 ? 's' : ''}`);
+    }
+
+    const tChannelRow = db.prepare('SELECT read_only FROM channels WHERE id = ?').get(channel.id);
+    if (tChannelRow && tChannelRow.read_only === 1 && !socket.user.isAdmin &&
+        !userHasPermission(socket.user.id, 'read_only_override', channel.id)) {
+      return socket.emit('error-msg', 'This channel is read-only');
+    }
+
+    if (enforceAutomod(content, { surface: 'message', channelId: channel.id })) return;
+
     const safeContent = sanitizeText(content);
     if (!safeContent) return;
 
