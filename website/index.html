@@ -1420,12 +1420,12 @@
       </div>
 
       <div class="download-card fade-in">
-        <h2>&#x2B21; Haven Server &mdash; v3.44.1</h2>
+        <h2>&#x2B21; Haven Server &mdash; v3.44.2</h2>
         <p class="download-version">Latest stable release &middot; Windows, macOS &amp; Linux &middot; ~5 MB</p>
 
         <div class="download-btn-group">
-          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.1.zip" class="btn btn-primary download-main">
-            <span class="icon">&#x2B07;</span> Download v3.44.1 (.zip)
+          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.2.zip" class="btn btn-primary download-main">
+            <span class="icon">&#x2B07;</span> Download v3.44.2 (.zip)
           </a>
           <div class="download-alt-links">
             <a href="https://github.com/ancsemi/Haven" target="_blank">&#9965; View on GitHub</a>
@@ -1442,7 +1442,11 @@
           <div class="version-list">
             <div class="version-list-inner">
               <div class="version-item">
-                <div><span class="v-name">v3.44.1</span><span class="v-tag latest">Latest</span> &mdash; <strong>YouTube embeds play again, and thread replies stopped skipping the message checks.</strong> Since 3.41.0 Haven has told browsers not to say which page a request came from when loading something on another site, which is what stopped X refusing to play its videos. YouTube wants the opposite and its player would not start, showing Error 153. Haven&#39;s two embeds now pass along just the server address, with no page path and no invite code, which suits both. Separately, replies posted in threads were ignoring the link policy, going through while the sender was muted, ignoring a read-only channel and having no length limit, because the thread handler never picked up the checks the normal one has. Popped-out DMs also were not showing link warnings, since the DM check was looking for a marker that is not in the page. Thanks to @BolVerK and @birdcrazy.</div>
+                <div><span class="v-name">v3.44.2</span><span class="v-tag latest">Latest</span> &mdash; <strong>Handing over admin now puts the new admin in every public channel.</strong> Admins cannot leave channels on purpose, so whoever runs the server can see what happens everywhere. A transfer quietly broke that: the incoming admin only had the channels they had already joined, with no way to add themselves to the rest. They now get all of them automatically. Hiding a channel from your own sidebar is a personal setting and still works.</div>
+                <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.2.zip">Download &rarr;</a>
+              </div>
+              <div class="version-item">
+                <div><span class="v-name">v3.44.1</span> &mdash; <strong>YouTube embeds play again, and thread replies stopped skipping the message checks.</strong> Since 3.41.0 Haven has told browsers not to say which page a request came from when loading something on another site, which is what stopped X refusing to play its videos. YouTube wants the opposite and its player would not start, showing Error 153. Haven&#39;s two embeds now pass along just the server address, with no page path and no invite code, which suits both. Separately, replies posted in threads were ignoring the link policy, going through while the sender was muted, ignoring a read-only channel and having no length limit, because the thread handler never picked up the checks the normal one has. Popped-out DMs also were not showing link warnings, since the DM check was looking for a marker that is not in the page. Thanks to @BolVerK and @birdcrazy.</div>
                 <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.1.zip">Download &rarr;</a>
               </div>
               <div class="version-item">

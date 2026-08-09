@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.44.2] — 2026-08-09
+
+### Fixed
+- **Transferring admin now adds the new admin to every public channel.** Admins deliberately cannot leave channels, so that whoever runs the server can see what happens in all of them. That guarantee quietly broke on a transfer: the incoming admin only had whatever channels they had already joined as a member, and no way to add themselves to the rest. They are now joined to all of them automatically. Hiding a channel from your own sidebar is a personal view setting and still works.
+
 ## [3.44.1] — 2026-08-08
 
 ### Fixed
