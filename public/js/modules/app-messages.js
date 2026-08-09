@@ -1512,7 +1512,15 @@ _fetchLinkPreviews(containerEl) {
       wrapper.style.setProperty('--lp-accent', '#ff0000');
       wrapper.innerHTML =
         this._embedHeaderHtml('YouTube', ytCollapsed) +
-        `<div class="lp-content"><div class="link-preview-yt"><iframe src="https://www.youtube.com/embed/${this._escapeHtml(ytVideoId)}?rel=0" width="100%" height="270" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></div>`;
+        // referrerpolicy is set per-iframe on purpose. Haven's document-level
+        // Referrer-Policy has defaulted to same-origin since 3.41.0, which
+        // sends NOTHING cross-origin. YouTube's embed player treats a missing
+        // referrer as a configuration failure and shows "Error 153" instead of
+        // the video. strict-origin-when-cross-origin gives it just the origin
+        // (scheme + host, no path and no query), which is enough for YouTube
+        // and still keeps invite codes out of the referrer, since those live
+        // in the query string. That was the whole reason for same-origin.
+        `<div class="lp-content"><div class="link-preview-yt"><iframe src="https://www.youtube.com/embed/${this._escapeHtml(ytVideoId)}?rel=0" width="100%" height="270" frameborder="0" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></div>`;
       this._wireEmbedControls(wrapper, url);
       msgContent.appendChild(wrapper);
       if (this._coupledToBottom) this._scrollToBottom(true);

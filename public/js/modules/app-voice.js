@@ -2318,7 +2318,11 @@ _handleMusicShared(data) {
   // We skip referrerpolicy=no-referrer so the IFrame API (enablejsapi) can
   // communicate with the parent window; the origin= param already handles
   // the "Video unavailable" issue that self-hosted instances used to trigger.
-  container.innerHTML = `<div class="music-embed-wrapper"><iframe id="music-iframe" src="${embedUrl}" width="100%" height="${iframeH}" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>${needsOverlay ? '<div class="music-embed-overlay"></div>' : ''}</div>`;
+  // Same per-iframe referrerpolicy as the chat YouTube embed. The document
+  // default (same-origin since 3.41.0) sends no referrer cross-origin, which
+  // YouTube reports as "Error 153" and other providers can reject too. The
+  // origin alone is enough for them and carries no invite code.
+  container.innerHTML = `<div class="music-embed-wrapper"><iframe id="music-iframe" src="${embedUrl}" width="100%" height="${iframeH}" frameborder="0" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>${needsOverlay ? '<div class="music-embed-overlay"></div>' : ''}</div>`;
   if (data.resolvedFrom === 'spotify') {
     label.textContent = `🎵 🟢 Spotify (via YouTube) — shared by ${data.username || 'someone'}`;
   } else {
