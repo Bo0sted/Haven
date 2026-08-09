@@ -851,6 +851,19 @@ module.exports = function register(socket, ctx) {
           db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(userId);
           db.prepare('UPDATE users SET is_admin = 0 WHERE id = ?').run(socket.user.id);
 
+          // Admins are deliberately not allowed to leave channels, so that
+          // whoever runs the server can see what happens in all of them. That
+          // guarantee quietly broke on transfer: the incoming admin only had
+          // whatever channels they had joined as an ordinary member, and there
+          // was no way for them to add themselves back to the rest. Join them
+          // to every non-DM channel so the new admin starts with the same
+          // visibility the old one had. Hiding a channel from your own sidebar
+          // is a per-user view setting and stays available.
+          db.prepare(`
+            INSERT OR IGNORE INTO channel_members (channel_id, user_id)
+            SELECT id, ? FROM channels WHERE is_dm = 0
+          `).run(userId);
+
           let formerAdminRole = db.prepare("SELECT id FROM roles WHERE name = 'Former Admin' AND level = 99").get();
           if (!formerAdminRole) {
             const r = db.prepare("INSERT INTO roles (name, level, scope, color) VALUES ('Former Admin', 99, 'server', '#e74c3c')").run();
