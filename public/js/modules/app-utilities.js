@@ -3123,6 +3123,9 @@ _appendDMPiPMessage(msg) {
   try { this._setupVideos?.(el); } catch {}
   try { this._decryptE2EImages?.(el); } catch {}
   try { this._decryptE2EFiles?.(el); } catch {}
+  // DM PiP is unambiguously a DM view, so enforce directly rather than
+  // routing through _isDmContainer. (#5483)
+  try { this._enforceDmLinkPolicy?.(el); } catch {}
   try { this._wireBurnMessages?.(el); } catch {}
   if (wasAtBottom) list.scrollTop = list.scrollHeight;
 },
@@ -3141,6 +3144,9 @@ _renderDMPiPHistory(messages) {
   try { this._setupVideos?.(list); } catch {}
   try { this._decryptE2EImages?.(list); } catch {}
   try { this._decryptE2EFiles?.(list); } catch {}
+  // DM PiP is unambiguously a DM view, so enforce directly rather than
+  // routing through _isDmContainer. (#5483)
+  try { this._enforceDmLinkPolicy?.(list); } catch {}
   try { this._wireBurnMessages?.(list); } catch {}
   list.scrollTop = list.scrollHeight;
 },
@@ -3507,6 +3513,7 @@ _appendThreadMessage(msg) {
   container.appendChild(el);
   try { this._decryptE2EImages?.(el); } catch {}
   try { this._decryptE2EFiles?.(el); } catch {}
+  try { if (this._isDmContainer(el)) this._enforceDmLinkPolicy?.(el); } catch {}
   try { this._setupVideos?.(el); } catch {}
   container.scrollTop = container.scrollHeight;
 },
@@ -3815,11 +3822,20 @@ _startEditMessage(msgEl, msgId) {
 // The rules themselves come from /js/automod-rules.js, the same file the
 // server requires, so the two cannot drift into disagreeing.
 
-// Is this container showing DM content? Either the popped-out DM renderer
-// marked its messages, or the channel currently in view is a DM.
+// Is this container showing DM content?
+//
+// The first version of this looked for a [data-dm-render] attribute that does
+// not exist: the DM PiP renderer marks a JS property on the message object,
+// not the DOM. So the only branch that ever fired was the current-channel
+// check, and a DM popped out over a normal channel was never recognised.
+// @birdcrazy caught it (#5483). Detect the PiP container by its actual id.
 _isDmContainer(containerEl) {
   try {
-    if (containerEl && containerEl.querySelector('[data-dm-render="1"]')) return true;
+    if (containerEl) {
+      if (containerEl.id === 'dm-pip-messages') return true;
+      if (containerEl.closest && containerEl.closest('#dm-pip-messages, #dm-pip')) return true;
+      if (containerEl.querySelector && containerEl.querySelector('#dm-pip-messages')) return true;
+    }
     const ch = (this.channels || []).find(c => c.code === this.currentChannel);
     return !!(ch && ch.is_dm);
   } catch { return false; }
