@@ -612,6 +612,27 @@ _setCfnBadge(fn, isOn, text) {
   badge.className = 'cfn-badge ' + (isOn ? 'cfn-on' : 'cfn-off');
 },
 
+// Undo the last optimistic Channel Functions toggle. Rows apply their new
+// value immediately so the switch feels instant, but the server is free to
+// refuse: it replies with error-msg and never broadcasts a channel list, so
+// nothing else would ever correct the row. Called from the error-msg handler;
+// the saved values are cleared by channels-list, which is what a server that
+// accepted the change sends back.
+_revertPendingChannelToggle() {
+  const pending = this._cfnPendingToggle;
+  if (!pending) return;
+  this._cfnPendingToggle = null;
+  // Only errors that answer the click we just made are ours to act on.
+  if (Date.now() - pending.at > 5000) return;
+  const ch = (this.channels || []).find(c => c.code === pending.code);
+  if (!ch) return;
+  Object.assign(ch, pending.prev);
+  const panel = document.getElementById('channel-functions-panel');
+  if (panel && panel.style.display !== 'none' && this._ctxMenuChannel === pending.code) {
+    this._updateChannelFunctionsPanel(ch);
+  }
+},
+
 _updateChannelFunctionsPanel(ch) {
   if (!ch) return;
   // Voice & text toggles

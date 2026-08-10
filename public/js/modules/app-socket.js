@@ -601,6 +601,9 @@ _setupSocketListeners() {
   this.socket.on('channels-list', (channels) => {
     // (#5391) Cancel the channels-not-arriving watchdog
     this._channelsListGotResponse = true;
+    // Fresh authoritative state — an optimistic Channel Functions toggle that
+    // was still awaiting a verdict has just been accepted, so drop its undo.
+    this._cfnPendingToggle = null;
     if (this._channelsWatchdog) {
       clearTimeout(this._channelsWatchdog);
       this._channelsWatchdog = null;
@@ -1348,6 +1351,9 @@ _setupSocketListeners() {
   });
 
   this.socket.on('error-msg', (msg) => {
+    // A refused channel-functions toggle arrives here and nowhere else, so
+    // this is the only chance to put the row back where it was.
+    this._revertPendingChannelToggle();
     this._showToast(msg, 'error');
   });
 

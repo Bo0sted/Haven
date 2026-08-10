@@ -413,9 +413,19 @@ _setupUI() {
     if (!code) return;
     const ch = this.channels.find(c => c.code === code);
 
-    // Helper: optimistically update ch, re-render panel
+    // Helper: optimistically update ch, re-render panel.
+    // The server can still refuse the change — a permission it doesn't grant,
+    // or a rule like "enable voice first" — and it answers a refusal with
+    // error-msg and no new channel state. Remember what the row held before
+    // the click so _revertPendingChannelToggle can put it back; without that
+    // the switch sat on its new value while the toast said it hadn't moved.
     const optimistic = (patch) => {
-      if (ch) Object.assign(ch, patch);
+      if (ch) {
+        const prev = {};
+        for (const key of Object.keys(patch)) prev[key] = ch[key];
+        this._cfnPendingToggle = { code, prev, at: Date.now() };
+        Object.assign(ch, patch);
+      }
       this._updateChannelFunctionsPanel(ch);
     };
 
