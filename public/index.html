@@ -44,11 +44,42 @@
           <small style="color:var(--text-muted)" data-i18n="auth.login.admin_recover_hint">Enter your admin credentials above and click Recover</small><br>
           <button type="button" class="btn-primary" id="admin-recover-btn" data-i18n="auth.login.admin_recover_btn" style="margin-top:6px;font-size:0.85rem;padding:6px 16px">Recover Admin Access</button>
         </div>
+        <!-- (#12) SSO — only shown when the server has OIDC configured -->
+        <div id="oidc-login-section" style="display:none;text-align:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-color,#333)">
+          <button type="button" class="btn-secondary" id="oidc-login-btn" style="font-size:0.9rem;padding:8px 18px">Sign in with SSO</button>
+        </div>
         <!-- (#5381) Guest login — only shown when the server has guests enabled -->
         <div id="guest-login-section" style="display:none;text-align:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-color,#333)">
           <small style="color:var(--text-muted);display:block;margin-bottom:6px">No account? Just want to look around?</small>
           <button type="button" class="btn-secondary" id="guest-login-show-btn" style="font-size:0.9rem;padding:8px 18px">Join as Guest</button>
         </div>
+      </form>
+
+      <!-- (#12) Encryption passphrase for SSO accounts.
+           Signing in through a provider means no password is ever typed into
+           Haven, and the private key that decrypts DMs is wrapped with a key
+           derived from exactly that. So SSO users pick a separate passphrase
+           here. It never leaves this page: it is stretched with PBKDF2 and only
+           the derived key is kept, for this session. -->
+      <form id="e2e-pass-form" class="auth-form" style="display:none">
+        <h3 id="e2e-pass-title" style="text-align:center;margin-bottom:6px;font-size:1.05rem">Set an encryption passphrase</h3>
+        <p id="e2e-pass-blurb" style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-bottom:14px">
+          Your private messages are encrypted with a key only you hold. Signing in with SSO means Haven never sees a
+          password to protect it with, so pick a passphrase. You will need it again on any other device.
+        </p>
+        <div class="form-group">
+          <label for="e2e-pass-input">Passphrase</label>
+          <input type="password" id="e2e-pass-input" autocomplete="new-password" minlength="8" maxlength="128" required>
+          <small id="e2e-pass-hint">At least 8 characters. Nobody can reset this for you, including the server admin.</small>
+        </div>
+        <div class="form-group" id="e2e-pass-confirm-group">
+          <label for="e2e-pass-confirm">Confirm passphrase</label>
+          <input type="password" id="e2e-pass-confirm" autocomplete="new-password" minlength="8" maxlength="128">
+        </div>
+        <button type="submit" class="btn-primary" id="e2e-pass-submit">Continue</button>
+        <p style="text-align:center;margin-top:10px">
+          <a href="#" id="e2e-pass-skip" style="font-size:0.85rem;color:var(--text-muted)">Skip for now</a>
+        </p>
       </form>
 
       <!-- (#5381) Guest username prompt — appears after clicking Join as Guest -->

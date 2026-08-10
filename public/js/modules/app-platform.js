@@ -976,6 +976,17 @@ _showE2EPasswordModal() {
   submitBtn.disabled = false;
   submitBtn.textContent = 'Unlock';
 
+  // (#12) An SSO account has no Haven password — its key is wrapped with the
+  // separate encryption passphrase set at first sign-in. Ask for that instead,
+  // or the prompt tells the user to enter a password they do not have.
+  if (this.user?.isSso) {
+    const titleEl = modal.querySelector('h3 span');
+    const descEl = modal.querySelector('.e2e-pw-desc');
+    if (titleEl) titleEl.textContent = 'Passphrase Required';
+    if (descEl) descEl.textContent = 'Enter the encryption passphrase you set when you first signed in, to unlock your private messages on this device.';
+    input.placeholder = 'Enter your encryption passphrase';
+  }
+
   // Check rate limit
   const now = Date.now();
   this._e2ePwAttempts = (this._e2ePwAttempts || []).filter(t => now - t < 60_000);
@@ -1027,13 +1038,18 @@ async _submitE2EPassword() {
   errorEl.style.display = 'none';
 
   try {
-    // Verify password on server
-    const resp = await fetch('/api/auth/verify-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: this.user.username, password })
-    });
-    const data = await resp.json();
+    // (#12) SSO accounts have nothing on the server to check this against —
+    // the passphrase is deliberately never sent anywhere, so the server has no
+    // copy and no hash of it. Unwrapping the key IS the check: a wrong
+    // passphrase fails the AES-GCM auth tag below, and init() leaves the
+    // existing backup untouched rather than regenerating over it.
+    const data = this.user?.isSso
+      ? { valid: true }
+      : await (await fetch('/api/auth/verify-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: this.user.username, password })
+        })).json();
 
     if (!data.valid) {
       const remaining = 5 - this._e2ePwAttempts.length;

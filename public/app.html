@@ -2075,6 +2075,38 @@
         </div>
         <div class="admin-settings" id="section-security" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🔒 <span data-i18n="settings.admin.security_title">Security</span></h5>
+
+          <!-- (#12) SSO / OIDC -->
+          <small class="settings-group-label" style="margin-top:8px;display:block">🔑 <span data-i18n="settings.admin.oidc_group">Single sign-on (OIDC)</span></small>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.oidc_desc">Let members sign in with an account from your own identity provider (Authentik, Keycloak, Authelia, Auth0 and anything else that speaks OpenID Connect) instead of a Haven password. Fill in the issuer address and client ID here, then put the client secret in your .env file as OIDC_CLIENT_SECRET and restart. The secret is deliberately kept out of the database so your backups never carry it. Register this address with your provider as the redirect URI: <code>https://your-haven-address/api/auth/oidc/callback</code></small>
+          <small class="settings-hint" style="display:block;margin-top:6px" data-i18n="settings.admin.oidc_e2e_note">Encrypted DMs are unlocked by a key derived from what you type when you sign in, and an SSO member never types a password here. They are asked to set a separate encryption passphrase on their first sign-in, and for it again on each new device. Nobody, including you, can reset that passphrase for them.</small>
+          <label class="toggle-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.oidc_enabled_label">Enable SSO sign-in</span>
+            <input type="checkbox" id="oidc-enabled">
+          </label>
+          <label class="select-row" style="margin-top:6px">
+            <span data-i18n="settings.admin.oidc_issuer_label">Issuer URL</span>
+            <input type="text" id="oidc-issuer-url" placeholder="https://auth.example.com" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="select-row" style="margin-top:6px">
+            <span data-i18n="settings.admin.oidc_client_id_label">Client ID</span>
+            <input type="text" id="oidc-client-id" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="select-row" style="margin-top:6px">
+            <span data-i18n="settings.admin.oidc_scopes_label">Scopes</span>
+            <input type="text" id="oidc-scopes" placeholder="openid profile email" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="select-row" style="margin-top:6px">
+            <span data-i18n="settings.admin.oidc_button_label_label">Button text</span>
+            <input type="text" id="oidc-button-label" placeholder="Sign in with SSO" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="toggle-row" style="margin-top:6px">
+            <span data-i18n="settings.admin.oidc_create_users_label">Create a Haven account on first sign-in</span>
+            <input type="checkbox" id="oidc-create-users" checked>
+          </label>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.oidc_create_users_hint">Off means only people who already have a Haven account linked to your provider can sign in this way. Since linking an existing account is not built yet, leaving this off will turn away everyone new.</small>
+          <div id="oidc-secret-warning" class="settings-hint" style="display:none;margin-top:6px;color:var(--warning,#e0a800)">OIDC_CLIENT_SECRET is not set in the server environment, so the sign-in button stays hidden until it is.</div>
+
           <small class="settings-group-label" style="margin-top:8px;display:block">🔗 <span data-i18n="settings.admin.referrer_policy_group">Referrer configuration</span></small>
           <small class="settings-hint" style="display:block" data-i18n="settings.admin.referrer_policy_desc">Sets the Referrer-Policy header Haven sends to browsers, which controls how much of the current page's address is shared when the browser loads resources or follows links to other sites. The recommended options cover almost every server; the advanced policies are standard browser values left to your discretion. Policies that would send the full page address to other sites are not offered, because Haven invite links live in that address.</small>
           <ul class="settings-hint" style="margin:6px 0 0;padding-left:20px">

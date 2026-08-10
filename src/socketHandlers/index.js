@@ -1334,7 +1334,7 @@ function setupSocketHandlers(io, db, opts = {}) {
 
     try {
       // created_at feeds the automod new-account link gate (v3.42.0).
-      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, password_version, is_guest, created_at FROM users WHERE id = ?').get(user.id);
+      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, password_version, is_guest, created_at, oidc_subject FROM users WHERE id = ?').get(user.id);
       if (!uRow || uRow.username !== user.username) {
         return next(new Error('Session expired'));
       }
@@ -1348,6 +1348,9 @@ function setupSocketHandlers(io, db, opts = {}) {
       socket.user.avatar_shape = uRow.avatar_shape || 'circle';
       socket.user.isGuest = !!uRow.is_guest;
       socket.user.createdAt = uRow.created_at || null;
+      // (#12) The client needs this to ask for the right secret: an SSO
+      // account unlocks E2E with its encryption passphrase, not a password.
+      socket.user.isSso = !!uRow.oidc_subject;
 
       const anyAdmin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
       if (!anyAdmin && uRow.username.toLowerCase() === ADMIN_USERNAME && !uRow.is_admin) {
@@ -1444,6 +1447,7 @@ function setupSocketHandlers(io, db, opts = {}) {
     socket.emit('session-info', {
       id: socket.user.id, username: socket.user.username,
       isAdmin: socket.user.isAdmin,
+      isSso: !!socket.user.isSso,
       displayName: socket.user.displayName,
       avatar: socket.user.avatar || null,
       avatarShape: socket.user.avatar_shape || 'circle',

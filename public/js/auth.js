@@ -20,8 +20,24 @@
   })();
   const _appUrl = '/app' + _appQuery;
 
+  // (#12) A returning SSO callback stashes its session here and bounces to
+  // this page. Claim it before the already-logged-in check below, so an old
+  // token in localStorage can't send us to the app and strand a fresh login
+  // that still has to set up its encryption passphrase.
+  let _oidcHandoff = null;
+  if (_urlParams.get('oidc') === '1') {
+    try {
+      const raw = sessionStorage.getItem('haven_oidc_handoff');
+      sessionStorage.removeItem('haven_oidc_handoff');
+      if (raw) _oidcHandoff = JSON.parse(raw);
+    } catch { /* malformed handoff — fall through to the normal login page */ }
+    history.replaceState({}, '', window.location.pathname);
+  }
+  const _oidcError = _urlParams.get('oidc_error') || '';
+  if (_oidcError) history.replaceState({}, '', window.location.pathname);
+
   // If already logged in, redirect to app
-  if (localStorage.getItem('haven_token')) {
+  if (!_oidcHandoff && localStorage.getItem('haven_token')) {
     window.location.href = _appUrl;
     return;
   }
@@ -956,6 +972,20 @@
     } catch { /* ignore */ }
   })();
 
+  // ── (#12) SSO button — only when the server reports OIDC usable ──
+  (async () => {
+    try {
+      const r = await fetch('/api/public-config');
+      if (!r.ok) return;
+      const cfg = await r.json();
+      if (!cfg || !cfg.oidc_enabled) return;
+      const sec = document.getElementById('oidc-login-section');
+      const btn = document.getElementById('oidc-login-btn');
+      if (btn && cfg.oidc_button_label) btn.textContent = cfg.oidc_button_label;
+      if (sec) sec.style.display = '';
+    } catch { /* ignore */ }
+  })();
+
   const guestShowBtn = document.getElementById('guest-login-show-btn');
   const guestForm = document.getElementById('guest-form');
   const guestBackBtn = document.getElementById('guest-back-btn');
@@ -1007,6 +1037,88 @@
       } catch {
         showError(t('auth.errors.connection_error'));
       }
+    });
+  }
+
+  /* ── SSO / OIDC (#12) ─────────────────────────────────
+     Two halves. The button just leaves for the provider. Coming back, the
+     server has already handed us a session, and the only thing left is the
+     encryption passphrase: an SSO user types no password into Haven, so
+     there is nothing to derive the private-key wrapping key from. We ask for
+     a passphrase, stretch it exactly like a password (same PBKDF2 salt and
+     iteration count), and drop the result into the same sessionStorage slot
+     the password path uses — so everything downstream is unchanged. */
+
+  const OIDC_ERRORS = {
+    cancelled: 'Sign-in was cancelled.',
+    disabled: 'SSO is not enabled on this server.',
+    no_account: 'No Haven account is linked to that sign-in, and this server does not create them automatically.',
+    banned: 'That account is banned from this server.',
+    expired: 'That sign-in took too long. Please try again.',
+    provider_unreachable: 'Could not reach the SSO provider. Ask your admin to check the server settings.',
+  };
+  if (_oidcError) showError(OIDC_ERRORS[_oidcError] || 'SSO sign-in failed. Please try again.');
+
+  const oidcBtn = document.getElementById('oidc-login-btn');
+  if (oidcBtn) {
+    oidcBtn.addEventListener('click', () => {
+      oidcBtn.disabled = true;
+      window.location.href = '/api/auth/oidc/start';
+    });
+  }
+
+  if (_oidcHandoff && _oidcHandoff.token) {
+    const passForm = document.getElementById('e2e-pass-form');
+    const passInput = document.getElementById('e2e-pass-input');
+    const confirmGroup = document.getElementById('e2e-pass-confirm-group');
+    const confirmInput = document.getElementById('e2e-pass-confirm');
+    const titleEl = document.getElementById('e2e-pass-title');
+    const blurbEl = document.getElementById('e2e-pass-blurb');
+    const hintEl = document.getElementById('e2e-pass-hint');
+
+    const finish = (wrapKey) => {
+      if (wrapKey) sessionStorage.setItem('haven_e2e_wrap', wrapKey);
+      else sessionStorage.removeItem('haven_e2e_wrap');
+      localStorage.setItem('haven_token', _oidcHandoff.token);
+      localStorage.setItem('haven_user', JSON.stringify(_oidcHandoff.user));
+      window.location.href = _appUrl;
+    };
+
+    // Hide every other form and show the passphrase step.
+    document.querySelectorAll('.auth-form').forEach(f => { f.style.display = 'none'; });
+    document.querySelector('.auth-tabs')?.style.setProperty('display', 'none');
+    passForm.style.display = 'block';
+
+    // Returning on a second device: the key already exists on the server, so
+    // this is an unlock, not a setup. No confirm field, different wording.
+    if (_oidcHandoff.e2eReady) {
+      titleEl.textContent = 'Enter your encryption passphrase';
+      blurbEl.textContent = 'This device needs the passphrase you set when you first signed in, to unlock your private messages.';
+      hintEl.textContent = 'Wrong passphrase? Your other devices keep working — nothing is overwritten.';
+      confirmGroup.style.display = 'none';
+      confirmInput.removeAttribute('required');
+      passInput.setAttribute('autocomplete', 'current-password');
+    }
+
+    passForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
+      const pass = passInput.value;
+      if (!pass || pass.length < 8) return showError('Passphrase must be at least 8 characters.');
+      if (!_oidcHandoff.e2eReady && pass !== confirmInput.value) {
+        return showError('The two passphrases do not match.');
+      }
+      // Only the derived key is kept. The passphrase itself never leaves this
+      // function, and never goes to the server in any form.
+      finish(await deriveE2EWrappingKey(pass));
+    });
+
+    document.getElementById('e2e-pass-skip').addEventListener('click', (ev) => {
+      ev.preventDefault();
+      // Same state as any auto-login without a password: the app runs, and DMs
+      // stay locked on this device until the passphrase is supplied. Nothing
+      // is generated or overwritten, so no history is lost by skipping.
+      finish(null);
     });
   }
 })();

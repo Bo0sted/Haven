@@ -372,6 +372,76 @@ router.post('/guest-login', authLimiter, async (req, res) => {
   }
 });
 
+/**
+ * Everything a brand-new account needs beyond its row in `users`: the roles an
+ * admin flagged auto_assign (without them a new member can be left unable to
+ * see any channel), plus the persistent welcome message.
+ *
+ * Shared by local registration and OIDC first-login (#12) so a federated user
+ * lands in exactly the same state as someone who signed up with a password.
+ * Every step is best-effort — none of it is worth failing a signup over.
+ */
+function provisionNewUser(db, userId, username, io) {
+  // Auto-assign roles flagged as auto_assign to new users
+  try {
+    const autoRoles = db.prepare("SELECT id FROM roles WHERE auto_assign = 1 AND scope = 'server'").all();
+    const insertRole = db.prepare('INSERT OR IGNORE INTO user_roles (user_id, role_id, channel_id, granted_by) VALUES (?, ?, NULL, NULL)');
+    for (const role of autoRoles) {
+      insertRole.run(userId, role.id);
+      // Grant linked channel access for this role (fixes #79)
+      try {
+        const r = db.prepare('SELECT link_channel_access FROM roles WHERE id = ?').get(role.id);
+        if (r && r.link_channel_access) {
+          const grantChannels = db.prepare(
+            'SELECT channel_id FROM role_channel_access WHERE role_id = ? AND grant_on_promote = 1'
+          ).all(role.id);
+          const ins = db.prepare('INSERT OR IGNORE INTO channel_members (channel_id, user_id) VALUES (?, ?)');
+          for (const ch of grantChannels) ins.run(ch.channel_id, userId);
+        }
+      } catch { /* non-critical */ }
+    }
+  } catch { /* non-critical */ }
+
+  // ── Persistent welcome message ─────────────────────────
+  // Post a saved welcome message to every channel flagged show_welcome, so a
+  // new member gets a permanent, consistent welcome that stays in history for
+  // everyone (replacing the old live-only flash that vanished on reload and
+  // only showed to whoever happened to be watching that channel). Gated on
+  // the admin welcome_message template — an empty template turns it off.
+  try {
+    const wmRow = db.prepare("SELECT value FROM server_settings WHERE key = 'welcome_message'").get();
+    const template = wmRow && typeof wmRow.value === 'string' ? wmRow.value.trim() : '';
+    if (template) {
+      const welcomeText = template.replace(/\{user\}/gi, username).slice(0, 500);
+      const welcomeChannels = db.prepare(
+        'SELECT id, code FROM channels WHERE is_dm = 0 AND show_welcome = 1'
+      ).all();
+      if (welcomeChannels.length) {
+        const insertWelcome = db.prepare(
+          "INSERT INTO messages (channel_id, user_id, content, type) VALUES (?, ?, ?, 'welcome')"
+        );
+        for (const ch of welcomeChannels) {
+          const info = insertWelcome.run(ch.id, userId, welcomeText);
+          if (io) {
+            io.to(`channel:${ch.code}`).emit('welcome-message', {
+              channelCode: ch.code,
+              message: {
+                id: info.lastInsertRowid,
+                user_id: userId,
+                content: welcomeText,
+                type: 'welcome',
+                created_at: new Date().toISOString()
+              }
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[welcome] Failed to post welcome message:', err.message);
+  }
+}
+
 router.post('/register', authLimiter, async (req, res) => {
   try {
     const username = sanitizeString(req.body.username, 20);
@@ -481,65 +551,7 @@ router.post('/register', authLimiter, async (req, res) => {
     ).run(username, hash, isAdmin, avatarPath);
     _regTimestamps.push(Date.now()); // feed the opt-in global registration rate limit
 
-    // Auto-assign roles flagged as auto_assign to new users
-    try {
-      const autoRoles = db.prepare("SELECT id FROM roles WHERE auto_assign = 1 AND scope = 'server'").all();
-      const insertRole = db.prepare('INSERT OR IGNORE INTO user_roles (user_id, role_id, channel_id, granted_by) VALUES (?, ?, NULL, NULL)');
-      for (const role of autoRoles) {
-        insertRole.run(result.lastInsertRowid, role.id);
-        // Grant linked channel access for this role (fixes #79)
-        try {
-          const r = db.prepare('SELECT link_channel_access FROM roles WHERE id = ?').get(role.id);
-          if (r && r.link_channel_access) {
-            const grantChannels = db.prepare(
-              'SELECT channel_id FROM role_channel_access WHERE role_id = ? AND grant_on_promote = 1'
-            ).all(role.id);
-            const ins = db.prepare('INSERT OR IGNORE INTO channel_members (channel_id, user_id) VALUES (?, ?)');
-            for (const ch of grantChannels) ins.run(ch.channel_id, result.lastInsertRowid);
-          }
-        } catch { /* non-critical */ }
-      }
-    } catch { /* non-critical */ }
-
-    // ── Persistent welcome message ─────────────────────────
-    // Post a saved welcome message to every channel flagged show_welcome, so a
-    // new member gets a permanent, consistent welcome that stays in history for
-    // everyone (replacing the old live-only flash that vanished on reload and
-    // only showed to whoever happened to be watching that channel). Gated on
-    // the admin welcome_message template — an empty template turns it off.
-    try {
-      const wmRow = db.prepare("SELECT value FROM server_settings WHERE key = 'welcome_message'").get();
-      const template = wmRow && typeof wmRow.value === 'string' ? wmRow.value.trim() : '';
-      if (template) {
-        const welcomeText = template.replace(/\{user\}/gi, username).slice(0, 500);
-        const welcomeChannels = db.prepare(
-          'SELECT id, code FROM channels WHERE is_dm = 0 AND show_welcome = 1'
-        ).all();
-        if (welcomeChannels.length) {
-          const insertWelcome = db.prepare(
-            "INSERT INTO messages (channel_id, user_id, content, type) VALUES (?, ?, ?, 'welcome')"
-          );
-          const io = req.app.get('io');
-          for (const ch of welcomeChannels) {
-            const info = insertWelcome.run(ch.id, result.lastInsertRowid, welcomeText);
-            if (io) {
-              io.to(`channel:${ch.code}`).emit('welcome-message', {
-                channelCode: ch.code,
-                message: {
-                  id: info.lastInsertRowid,
-                  user_id: result.lastInsertRowid,
-                  content: welcomeText,
-                  type: 'welcome',
-                  created_at: new Date().toISOString()
-                }
-              });
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[welcome] Failed to post welcome message:', err.message);
-    }
+    provisionNewUser(db, result.lastInsertRowid, username, req.app.get('io'));
 
     const token = jwt.sign(
       { id: result.lastInsertRowid, username, isAdmin: !!isAdmin, displayName: username, pwv: 1 },
@@ -589,6 +601,14 @@ router.post('/login', authLimiter, async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // (#12) A federated account has no password_hash at all. Say so rather
+    // than failing as "invalid credentials" — otherwise someone who signed up
+    // through SSO just sees their password rejected forever, with no hint that
+    // they are meant to use the SSO button.
+    if (user.oidc_subject && !hasLocalPassword(user)) {
+      return res.status(401).json({ error: 'This account signs in through SSO. Use the SSO button on the login page.' });
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);
@@ -1144,6 +1164,12 @@ router.post('/change-password', authLimiter, async (req, res) => {
     const db = getDb();
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // (#12) There is no Haven password on a federated account to change. The
+    // compare below would just fail as "incorrect", which reads like a bug.
+    if (user.oidc_subject && !hasLocalPassword(user)) {
+      return res.status(400).json({ error: 'This account signs in through SSO, so it has no Haven password. Change it with your identity provider instead.' });
+    }
 
     const valid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
@@ -1785,6 +1811,188 @@ router.options('/SSO/authenticate', (req, res) => {
     res.set('Access-Control-Max-Age', '600');
   }
   res.sendStatus(204);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   OIDC / SSO  (issue #12)
+
+   Phase 1: sign in through an external provider, creating a Haven account on
+   first login. Linking an SSO identity to an existing local account and
+   RP-initiated logout are deliberately not here yet.
+
+   The E2E half of this lives entirely in the browser. Haven wraps your private
+   key with a key derived from what you type at login, and an SSO user never
+   types a password here — so on first login the client asks for a separate
+   encryption passphrase and derives from that instead. The server's only part
+   is telling the client whether a wrapped key already exists (`e2eReady`); it
+   never sees the passphrase, and there is nothing to store for it.
+   ═══════════════════════════════════════════════════════════ */
+
+const oidc = require('./oidc');
+const { baseUrl } = require('./connectRoutes');
+
+function _oidcRedirectUri(req) {
+  return `${baseUrl(req)}/api/auth/oidc/callback`;
+}
+
+/**
+ * `users.password_hash` is NOT NULL, and rebuilding that table on every
+ * existing install just to relax it is not worth the risk. Federated accounts
+ * store this sentinel instead. It can never authenticate anyone: bcrypt.compare
+ * returns false for any string that is not a real hash (verified), and
+ * hasLocalPassword() below rejects it before a comparison is even attempted.
+ */
+const OIDC_NO_PASSWORD = '!oidc-no-local-password';
+
+/** True only for a real bcrypt hash — every one starts with $2a/$2b/$2y. */
+function hasLocalPassword(user) {
+  return typeof user.password_hash === 'string' && user.password_hash.startsWith('$2');
+}
+
+/** Turn provider claims into a username that satisfies Haven's own rules. */
+function _usernameFromClaims(db, claims) {
+  const candidates = [
+    claims.preferred_username,
+    typeof claims.email === 'string' ? claims.email.split('@')[0] : '',
+    claims.name,
+  ];
+  let base = '';
+  for (const c of candidates) {
+    if (typeof c !== 'string') continue;
+    const cleaned = c.trim().replace(/[^a-zA-Z0-9_]/g, '');
+    if (cleaned.length >= 3) { base = cleaned.slice(0, 20); break; }
+  }
+  // Nothing usable in the claims — fall back to the subject, which always exists.
+  if (!base) base = `sso_${String(claims.sub).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12)}`;
+  if (base.length < 3) base = `${base}_sso`;
+
+  const taken = (name) => !!db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(name);
+  if (!taken(base)) return base;
+  // A directory username can collide with a local account. Suffix rather than
+  // adopt the existing account — taking it over would be exactly the account
+  // takeover that linking has to ask about explicitly.
+  for (let i = 2; i < 1000; i++) {
+    const suffix = String(i);
+    const candidate = base.slice(0, 20 - suffix.length) + suffix;
+    if (!taken(candidate)) return candidate;
+  }
+  return `sso_${crypto.randomBytes(6).toString('hex')}`;
+}
+
+/** Bounce back to the login page with a short reason code. */
+function _oidcFail(res, code, err) {
+  if (err) console.warn(`[OIDC] ${code}:`, err.message || err);
+  res.redirect(`/?oidc_error=${encodeURIComponent(code)}`);
+}
+
+// Begin a login. Nothing is trusted from the query string here; the redirect
+// URI is derived from the server's own configuration.
+router.get('/oidc/start', authLimiter, async (req, res) => {
+  if (!oidc.isOidcEnabled()) return _oidcFail(res, 'disabled');
+  try {
+    const { url, state, nonce, verifier } = await oidc.buildAuthorizationUrl(_oidcRedirectUri(req));
+    oidc.saveTransaction(state, { nonce, verifier });
+    res.redirect(url);
+  } catch (err) {
+    _oidcFail(res, 'provider_unreachable', err);
+  }
+});
+
+router.get('/oidc/callback', authLimiter, async (req, res) => {
+  if (!oidc.isOidcEnabled()) return _oidcFail(res, 'disabled');
+
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+
+  // The provider reports its own refusals here (access_denied when the user
+  // cancels at the consent screen, and so on).
+  if (typeof req.query.error === 'string' && req.query.error) {
+    return _oidcFail(res, req.query.error === 'access_denied' ? 'cancelled' : 'provider_error',
+      new Error(String(req.query.error_description || req.query.error)));
+  }
+  if (!state || !code) return _oidcFail(res, 'bad_callback');
+
+  // Single-use: a replayed callback finds nothing here.
+  const tx = oidc.takeTransaction(state);
+  if (!tx) return _oidcFail(res, 'expired');
+
+  try {
+    const tokens = await oidc.exchangeCode(code, tx.verifier, _oidcRedirectUri(req));
+    const claims = await oidc.verifyIdToken(tokens.id_token, tx.nonce);
+
+    const db = getDb();
+    const cfg = oidc.getOidcConfig();
+    const subject = String(claims.sub);
+
+    let user = db.prepare('SELECT * FROM users WHERE oidc_issuer = ? AND oidc_subject = ?')
+      .get(cfg.issuer, subject);
+
+    if (!user) {
+      if (!cfg.createUsers) return _oidcFail(res, 'no_account');
+      const username = _usernameFromClaims(db, claims);
+      // Never inherit admin from a directory. ADMIN_USERNAME grants admin on
+      // local signup, and honouring that here would let anyone who can pick
+      // their own username at the IdP walk in as the server admin.
+      const result = db.prepare(
+        'INSERT INTO users (username, password_hash, is_admin, oidc_issuer, oidc_subject) VALUES (?, ?, 0, ?, ?)'
+      ).run(username, OIDC_NO_PASSWORD, cfg.issuer, subject);
+      provisionNewUser(db, result.lastInsertRowid, username, req.app.get('io'));
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+      console.log(`🔐 OIDC: created account "${username}" for ${cfg.issuer} subject ${subject.slice(0, 8)}…`);
+    }
+
+    const banned = db.prepare('SELECT id FROM bans WHERE user_id = ?').get(user.id);
+    if (banned) return _oidcFail(res, 'banned');
+
+    // Keep the display name in step with the directory, but never clobber a
+    // name the user set inside Haven.
+    if (!user.display_name && typeof claims.name === 'string' && claims.name.trim()) {
+      try {
+        db.prepare('UPDATE users SET display_name = ? WHERE id = ?')
+          .run(sanitizeString(claims.name, 32), user.id);
+      } catch { /* non-critical */ }
+    }
+
+    const displayName = user.display_name || user.username;
+    const token = generateToken({
+      id: user.id, username: user.username, isAdmin: !!user.is_admin,
+      displayName, pwv: user.password_version || 1,
+    });
+
+    // `e2eReady` decides which passphrase prompt the client shows: a wrapped
+    // key already on the server means "enter your passphrase to unlock this
+    // device", none means "set one".
+    const e2eReady = !!(user.encrypted_private_key && user.e2e_key_salt);
+    const handoff = JSON.stringify({
+      token,
+      user: { id: user.id, username: user.username, isAdmin: !!user.is_admin, displayName },
+      e2eReady,
+    });
+
+    // Hand the session to the login page through the document body, not the
+    // URL. A token in a query string survives in browser history, proxy logs,
+    // and Referer headers (same reasoning as generateConnectToken above).
+    res.set('Cache-Control', 'no-store');
+    // Locked down to exactly what this page uses: one inline script, one
+    // inline style, and a data: favicon so the browser does not go asking for
+    // one and get refused by default-src.
+    res.set('Content-Security-Policy',
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:");
+    res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Signing in…</title>
+<link rel="icon" href="data:,">
+<style>body{background:#0d0d1a}</style></head>
+<body>
+<script>
+  try {
+    sessionStorage.setItem('haven_oidc_handoff', ${JSON.stringify(handoff)});
+  } catch (e) {}
+  location.replace('/?oidc=1');
+</script>
+</body></html>`);
+  } catch (err) {
+    _oidcFail(res, 'exchange_failed', err);
+  }
 });
 
 module.exports = { router, verifyToken, generateChannelCode, generateToken, generateConnectToken, authLimiter };

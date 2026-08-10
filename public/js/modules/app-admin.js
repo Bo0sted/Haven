@@ -318,6 +318,34 @@ _wizardComplete() {
   this._showToast(t('modals.wizard.setup_complete'), 'success');
 },
 
+/**
+ * (#12) Fill the SSO fields from server settings, and warn when the toggle is
+ * on but the server still reports SSO unusable — which in practice always
+ * means OIDC_CLIENT_SECRET is missing from the environment, the one piece of
+ * this configuration that is not stored in the database.
+ */
+_applyOidcSettings() {
+  const s = this.serverSettings || {};
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
+  const check = (id, on) => { const el = document.getElementById(id); if (el) el.checked = !!on; };
+
+  set('oidc-issuer-url', s.oidc_issuer_url);
+  set('oidc-client-id', s.oidc_client_id);
+  set('oidc-scopes', s.oidc_scopes);
+  set('oidc-button-label', s.oidc_button_label);
+  check('oidc-enabled', s.oidc_enabled === '1');
+  check('oidc-create-users', s.oidc_create_users !== '0');
+
+  const warn = document.getElementById('oidc-secret-warning');
+  if (!warn) return;
+  const configured = s.oidc_enabled === '1' && !!s.oidc_issuer_url && !!s.oidc_client_id;
+  if (!configured) { warn.style.display = 'none'; return; }
+  fetch('/api/public-config')
+    .then(r => r.json())
+    .then(cfg => { warn.style.display = cfg && cfg.oidc_enabled ? 'none' : 'block'; })
+    .catch(() => { /* leave the warning hidden rather than guess */ });
+},
+
 _applyServerSettings() {
   // Don't overwrite admin form inputs when settings modal is open (user may be editing)
   const modalOpen = document.getElementById('settings-modal')?.style.display === 'flex';
@@ -331,6 +359,10 @@ _applyServerSettings() {
     if (refPol && this.serverSettings.referrer_policy) {
       refPol.value = this.serverSettings.referrer_policy;
     }
+    // (#12) SSO. The client secret lives in the environment, so the only way
+    // to tell an admin it is missing is to compare what they configured here
+    // against whether the server reports SSO as actually usable.
+    this._applyOidcSettings?.();
     // Auto-mod controls apply immediately rather than through the Save flow,
     // so they only need populating here. (v3.42.0)
     if (typeof this._applyAutomodSettings === 'function') this._applyAutomodSettings();
@@ -795,6 +827,28 @@ _saveAdminSettings() {
     changed = true;
   }
 
+  // (#12) SSO / OIDC
+  for (const [id, key, kind] of [
+    ['oidc-enabled', 'oidc_enabled', 'bool'],
+    ['oidc-create-users', 'oidc_create_users', 'bool'],
+    ['oidc-issuer-url', 'oidc_issuer_url', 'text'],
+    ['oidc-client-id', 'oidc_client_id', 'text'],
+    ['oidc-scopes', 'oidc_scopes', 'text'],
+    ['oidc-button-label', 'oidc_button_label', 'text'],
+  ]) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const value = kind === 'bool' ? (el.checked ? '1' : '0') : el.value.trim();
+    // A never-set toggle reads as undefined in the snapshot; oidc_create_users
+    // defaults on, so treat undefined as its default rather than as a change.
+    const previous = snap[key] !== undefined ? snap[key]
+      : (key === 'oidc_create_users' ? '1' : (kind === 'bool' ? '0' : ''));
+    if (value !== previous) {
+      this.socket.emit('update-server-setting', { key, value });
+      changed = true;
+    }
+  }
+
   const cleanEnabled = document.getElementById('cleanup-enabled')?.checked ? 'true' : 'false';
   if (cleanEnabled !== snap.cleanup_enabled) {
     this.socket.emit('update-server-setting', { key: 'cleanup_enabled', value: cleanEnabled });
@@ -996,6 +1050,7 @@ _cancelAdminSettings() {
     if (vis) vis.value = snap.member_visibility;
     const refPol = document.getElementById('referrer-policy-select');
     if (refPol) refPol.value = snap.referrer_policy;
+    this._applyOidcSettings?.();
     const ce = document.getElementById('cleanup-enabled');
     if (ce) ce.checked = snap.cleanup_enabled === 'true';
     const ca = document.getElementById('cleanup-max-age');

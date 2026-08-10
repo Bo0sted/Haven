@@ -1199,6 +1199,7 @@ app.get('/api/public-config', (req, res) => {
     const nameRow = db.prepare("SELECT value FROM server_settings WHERE key = 'server_name'").get();
     const iconRow = db.prepare("SELECT value FROM server_settings WHERE key = 'server_icon'").get();
     const adminPwResetRow = db.prepare("SELECT value FROM server_settings WHERE key = 'admin_password_reset_enabled'").get();
+    const oidcConfig = require('./src/oidc').getOidcConfig();
     res.json({
       default_theme: themeRow?.value || '',
       default_locale: localeRow?.value || '',
@@ -1212,7 +1213,12 @@ app.get('/api/public-config', (req, res) => {
       // before signing up (issue #5300). Allowing a user to *see* whether
       // an admin can reset their password is the trust-and-warning half
       // of the feature — admins enable, users get the disclosure.
-      admin_password_reset_enabled: adminPwResetRow?.value === 'true'
+      admin_password_reset_enabled: adminPwResetRow?.value === 'true',
+      // SSO (#12). Reports configured-and-usable, not just the toggle, so the
+      // login page never offers a button that can only fail. The issuer and
+      // client id stay server-side; the client needs neither.
+      oidc_enabled: oidcConfig.enabled,
+      oidc_button_label: oidcConfig.enabled ? oidcConfig.buttonLabel : ''
     });
   } catch {
     res.json({ default_theme: '', default_locale: '', server_title: '' });

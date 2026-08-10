@@ -1046,6 +1046,25 @@ function initDatabase() {
     db.exec("ALTER TABLE users ADD COLUMN e2e_secret TEXT DEFAULT NULL");
   }
 
+  // ── Migration: OIDC / SSO federated identity (#12) ──
+  // A federated account is identified by the pair (issuer, subject), never by
+  // email — an email can be reassigned inside a directory, `sub` cannot.
+  // password_hash stays NULL for these accounts so the local login form can
+  // never authenticate one.
+  try {
+    db.prepare("SELECT oidc_subject FROM users LIMIT 0").get();
+  } catch {
+    db.exec("ALTER TABLE users ADD COLUMN oidc_subject TEXT DEFAULT NULL");
+  }
+  try {
+    db.prepare("SELECT oidc_issuer FROM users LIMIT 0").get();
+  } catch {
+    db.exec("ALTER TABLE users ADD COLUMN oidc_issuer TEXT DEFAULT NULL");
+  }
+  try {
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc ON users(oidc_issuer, oidc_subject) WHERE oidc_subject IS NOT NULL");
+  } catch { /* older SQLite without partial indexes — lookup still works */ }
+
   // ── Migration: ensure create_channel default threshold ──
   try {
     const row = db.prepare("SELECT value FROM server_settings WHERE key = 'permission_thresholds'").get();

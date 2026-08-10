@@ -50,6 +50,11 @@ module.exports = function register(socket, ctx) {
       'registration_captcha_enabled', 'turnstile_site_key', 'turnstile_secret_key', // opt-in Cloudflare Turnstile on registration
       'registration_rate_limit_enabled', 'registration_rate_limit_per_hour', // opt-in global new-account velocity cap
       'channel_creator_role', // (#5461) role auto-granted to a non-admin who creates a channel
+      // (#12) OIDC / SSO. The client secret is NOT here on purpose — it lives
+      // in OIDC_CLIENT_SECRET in the environment, so a database backup never
+      // carries an identity-provider credential around with it.
+      'oidc_enabled', 'oidc_issuer_url', 'oidc_client_id', 'oidc_scopes',
+      'oidc_create_users', 'oidc_button_label',
       'referrer_policy', // Referrer-Policy header, admin-configurable under Settings → Security
       // (v3.42.0) Auto-moderation + voice privacy
       'automod_enabled', 'automod_link_mode', 'automod_link_exempt_level',
@@ -150,6 +155,20 @@ module.exports = function register(socket, ctx) {
     if (key === 'setup_wizard_complete' && !['true', 'false'].includes(value)) return;
     if (key === 'update_banner_admin_only' && !['true', 'false'].includes(value)) return;
     if (key === 'admin_password_reset_enabled' && !['true', 'false'].includes(value)) return;
+    // (#12) OIDC. The issuer must be an absolute https URL — anything else is
+    // either a typo or an attempt to point discovery somewhere it shouldn't go.
+    if (key === 'oidc_enabled' && !['0', '1'].includes(value)) return;
+    if (key === 'oidc_create_users' && !['0', '1'].includes(value)) return;
+    if (key === 'oidc_issuer_url' && value) {
+      try {
+        const u = new URL(value);
+        const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(u.hostname);
+        if (u.protocol !== 'https:' && !isLocal) return;
+      } catch { return; }
+    }
+    if (key === 'oidc_client_id' && value.length > 200) return;
+    if (key === 'oidc_scopes' && (value.length > 200 || !/^[\w :.\-\/]*$/.test(value))) return;
+    if (key === 'oidc_button_label' && value.length > 40) return;
     if (key === 'role_icon_sidebar' && !['true', 'false'].includes(value)) return;
     if (key === 'role_icon_chat' && !['true', 'false'].includes(value)) return;
     if (key === 'role_icon_after_name' && !['true', 'false'].includes(value)) return;
