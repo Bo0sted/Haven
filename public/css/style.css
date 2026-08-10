@@ -2053,14 +2053,27 @@ html.rgb-cycling *::after {
    status bar below the visible area.  Pin to vh and ensure visible. */
 [data-desktop-app] #app {
   height: 100vh !important;
+  /* Desktop builds before v1.4.26 drew their own footer bar from the preload
+     and reserved room for it by injecting `#app { padding-bottom: 26px }`.
+     That reserved band is the blank strip that kept appearing under the debug
+     footer: the status bar is the last child of #app, so the padding stopped
+     it 26px short of the window and left an empty bar below it. The desktop
+     app has since dropped its footer, but an install that hasn't been updated
+     still injects both, and no amount of styling the status bar itself can
+     reach it. Overruled here — this selector outranks the bare `#app` the
+     preload injects — so the status bar ends at the bottom of the window
+     whichever desktop build is hosting us. */
+  padding-bottom: 0 !important;
 }
 [data-desktop-app] .status-bar {
   display: flex !important;
 }
+/* Same legacy footer: hide it outright so it can't sit under the status bar
+   as an empty bar. The web app's status bar is the one debug footer. */
+#haven-desktop-footer { display: none !important; }
 
 /* User preference: hide status bar everywhere */
-[data-hide-statusbar] .status-bar,
-[data-hide-statusbar] #haven-desktop-footer { display: none !important; }
+[data-hide-statusbar] .status-bar { display: none !important; }
 [data-hide-statusbar] .status-bar-toggle-tab { display: flex; }
 
 /* ── Status bar toggle tab (shows when bar is hidden) ── */

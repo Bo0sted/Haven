@@ -395,15 +395,17 @@ _setupNotifications() {
     });
   }
 
-  // Show status bar (opt-in — hidden by default, but Desktop always shows its own footer)
+  // Show status bar (opt-in — hidden by default, but the Desktop app always
+  // shows it: there it is the app's footer, not a debug extra.)
   const showStatusBarToggle = document.getElementById('show-status-bar');
   const statusBarToggleTab = document.getElementById('status-bar-toggle');
-  const _hasDesktopFooter = !!document.getElementById('haven-desktop-footer');
+  const _isDesktopApp = !!(window.havenDesktop?.isDesktopApp ||
+                           navigator.userAgent.includes('Electron'));
   if (showStatusBarToggle) {
     showStatusBarToggle.checked = localStorage.getItem('haven_show_statusbar') === 'true';
     const applyStatusBar = () => {
-      // On Desktop the preload's own footer is always visible; don't touch it
-      if (_hasDesktopFooter) return;
+      // Desktop keeps the bar on regardless — _startStatusBar pins it there.
+      if (_isDesktopApp) return;
       const show = showStatusBarToggle.checked;
       const sb = document.getElementById('status-bar');
       if (show) {
@@ -1186,22 +1188,11 @@ _startStatusBar() {
     // Belt-and-suspenders: ensure the CSS attribute is present (preload
     // sets this on DOMContentLoaded, but reinforce here in case of timing)
     document.documentElement.setAttribute('data-desktop-app', '1');
-    // If the Desktop preload already injected its own fixed footer bar,
-    // don't force the original status bar visible (that causes duplicates)
-    const hasDesktopFooter = !!document.getElementById('haven-desktop-footer');
-    if (!hasDesktopFooter) {
-      _forceWebStatusBar();
-    }
-    // Delayed fallback: if after 600 ms neither footer is visible (e.g. old
-    // Desktop build whose preload hides the web bar but doesn't create its
-    // own), force-show the web status bar regardless.
-    setTimeout(() => {
-      const hdf = document.getElementById('haven-desktop-footer');
-      const sb  = document.getElementById('status-bar');
-      if (!hdf && sb && getComputedStyle(sb).display === 'none') {
-        _forceWebStatusBar();
-      }
-    }, 600);
+    // The status bar is the desktop app's only footer. Pre-v1.4.26 builds
+    // inject one of their own from the preload, which used to make us stand
+    // down here to avoid two stacked bars — but that legacy bar is now hidden
+    // in CSS, so standing down would leave no footer at all. Always show ours.
+    _forceWebStatusBar();
   } else {
     // Browser / mobile: respect the user's opt-in preference (default hidden).
     // The settings toggle in _initSettings applies the attribute + display;
