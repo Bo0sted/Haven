@@ -9538,6 +9538,32 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   visibility: hidden;
 }
 
+/* Inline code sets its own color and background, so `color: transparent`
+   can't hide it and it would show through an unrevealed spoiler. It's a
+   single line, so the spoiler's own bar covers it — just hide the element
+   (keeping its layout box) until revealed. */
+.spoiler:not(.revealed) .inline-code {
+  visibility: hidden;
+}
+
+/* Fenced code blocks are tall block-level boxes, but .spoiler is an inline
+   span whose background only paints the first and last line — the middle of
+   the block would be hidden-but-uncovered (transparent) instead of showing a
+   spoiler bar. So rather than hide the block, repaint it as the bar itself:
+   the muted background, transparent text, no border, and no language tag,
+   until revealed. */
+.spoiler:not(.revealed) .code-block {
+  background: var(--text-muted);
+  border-color: transparent;
+  color: transparent;
+}
+.spoiler:not(.revealed) .code-block code {
+  color: transparent;
+}
+.spoiler:not(.revealed) .code-block-lang {
+  visibility: hidden;
+}
+
 /* Spoiler images (sender marked the image as a spoiler) — blurred behind a
    label until clicked. The inner .chat-image is the actual image. */
 .spoiler-media {
