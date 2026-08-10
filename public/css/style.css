@@ -9568,6 +9568,29 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   display: none;
 }
 
+/* A link wrapped in a || spoiler || carries the spoiler onto its embed card:
+   blur the card behind the shared spoiler tag until it's clicked to reveal.
+   Only the children are blurred and made click-through, so the card itself
+   catches the reveal click — same mechanic as .spoiler-media above. */
+.link-preview.lp-spoiler {
+  position: relative;
+  cursor: pointer;
+}
+.link-preview.lp-spoiler:not(.revealed) {
+  overflow: hidden;
+}
+.link-preview.lp-spoiler:not(.revealed) > *:not(.spoiler-media-tag) {
+  filter: blur(22px);
+  transform: scale(1.02);
+  pointer-events: none;
+}
+.link-preview.lp-spoiler.revealed {
+  cursor: default;
+}
+.link-preview.lp-spoiler.revealed > .spoiler-media-tag {
+  display: none;
+}
+
 /* Hidden image placeholder (viewer chose "Hide Image") — a compact pill that
    restores the image when clicked. */
 .hidden-image {

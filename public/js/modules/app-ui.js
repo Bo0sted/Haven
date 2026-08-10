@@ -6310,6 +6310,15 @@ _maybeRevealConcealed(e) {
     sp.classList.add('revealed');
     return true;
   }
+  // Spoilered link embed (the link was wrapped in ||spoiler||) → reveal the
+  // card in place; blurred children have pointer-events disabled, so the
+  // click lands on the card and this consumes it before the embed's own
+  // controls or link fire.
+  const lp = e.target.closest && e.target.closest('.link-preview.lp-spoiler');
+  if (lp && !lp.classList.contains('revealed')) {
+    lp.classList.add('revealed');
+    return true;
+  }
   return false;
 },
 
