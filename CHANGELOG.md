@@ -11,6 +11,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.45.0] — 2026-08-10
+
+### Added
+- **Sign in with your own identity provider (#12).** Members can now sign in with an account from Authentik, Keycloak, Authelia, Auth0 or anything else that speaks OpenID Connect, instead of a Haven password. Set the issuer address and client ID under Settings → Security, put the client secret in your `.env` as `OIDC_CLIENT_SECRET`, and a sign-in button appears on the login page. The secret is deliberately kept out of the database so your backups never carry an identity-provider credential around with them.
+
+  Encrypted DMs are unlocked by a key derived from what you type when you sign in, and someone signing in through a provider never types a password into Haven. Those accounts are asked to set a separate encryption passphrase the first time they sign in, and for it again on each new device. It never reaches the server in any form, so nobody can reset it, including the server admin, and the setup page says so rather than leaving it to be discovered later. Getting it wrong is safe: the stored key is left alone instead of being overwritten, so your other devices keep working.
+
+  A federated account never inherits admin from the directory and never takes over an existing local account, so a directory user who names themselves after your admin gets an ordinary account with a suffixed name. Linking a provider sign-in to a Haven account you already have, and signing out of the provider when you sign out of Haven, are not included yet. Suggested by @Lordingard, with an implementation sketch from @Amnibro.
+
+### Fixed
+- **A channel setting the server refused would still look like it had changed.** Every row in the Channel Functions panel applies its new value the moment you click it so the switch feels instant, but when the server turned the change down, nothing put the row back. The result was a message saying the setting had not changed sitting next to a switch showing that it had. Reported against Welcome Messages, though it applied to every row in that panel.
+- **The blank bar under the debug footer in the desktop app.** Desktop builds before v1.4.26 drew their own footer bar and reserved a strip of space for it. Newer Haven versions hide that footer, but an out-of-date desktop install still reserves the space, leaving an empty bar pinned under the status bar. That reservation is made from inside the desktop app, which is why no amount of fixing it here ever worked. Haven now overrules it, so the debug footer is the last thing on screen whichever desktop version you are running.
+- **Follow-up messages did not line up with the message above them.** When you send several messages in a row, only the first shows your avatar and the rest indent to match it. The two indents were written out separately in five places and two of them disagreed, so on the Spacious density and under both Braid themes the follow-ups sat slightly to the left of the first message. One is now worked out from the other, so they cannot drift apart again, and a custom theme that follows the same convention gets it right for free.
+
 ## [3.44.2] — 2026-08-09
 
 ### Fixed

@@ -1420,12 +1420,12 @@
       </div>
 
       <div class="download-card fade-in">
-        <h2>&#x2B21; Haven Server &mdash; v3.44.2</h2>
+        <h2>&#x2B21; Haven Server &mdash; v3.45.0</h2>
         <p class="download-version">Latest stable release &middot; Windows, macOS &amp; Linux &middot; ~5 MB</p>
 
         <div class="download-btn-group">
-          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.2.zip" class="btn btn-primary download-main">
-            <span class="icon">&#x2B07;</span> Download v3.44.2 (.zip)
+          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.45.0.zip" class="btn btn-primary download-main">
+            <span class="icon">&#x2B07;</span> Download v3.45.0 (.zip)
           </a>
           <div class="download-alt-links">
             <a href="https://github.com/ancsemi/Haven" target="_blank">&#9965; View on GitHub</a>
@@ -1442,7 +1442,11 @@
           <div class="version-list">
             <div class="version-list-inner">
               <div class="version-item">
-                <div><span class="v-name">v3.44.2</span><span class="v-tag latest">Latest</span> &mdash; <strong>Handing over admin now puts the new admin in every public channel.</strong> Admins cannot leave channels on purpose, so whoever runs the server can see what happens everywhere. A transfer quietly broke that: the incoming admin only had the channels they had already joined, with no way to add themselves to the rest. They now get all of them automatically. Hiding a channel from your own sidebar is a personal setting and still works.</div>
+                <div><span class="v-name">v3.45.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Sign in with your own identity provider.</strong> Members can now sign in with an account from Authentik, Keycloak, Authelia, Auth0 or anything else that speaks OpenID Connect, instead of a Haven password. Set it up under Settings &rarr; Security. Because those members never type a password into Haven, and encrypted DMs are unlocked by a key derived from what you type, they set a separate encryption passphrase the first time they sign in and enter it again on each new device. It never reaches the server, so nobody can reset it, including the admin. Also fixed: a channel setting the server refused would still look like it had changed, the blank bar under the debug footer in the desktop app is gone, and follow-up messages now line up with the message above them on every density and theme. Thanks to @Lordingard and @Amnibro.</div>
+                <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.45.0.zip">Download &rarr;</a>
+              </div>
+              <div class="version-item">
+                <div><span class="v-name">v3.44.2</span> &mdash; <strong>Handing over admin now puts the new admin in every public channel.</strong> Admins cannot leave channels on purpose, so whoever runs the server can see what happens everywhere. A transfer quietly broke that: the incoming admin only had the channels they had already joined, with no way to add themselves to the rest. They now get all of them automatically. Hiding a channel from your own sidebar is a personal setting and still works.</div>
                 <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.44.2.zip">Download &rarr;</a>
               </div>
               <div class="version-item">
