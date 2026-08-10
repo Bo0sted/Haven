@@ -4615,16 +4615,33 @@ select.cfn-select.cfn-input {
   box-shadow: var(--msg-glow);
 }
 
+/* ── Message gutter ──────────────────────────────────────
+   A group leader indents its text by (row padding + avatar + gap). A compact
+   follow-up has no avatar, so it must pad by that exact same total or the
+   lines of one conversation don't share a left edge. Those numbers used to be
+   spelled out independently in five places — base, two breakpoints, two
+   density tiers — and the spacious tier never got its compact value at all,
+   so every follow-up sat 14px left of the message above it. One side is now
+   derived from the other: overrides set these variables and both move
+   together, so the two can't drift apart again. */
+:root {
+  --msg-pad-x: 0.5rem;        /* 8px  — .message-row horizontal padding */
+  --msg-pad-y: 0.25rem;       /* 4px  — .message-row vertical padding */
+  --msg-avatar: 2.25rem;      /* 36px — avatar column */
+  --msg-gap: 0.75rem;         /* 12px — avatar → body gap */
+  --msg-gutter: calc(var(--msg-pad-x) + var(--msg-avatar) + var(--msg-gap));
+}
+
 .message-row {
   display: flex;
-  gap: 0.75rem;               /* 12px */
-  padding: 0.25rem 0.5rem;    /* 4px 8px */
+  gap: var(--msg-gap);
+  padding: var(--msg-pad-y) var(--msg-pad-x);
   position: relative;
 }
 
 .message-avatar {
-  width: 2.25rem;             /* 36px */
-  height: 2.25rem;
+  width: var(--msg-avatar);
+  height: var(--msg-avatar);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -4637,8 +4654,8 @@ select.cfn-select.cfn-input {
 }
 
 .message-avatar-img {
-  width: 2.25rem;             /* 36px */
-  height: 2.25rem;
+  width: var(--msg-avatar);
+  height: var(--msg-avatar);
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -4976,7 +4993,8 @@ details.sound-section:not([open]) .sound-section-label::before {
 .message-compact {
   display: flex;
   position: relative;
-  padding: 0.0625rem 0.5rem 0.0625rem 3.5rem;   /* 1px 8px 1px 56px */
+  /* Left pad matches the leader's avatar column — see --msg-gutter above. */
+  padding: 0.0625rem 0.5rem 0.0625rem var(--msg-gutter);
   border-radius: var(--radius-sm);
   transition: background var(--transition);
   flex-shrink: 0;
@@ -4993,7 +5011,7 @@ details.sound-section:not([open]) .sound-section-label::before {
 
 .message-compact .compact-time {
   position: absolute;
-  left: 8px;
+  left: var(--msg-pad-x);
   top: 2px;
   font-size: 0.625rem;
   color: var(--text-muted);
@@ -11334,16 +11352,14 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
   /* Messages */
   .messages { padding: 0.5rem; }
-  .message-row { gap: 0.5rem; padding: 0.25rem; }
-  .message-avatar { width: 1.875rem; height: 1.875rem; font-size: 0.75rem; }
-  .message-avatar-img { width: 1.875rem; height: 1.875rem; }
+  :root { --msg-pad-x: 0.25rem; --msg-pad-y: 0.25rem; --msg-avatar: 1.875rem; --msg-gap: 0.5rem; }
+  .message-avatar { font-size: 0.75rem; }
   .user-item-avatar, .user-item-avatar-img { width: 1.25rem; height: 1.25rem; font-size: 0.5625rem; }
   .user-avatar-wrapper { width: 1.25rem; height: 1.25rem; }
   .user-status-dot { width: 0.5rem; height: 0.5rem; bottom: -2px; right: -2px; }
   .message-author { font-size: 0.8125rem; }
   .message-content { font-size: 0.875rem; line-height: 1.45; word-break: break-word; overflow-wrap: break-word; }
   .message-time { font-size: 0.625rem; }
-  .message-compact { padding-left: 2.875rem; }
   .message-header { flex-wrap: wrap; }
 
   /* Reply banners — allow wrapping on mobile */
@@ -11514,13 +11530,11 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 @media (max-width: 360px) {
   .channel-info h3 { font-size: 0.75rem; max-width: 5.625rem; }
-  .message-avatar { width: 1.625rem; height: 1.625rem; font-size: 0.6875rem; }
-  .message-avatar-img { width: 1.625rem; height: 1.625rem; }
+  :root { --msg-avatar: 1.625rem; --msg-gap: 0.375rem; }
+  .message-avatar { font-size: 0.6875rem; }
   .user-item-avatar, .user-item-avatar-img { width: 1.125rem; height: 1.125rem; font-size: 0.5rem; }
   .user-avatar-wrapper { width: 1.125rem; height: 1.125rem; }
   .user-status-dot { width: 0.4375rem; height: 0.4375rem; bottom: -2px; right: -2px; }
-  .message-compact { padding-left: 2.5rem; }
-  .message-row { gap: 0.375rem; }
   .message-content { font-size: 0.8125rem; }
   .chat-image { max-width: min(90%, 15rem); }
 
@@ -15109,18 +15123,15 @@ ul.chat-list { list-style-type: disc; }
    Density adjusts spacing and message text size. Values are in rem so the
    rows/avatars scale with the interface Zoom too; at the default 1rem = 16px
    each tier is pixel-identical to the previous px-based rules. */
-[data-density="compact"] .message-row {
-  padding: 0.125rem 0.5rem;   /* 2px 8px */
-  gap: 0.5rem;                /* 8px */
+[data-density="compact"] {
+  --msg-pad-x: 0.5rem;        /* 8px  */
+  --msg-pad-y: 0.125rem;      /* 2px  */
+  --msg-avatar: 1.75rem;      /* 28px */
+  --msg-gap: 0.5rem;          /* 8px  → gutter 44px */
 }
 [data-density="compact"] .message-avatar,
 [data-density="compact"] .message-avatar-img {
-  width: 1.75rem;             /* 28px */
-  height: 1.75rem;
   font-size: 0.6875rem;       /* 11px */
-}
-[data-density="compact"] .message-compact {
-  padding-left: 2.75rem;      /* 44px */
 }
 [data-density="compact"] .message-compact .compact-time {
   font-size: 0.5625rem;       /* 9px */
@@ -15136,14 +15147,14 @@ ul.chat-list { list-style-type: disc; }
 }
 
 /* ── Spacious density ────────────────────────────────── */
-[data-density="spacious"] .message-row {
-  padding: 0.5rem 0.75rem;    /* 8px 12px */
-  gap: 0.875rem;              /* 14px */
+[data-density="spacious"] {
+  --msg-pad-x: 0.75rem;       /* 12px */
+  --msg-pad-y: 0.5rem;        /* 8px  */
+  --msg-avatar: 2.75rem;      /* 44px */
+  --msg-gap: 0.875rem;        /* 14px → gutter 70px */
 }
 [data-density="spacious"] .message-avatar,
 [data-density="spacious"] .message-avatar-img {
-  width: 2.75rem;             /* 44px */
-  height: 2.75rem;
   font-size: 1.0625rem;       /* 17px */
 }
 [data-density="spacious"] .message-content {

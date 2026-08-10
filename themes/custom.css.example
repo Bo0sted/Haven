@@ -70,6 +70,17 @@
   --right-width:   260px;
   --transition:    0.15s ease;
 
+  /* ── Message gutter ────────────────────────────── */
+  /* Resize the avatar column with these, NOT by restyling .message-row or
+     .message-avatar. The first message of a group shows an avatar; the ones
+     that follow it don't, and they indent by (pad-x + avatar + gap) to keep
+     one left edge with it. Set the parts here and both sides stay in step —
+     override the rules directly and follow-up messages end up misaligned. */
+  --msg-pad-x:     0.5rem;    /* message row horizontal padding */
+  --msg-pad-y:     0.25rem;   /* message row vertical padding */
+  --msg-avatar:    2.25rem;   /* avatar column width/height */
+  --msg-gap:       0.75rem;   /* avatar → text gap */
+
   /* ── Theme-specific decorative vars ────────────── */
   --theme-logo:    "⬡";      /* text shown in logo area */
   --msg-glow:      none;      /* glow on messages, e.g. 0 0 8px #7c5cfc */

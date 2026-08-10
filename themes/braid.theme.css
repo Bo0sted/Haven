@@ -125,8 +125,12 @@ body { background: var(--bg-primary) !important; color: var(--text-primary) !imp
 .messages { padding: 1.5rem 1.75rem .75rem !important; gap: .25rem; width: 100%; box-sizing: border-box; }
 .message { border-radius: var(--braid-r) !important; }
 .message:hover { background: color-mix(in srgb, var(--bg-hover) 80%, transparent) !important; box-shadow: none !important; }
-.message-row { gap: .875rem !important; padding: .5rem .75rem !important; }
-.message-avatar, .message-avatar-img { width: 2.375rem !important; height: 2.375rem !important; border-radius: .75rem !important; border: 0 !important; box-shadow: none !important; }
+/* Message gutter — drive the shared variables instead of restyling
+   .message-row / .message-avatar directly. A compact follow-up has no avatar
+   and indents by (padding + avatar + gap); sizing only the leader's half left
+   follow-ups 8px to its left. See --msg-gutter in style.css. */
+:root { --msg-pad-x: .75rem; --msg-pad-y: .5rem; --msg-avatar: 2.375rem; --msg-gap: .875rem; }
+.message-avatar, .message-avatar-img { border-radius: .75rem !important; border: 0 !important; box-shadow: none !important; }
 .message-author, .message-username { font-weight: 650; letter-spacing: -.01em; }
 .message-text, .message-content { font-size: .9375rem !important; line-height: 1.58 !important; letter-spacing: -.01em; color: var(--text-primary); text-shadow: none !important; }
 .message-input-area, .message-input-container { padding: .875rem 1.375rem 1.125rem !important; background: color-mix(in srgb, var(--bg-secondary) 92%, transparent) !important; border-top: 1px solid var(--border) !important; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); gap: .5rem; border-radius: 0 !important; }
