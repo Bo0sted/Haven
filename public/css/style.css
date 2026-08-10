@@ -8892,6 +8892,27 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   font-size: 0.85em;
 }
 
+/* Persona autocomplete (::Name) avatar — scale/crop to a small circle the way
+   the sent-message avatar does, rather than showing the raw, oversized image. */
+.persona-dd-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.persona-dd-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary, var(--bg-secondary));
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 /* :emoji autocomplete dropdown */
 .emoji-dropdown {
   position: absolute;
