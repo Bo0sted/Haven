@@ -669,6 +669,24 @@ module.exports = function register(socket, ctx) {
     const channel = db.prepare('SELECT * FROM channels WHERE code = ?').get(code);
     if (!channel) return;
 
+    // Collect the attachments this channel's messages point at, before the
+    // rows go away. Deleting a channel dropped the messages but left every
+    // uploaded file sitting in uploads/ forever — deleting a single message
+    // has always cleaned up after itself, and deleting a whole channel is
+    // the same thing in bulk. (#5487)
+    const doomedUploads = new Set();
+    try {
+      const msgs = db.prepare('SELECT content FROM messages WHERE channel_id = ?').all(channel.id);
+      for (const row of msgs) {
+        const text = row.content || '';
+        UPLOAD_PATH_RE.lastIndex = 0;
+        let m;
+        while ((m = UPLOAD_PATH_RE.exec(text)) !== null) {
+          if (isSafeUploadRelPath(m[1])) doomedUploads.add(m[1]);
+        }
+      }
+    } catch { /* best-effort cleanup — never block the delete */ }
+
     const deleteAll = db.transaction((chId) => {
       db.prepare('DELETE FROM reactions WHERE message_id IN (SELECT id FROM messages WHERE channel_id = ?)').run(chId);
       db.prepare('DELETE FROM pinned_messages WHERE channel_id = ?').run(chId);
@@ -677,6 +695,19 @@ module.exports = function register(socket, ctx) {
       db.prepare('DELETE FROM channels WHERE id = ?').run(chId);
     });
     deleteAll(channel.id);
+
+    // The same file can be linked from more than one message (a copy-pasted
+    // image URL), so only relocate the ones nothing else points at anymore.
+    // Mirrors what auto-cleanup does. (#5423)
+    for (const rel of doomedUploads) {
+      try {
+        const like = '%/uploads/' + rel.replace(/[\\%_]/g, '\\$&') + '%';
+        const still = db.prepare(
+          "SELECT 1 FROM messages WHERE content LIKE ? ESCAPE '\\' LIMIT 1"
+        ).get(like);
+        if (!still) moveUploadToDeleted(rel);
+      } catch { /* best-effort */ }
+    }
 
     io.to(`channel:${code}`).to(`voice:${code}`).emit('channel-deleted', { code });
 

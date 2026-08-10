@@ -1385,6 +1385,10 @@ async _decryptMessages(messages, channelCode = null) {
         msg._e2e = true;
       }
     }
+    // This is the only place the attachment URLs of an encrypted DM are ever
+    // in the clear. Note them now so deleting the message can tell the server
+    // which files to remove. (#5487)
+    this._rememberDmAttachments?.(msg);
     // Also decrypt the reply preview text if the replied-to message was encrypted
     if (msg.replyContext && msg.replyContext.content && HavenE2E.isEncrypted(msg.replyContext.content)) {
       if (!partnerJwk) {

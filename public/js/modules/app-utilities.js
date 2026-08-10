@@ -304,14 +304,42 @@ _isImageUrl(str) {
 // E2E DM attachments whose URL is hidden inside the ciphertext.
 _getMessageAttachments(messageId) {
   if (!messageId) return [];
+  // Messages that arrived live are appended straight to the DOM and never
+  // land in _lastRenderedMessages, which only holds the last full render.
+  // So an image you just posted in a DM had no URLs to hand the server, and
+  // deleting it left the file on disk forever. The hint map below is filled
+  // at decrypt time and covers exactly that gap. (#5487)
+  const hinted = this._dmAttachmentHints && this._dmAttachmentHints.get(messageId);
+  if (hinted && hinted.length) return hinted.slice();
   const msgs = this._lastRenderedMessages || [];
   const msg = msgs.find(m => m && m.id === messageId);
   if (!msg || typeof msg.content !== 'string') return [];
+  return this._extractUploadUrls(msg.content);
+},
+
+_extractUploadUrls(content) {
+  if (typeof content !== 'string' || !content) return [];
   const out = [];
   const re = /\/uploads\/((?!deleted-attachments)[\w\-.]+)/g;
   let m;
-  while ((m = re.exec(msg.content)) !== null) out.push('/uploads/' + m[1]);
+  while ((m = re.exec(content)) !== null) out.push('/uploads/' + m[1]);
   return out;
+},
+
+// Remember which uploads a decrypted DM message points at, so a later delete
+// can tell the server which files to clean up. Only DM messages need this —
+// everywhere else the server reads the URLs straight out of the stored
+// content. Capped so a long session can't grow it without bound. (#5487)
+_rememberDmAttachments(message) {
+  if (!message || !message.id || typeof message.content !== 'string') return;
+  const urls = this._extractUploadUrls(message.content);
+  if (!urls.length) return;
+  if (!(this._dmAttachmentHints instanceof Map)) this._dmAttachmentHints = new Map();
+  this._dmAttachmentHints.set(message.id, urls);
+  const MAX_HINTS = 500;
+  while (this._dmAttachmentHints.size > MAX_HINTS) {
+    this._dmAttachmentHints.delete(this._dmAttachmentHints.keys().next().value);
+  }
 },
 
 // Client-side DM message search — walks _lastRenderedMessages (already decrypted)
