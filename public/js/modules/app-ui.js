@@ -4900,9 +4900,10 @@ _setupServerBar() {
 
   // ── Channel Code Settings Modal ─────────────────────
   document.getElementById('channel-code-settings-btn')?.addEventListener('click', () => {
-    if (!this.currentChannel || (!this.user.isAdmin && !this._hasPerm('manage_channel_settings'))) return;
+    if (!this.currentChannel) return;
     const channel = this.channels.find(c => c.code === this.currentChannel);
     if (!channel || channel.is_dm) return;
+    if (!this.user.isAdmin && !channel.canManageSettings) return; // (#5467) per channel, not "anywhere"
 
     document.getElementById('code-settings-channel-name').textContent = `# ${channel.name}`;
     document.getElementById('code-visibility-select').value = channel.code_visibility || 'public';

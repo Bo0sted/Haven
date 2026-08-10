@@ -47,7 +47,8 @@ async switchChannel(code) {
   // channel's settings, on non-DM channels (#5467)
   const codeSettingsBtn = document.getElementById('channel-code-settings-btn');
   if (codeSettingsBtn) {
-    codeSettingsBtn.style.display = (!isDm && (this.user.isAdmin || this._hasPerm('manage_channel_settings'))) ? 'inline-flex' : 'none';
+    const canManageThis = this.user.isAdmin || !!(channel && channel.canManageSettings);
+    codeSettingsBtn.style.display = (!isDm && canManageThis) ? 'inline-flex' : 'none';
   }
 
   // Show the header actions box
@@ -376,10 +377,12 @@ _openChannelCtxMenu(code, btnEl) {
   const canManageChannels = isAdmin || this._hasPerm('create_channel');
   // (#5467) Channel Functions is gated on its own permission now, so a
   // moderator who runs one channel can configure it without also holding
-  // create_channel. The check here is deliberately unscoped — the client only
-  // ever sees a flat permission list — so the server re-checks against the
-  // specific channel on every action.
-  const canManageSettings = isAdmin || this._hasPerm('manage_channel_settings');
+  // create_channel. The answer is per channel and comes from the server
+  // (canManageSettings on the channel row) — the flat permission list can't
+  // tell "manage this channel" apart from "manage some other channel", so it
+  // used to show the entry everywhere once you held the permission anywhere.
+  const ch = this.channels.find(c => c.code === code);
+  const canManageSettings = isAdmin || !!(ch && ch.canManageSettings);
   const isMod = isAdmin || this._canModerate();
   menu.querySelectorAll('.admin-only').forEach(el => {
     el.style.display = canManageChannels ? '' : 'none';
@@ -408,7 +411,6 @@ _openChannelCtxMenu(code, btnEl) {
   }
   // Also show delete for users who created a temp channel
   if (deleteBtn && !canManageChannels && !this._hasPerm('delete_channel')) {
-    const ch = this.channels.find(c => c.code === code);
     if (ch && ch.is_temp_voice && ch.created_by === this.user?.id) {
       deleteBtn.style.display = '';
     }
@@ -424,16 +426,19 @@ _openChannelCtxMenu(code, btnEl) {
   // Show/hide "Mark as Read" based on unread count
   const markReadBtn = menu.querySelector('[data-action="mark-read"]');
   if (markReadBtn) markReadBtn.style.display = (this.unreadCounts[code] > 0) ? '' : 'none';
-  // Show "Create Sub-channel" for mods OR users with create_channel / manage_sub_channels perm
-  const ch = this.channels.find(c => c.code === code);
   const copyChannelLinkBtn = menu.querySelector('[data-action="copy-channel-link"]');
   if (copyChannelLinkBtn) {
     const canShare = !!(ch && !ch.is_dm && !ch.is_private && ch.code_visibility !== 'private');
     copyChannelLinkBtn.style.display = canShare ? '' : 'none';
   }
+  // Show "Create Sub-channel" only to people who manage this channel's
+  // sub-channels. The server answers that per channel (canManageSubs);
+  // create_channel no longer counts, and neither does being a moderator
+  // somewhere else, both of which put a button here that always got
+  // refused. (#5467)
   const createSubBtn = menu.querySelector('[data-action="create-sub-channel"]');
   if (createSubBtn) {
-    const canCreateSub = isMod || this._hasPerm('manage_sub_channels') || this._hasPerm('create_channel');
+    const canCreateSub = isAdmin || !!(ch && ch.canManageSubs);
     createSubBtn.style.display = (canCreateSub && ch && !ch.parent_channel_id) ? '' : 'none';
   }
   // (#5424) The Rename action was only shown to moderators (effective level

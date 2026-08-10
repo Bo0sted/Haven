@@ -452,6 +452,17 @@ function setupSocketHandlers(io, db, opts = {}) {
             || userHasPermission(userId, 'kick_user', ch.id);
         }
 
+        // Same per-channel answer for the two channel-management surfaces the
+        // flat permission list gets wrong. Holding manage_channel_settings in
+        // one channel put "Channel Functions" in every channel's menu, and
+        // holding manage_sub_channels in one channel offered "Create
+        // Sub-channel" everywhere. Both were refused server-side, so the
+        // controls were there but dead. (#5467)
+        if (!ch.is_dm) {
+          ch.canManageSettings = isAdmin || userHasPermission(userId, 'manage_channel_settings', ch.id);
+          ch.canManageSubs = isAdmin || userHasPermission(userId, 'manage_sub_channels', ch.id);
+        }
+
         if (ch.is_dm) {
           const otherUser = db.prepare(`
             SELECT u.id, COALESCE(u.display_name, u.username) as username FROM users u

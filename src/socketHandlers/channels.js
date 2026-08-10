@@ -219,6 +219,13 @@ module.exports = function register(socket, ctx) {
       socket.join(`channel:${code}`);
       socket.emit('channel-created', channel);
 
+      // channel-created carries a hand-built stub, not an enriched row, so the
+      // per-channel permission answers (canManageSettings / canManageSubs) are
+      // missing from it. Follow up with the real list — sub-channel creation
+      // already does — otherwise the creator's own context menu hides the
+      // options they just earned until something else refreshes it. (#5467)
+      broadcastChannelLists();
+
       _audit({ actor: socket.user, action: 'channel_create',
         target_type: 'channel', target_id: result.lastInsertRowid, target_name: name.trim(),
         details: { code, isPrivate: !!isPrivate, expiresAt } });
@@ -728,7 +735,12 @@ module.exports = function register(socket, ctx) {
     const parentChannel = db.prepare('SELECT * FROM channels WHERE code = ? AND is_dm = 0').get(parentCode);
     if (!parentChannel) return socket.emit('error-msg', 'Parent channel not found');
 
-    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'manage_sub_channels', parentChannel.id) && !userHasPermission(socket.user.id, 'create_channel', parentChannel.id)) {
+    // (#5467) Adding a sub-channel to an existing channel is that channel's
+    // business, so it takes manage_sub_channels on the parent and nothing
+    // else. create_channel used to pass here too, which meant anyone allowed
+    // to start their own channel could also add rooms inside channels they
+    // had nothing to do with.
+    if (!socket.user.isAdmin && !userHasPermission(socket.user.id, 'manage_sub_channels', parentChannel.id)) {
       return socket.emit('error-msg', 'You don\'t have permission to create sub-channels');
     }
 
