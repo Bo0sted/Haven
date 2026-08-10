@@ -346,6 +346,83 @@ _applyOidcSettings() {
     .catch(() => { /* leave the warning hidden rather than guess */ });
 },
 
+// Settings that can arrive either from the admin panel or from an environment
+// variable. The stored setting always wins and the environment is the
+// fallback, but nothing in the panel said so: a server started with
+// SERVER_NAME=Foo showed an empty Server Name box, and typing in it silently
+// took over from the env var for good. These notes spell out which value is
+// live and what saving will do. (#5489)
+_envHintFields: [
+  { key: 'server_name',   input: 'server-name-input' },
+  { key: 'stun_urls',     input: 'stun-urls-input' },
+  { key: 'turn_url',      input: 'turn-url-input' },
+  { key: 'turn_username', input: 'turn-username-input' },
+  { key: 'turn_password', input: 'turn-password-input' },
+  // TURN_SECRET has no field of its own — it belongs to the TURN block as a
+  // whole, so its note hangs off the TURN server row.
+  { key: 'turn_secret',   input: 'turn-url-input', standalone: true }
+],
+
+_applyEnvSettingHints() {
+  const env = this.serverEnvSettings || {};
+  for (const field of this._envHintFields) {
+    const input = document.getElementById(field.input);
+    if (!input) continue;
+    const row = input.closest('.select-row') || input;
+    const hintId = `env-hint-${field.key}`;
+    let hint = document.getElementById(hintId);
+    const info = env[field.key];
+
+    if (!info) {
+      if (hint) hint.remove();
+      // Only the field's own entry may clear a placeholder it set.
+      if (!field.standalone && input.dataset.envPlaceholder) {
+        input.placeholder = input.dataset.envPlaceholder === '__none__' ? '' : input.dataset.envPlaceholder;
+        delete input.dataset.envPlaceholder;
+      }
+      continue;
+    }
+
+    const stored = (this.serverSettings?.[field.key] || '').trim();
+    let text;
+    if (field.standalone) {
+      text = t('settings.admin.env_turn_secret', { var: info.var });
+    } else if (stored) {
+      text = t('settings.admin.env_overridden', { var: info.var });
+    } else if (info.secret) {
+      text = t('settings.admin.env_in_use_secret', { var: info.var });
+    } else {
+      text = t('settings.admin.env_in_use', { var: info.var, value: info.value });
+    }
+
+    // Show the environment's value as the placeholder while nothing is stored,
+    // so an empty box reads as "inherited" rather than "unset".
+    if (!field.standalone && !stored && !info.secret && info.value) {
+      if (input.dataset.envPlaceholder === undefined) {
+        input.dataset.envPlaceholder = input.placeholder || '__none__';
+      }
+      input.placeholder = info.value;
+    } else if (!field.standalone && input.dataset.envPlaceholder !== undefined) {
+      input.placeholder = input.dataset.envPlaceholder === '__none__' ? '' : input.dataset.envPlaceholder;
+      delete input.dataset.envPlaceholder;
+    }
+
+    if (!hint) {
+      hint = document.createElement('small');
+      hint.id = hintId;
+      hint.className = 'settings-hint env-setting-hint';
+      // Two settings can share a row (TURN_URL and TURN_SECRET), so queue
+      // behind any note already sitting under it instead of jumping ahead.
+      let anchor = row;
+      while (anchor.nextElementSibling?.classList.contains('env-setting-hint')) {
+        anchor = anchor.nextElementSibling;
+      }
+      anchor.insertAdjacentElement('afterend', hint);
+    }
+    hint.textContent = text;
+  }
+},
+
 _applyServerSettings() {
   // Don't overwrite admin form inputs when settings modal is open (user may be editing)
   const modalOpen = document.getElementById('settings-modal')?.style.display === 'flex';
@@ -439,6 +516,8 @@ _applyServerSettings() {
     if (turnUser) turnUser.value = this.serverSettings.turn_username || '';
     const turnPass = document.getElementById('turn-password-input');
     if (turnPass) turnPass.value = this.serverSettings.turn_password || '';
+
+    this._applyEnvSettingHints?.(); // (#5489)
 
     // ── Auto-backup form ───
     const abEnabled = document.getElementById('auto-backup-enabled');
@@ -745,7 +824,10 @@ _syncSettingsNav() {
 
 _snapshotAdminSettings() {
   this._adminSnapshot = {
-    server_name: this.serverSettings.server_name || 'HAVEN',
+    // Empty means "nothing stored", which is what lets SERVER_NAME (or the
+    // built-in default) take over. Snapshotting it as 'HAVEN' made clearing
+    // the box save the literal word instead of falling back. (#5489)
+    server_name: this.serverSettings.server_name || '',
     server_title: this.serverSettings.server_title || '',
     welcome_message: this.serverSettings.welcome_message || '',
     member_visibility: this.serverSettings.member_visibility || 'online',
@@ -783,6 +865,10 @@ _snapshotAdminSettings() {
   };
   const tosEl = document.getElementById('custom-tos-input');
   if (tosEl) tosEl.value = this._adminSnapshot.custom_tos;
+  // _applyServerSettings skips its input pass while the modal is open, so
+  // refresh the environment notes here too — otherwise they stay stale from
+  // whenever the panel was last closed. (#5489)
+  this._applyEnvSettingHints?.();
   // Load webhooks list for admin preview
   if (this.user?.isAdmin || this._hasPerm('manage_webhooks')) {
     this.socket.emit('get-webhooks');
@@ -797,7 +883,7 @@ _saveAdminSettings() {
   const snap = this._adminSnapshot || {};
   let changed = false;
 
-  const name = document.getElementById('server-name-input')?.value.trim() || 'HAVEN';
+  const name = document.getElementById('server-name-input')?.value.trim() || '';
   if (name !== snap.server_name) {
     this.socket.emit('update-server-setting', { key: 'server_name', value: name });
     changed = true;
@@ -1164,7 +1250,9 @@ _renderWhitelist(list) {
 /* ── Server Branding (icon + name) ──────────────────── */
 
 _applyServerBranding() {
-  const name = this.serverSettings.server_name || 'HAVEN';
+  // server_name_effective folds in SERVER_NAME from the environment, so a
+  // server named only through docker doesn't read as "HAVEN" in here. (#5489)
+  const name = this.serverSettings.server_name || this.serverSettings.server_name_effective || 'HAVEN';
   const icon = this.serverSettings.server_icon || '';
 
   // Sidebar brand text

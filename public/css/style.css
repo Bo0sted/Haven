@@ -10350,6 +10350,15 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 }
 .settings-hint.error { color: #e94560; }
 .settings-hint.success { color: #43b581; }
+/* Note on a setting that also has a value in the server's environment, so the
+   admin can see which of the two is actually live. (#5489) */
+.settings-hint.env-setting-hint {
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
+  margin-top: 0.25rem;
+  line-height: 1.5;
+}
 .settings-desc {
   font-size: 0.75rem;
   color: var(--text-secondary);

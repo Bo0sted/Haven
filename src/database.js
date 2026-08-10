@@ -395,7 +395,12 @@ function initDatabase() {
   insertSetting.run('cleanup_max_age_days', '0');      // delete messages older than N days (0 = disabled)
   insertSetting.run('cleanup_max_size_mb', '0');       // delete oldest messages when DB exceeds N MB (0 = disabled)
   insertSetting.run('whitelist_enabled', 'false');     // whitelist toggle
-  insertSetting.run('server_name', 'HAVEN');           // displayed in sidebar header + server bar
+  // Empty on purpose. A stored value always beats SERVER_NAME, so seeding the
+  // literal 'HAVEN' here meant a server started with SERVER_NAME=Foo in its
+  // compose file was named HAVEN anyway and nothing in the panel explained
+  // why. Blank means "not set here", which lets SERVER_NAME through and falls
+  // back to Haven when that is unset too. (#5489)
+  insertSetting.run('server_name', '');                // displayed in sidebar header + server bar
   insertSetting.run('server_icon', '');                // path to uploaded server icon image
   insertSetting.run('permission_thresholds', '{"create_channel":50,"manage_channel_settings":50}');    // JSON: { permission: minLevel } — auto-grant perms at level
   insertSetting.run('server_code', '');                // server-wide invite code (joins all channels)
@@ -1349,6 +1354,32 @@ function initDatabase() {
     }
   } catch (e) {
     console.warn('manage_channel_settings backfill failed:', e.message);
+  }
+
+  // ── Migration: let SERVER_NAME through on existing installs (#5489) ──
+  // Every install created before this seeded the literal 'HAVEN' into
+  // server_name, and a stored name beats the environment, so SERVER_NAME has
+  // never actually applied to them. A stored 'HAVEN' is indistinguishable
+  // from "never named it", and setting SERVER_NAME is a clear statement of
+  // intent, so hand it back. Only touches installs where both are true, and
+  // the marker key means an admin who later types HAVEN on purpose keeps it.
+  try {
+    const marker = db.prepare(
+      "SELECT value FROM server_settings WHERE key = 'server_name_env_reclaim'"
+    ).get();
+    if (!marker) {
+      const envName = (process.env.SERVER_NAME || '').trim();
+      const stored = db.prepare("SELECT value FROM server_settings WHERE key = 'server_name'").get();
+      if (envName && stored && stored.value === 'HAVEN') {
+        db.prepare("UPDATE server_settings SET value = '' WHERE key = 'server_name'").run();
+        console.log(`Server name now comes from SERVER_NAME ("${envName}") — set a name in Settings to override it.`);
+      }
+      db.prepare(
+        "INSERT OR IGNORE INTO server_settings (key, value) VALUES ('server_name_env_reclaim', '1')"
+      ).run();
+    }
+  } catch (e) {
+    console.warn('server_name env reclaim failed:', e.message);
   }
 
   // ── Migration: chat threads (thread_id on messages) ─────

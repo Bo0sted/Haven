@@ -12,6 +12,26 @@ module.exports = function register(socket, ctx) {
   } = ctx;
   const { channelUsers } = state;
 
+  // Settings that can also be supplied through the environment (docker
+  // env vars, .env). In every one of these the stored setting wins and the
+  // environment is only the fallback — but the panel showed no sign of that,
+  // so an admin who set SERVER_NAME in their compose file opened Settings,
+  // saw an empty box, and had no way to tell whether it had taken effect or
+  // what would happen if they typed in it. (#5489)
+  const ENV_BACKED_SETTINGS = [
+    { key: 'server_name',   env: 'SERVER_NAME' },
+    { key: 'stun_urls',     env: 'STUN_URLS' },
+    { key: 'turn_url',      env: 'TURN_URL' },
+    { key: 'turn_username', env: 'TURN_USERNAME' },
+    { key: 'turn_password', env: 'TURN_PASSWORD', secret: true },
+    // No field of its own — TURN_SECRET switches env TURN to time-limited
+    // HMAC credentials, and is ignored entirely once a TURN server is set
+    // here. Reported so that isn't a silent surprise.
+    { key: 'turn_secret',   env: 'TURN_SECRET',   secret: true },
+    { key: 'giphy_api_key', env: 'GIPHY_API_KEY', secret: true },
+    { key: 'tenor_api_key', env: 'TENOR_API_KEY', secret: true }
+  ];
+
   // ── Server settings ─────────────────────────────────────
   socket.on('get-server-settings', () => {
     const rows = db.prepare('SELECT key, value FROM server_settings').all();
@@ -21,7 +41,30 @@ module.exports = function register(socket, ctx) {
       if (sensitiveKeys.includes(r.key) && !socket.user.isAdmin) return;
       settings[r.key] = r.value;
     });
-    socket.emit('server-settings', settings);
+
+    // Not a stored setting: the server name actually in effect once
+    // SERVER_NAME is taken into account. Without it the sidebar fell back to
+    // "HAVEN" on servers whose name only ever came from the environment,
+    // even though /api/health has always reported the env name. Kept apart
+    // from server_name so the admin panel still shows an empty box for a
+    // setting that genuinely has no stored value. (#5489)
+    settings.server_name_effective = settings.server_name || (process.env.SERVER_NAME || '').trim() || '';
+
+    // Only the people who can open the admin panel get told what the
+    // environment holds, and secrets are reported as present without ever
+    // sending the value.
+    let envInfo = {};
+    if (socket.user.isAdmin || userHasPermission(socket.user.id, 'manage_server')) {
+      for (const entry of ENV_BACKED_SETTINGS) {
+        const raw = (process.env[entry.env] || '').trim();
+        if (!raw) continue;
+        envInfo[entry.key] = entry.secret
+          ? { var: entry.env, secret: true }
+          : { var: entry.env, value: raw };
+      }
+    }
+
+    socket.emit('server-settings', settings, envInfo);
   });
 
   socket.on('update-server-setting', (data) => {
@@ -270,6 +313,16 @@ module.exports = function register(socket, ctx) {
     }
 
     io.emit('server-setting-changed', { key, value });
+
+    // Clearing the name hands it back to SERVER_NAME, so tell everyone what
+    // the name resolves to now rather than leaving the old one on screen
+    // until the next reconnect. (#5489)
+    if (key === 'server_name') {
+      io.emit('server-setting-changed', {
+        key: 'server_name_effective',
+        value: value || (process.env.SERVER_NAME || '').trim() || ''
+      });
+    }
 
     // Automod caches its settings for 15s on the hot path; drop the cache so
     // an admin toggle takes effect on the very next message. (v3.42.0)

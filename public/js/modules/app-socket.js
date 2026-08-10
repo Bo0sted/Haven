@@ -2044,8 +2044,11 @@ _setupSocketListeners() {
   });
 
   // ── Server settings ────────────────────────────────
-  this.socket.on('server-settings', (settings) => {
+  this.socket.on('server-settings', (settings, envInfo) => {
     this.serverSettings = settings;
+    // Which of these settings also have a value waiting in the environment,
+    // so the panel can say which one is actually in effect. (#5489)
+    this.serverEnvSettings = envInfo || {};
     this._applyServerSettings();
     this._maybeShowSetupWizard();
   });
