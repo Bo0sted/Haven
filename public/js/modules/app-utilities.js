@@ -3730,7 +3730,20 @@ _startEditMessage(msgEl, msgId) {
     e.stopPropagation();
     e.preventDefault();
     let newContent = textarea.value.trim();
-    if (!newContent) return cancel();
+    if (!newContent) {
+      // Discord-style: clearing the whole message and confirming the edit
+      // offers to delete the message rather than silently cancelling it.
+      // Enter confirms the prompt via the shared confirm modal.
+      cancel();
+      if (await this._showConfirmModal(t('confirm.delete_message'), '', { danger: true, confirmLabel: t('msg_toolbar.delete') })) {
+        const pip = msgEl.closest('#dm-pip-messages') ? this._activeDMPip : null;
+        const attachments = this._getMessageAttachments?.(msgId);
+        this.socket.emit('delete-message', pip
+          ? { messageId: msgId, channelCode: pip, attachments }
+          : { messageId: msgId, attachments });
+      }
+      return;
+    }
     if (newContent === rawText) return cancel();
 
     // E2E: encrypt edited DM content. The PiP can edit a DM that isn't
