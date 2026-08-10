@@ -1686,6 +1686,7 @@ _setupEmojiManagement() {
   }
 
   this._setupEmojiCropperEvents();
+  this._loadStandardEmojis();
   this._loadCustomEmojis();
 },
 
@@ -1862,6 +1863,30 @@ _renderEmojiCropFrame() {
     ctx.moveTo(x, y + sy); ctx.lineTo(x, y + sy * g);
     ctx.stroke();
   });
+},
+
+// Replace the built-in picker list with the full Unicode set served by the
+// server. On any failure the hand-curated built-in list stays in place.
+async _loadStandardEmojis() {
+  try {
+    const res = await fetch('/api/standard-emojis', {
+      headers: { 'Authorization': `Bearer ${this.token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.categories || !Object.keys(data.categories).length) return;
+    // Keep Haven's bundled flag category — its :flag_xx: images render on every
+    // OS, unlike Unicode's regional-indicator flags — and layer the rest under it.
+    const flags = this.emojiCategories.Flags;
+    this.emojiCategories = { ...data.categories, ...(flags ? { Flags: flags } : {}) };
+    this.emojis = Object.values(this.emojiCategories).flat();
+    // Built-in keywords are richer than Unicode's bare names, so let them win
+    // where they exist and use the Unicode name to fill every other gap.
+    this.emojiNames = { ...data.names, ...this.emojiNames };
+    if (Array.isArray(data.modifierBase) && data.modifierBase.length) {
+      this._emojiModifierBase = new Set(data.modifierBase.map(h => String.fromCodePoint(parseInt(h, 16))));
+    }
+  } catch { /* keep the built-in list */ }
 },
 
 async _loadCustomEmojis() {

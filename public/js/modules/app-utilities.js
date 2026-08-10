@@ -1164,12 +1164,15 @@ _saveEmojiSkinTone(tone) {
 _applySkinTone(emoji, tone) {
   const mod = SKIN_TONE_MODIFIERS[tone];
   if (!mod || typeof emoji !== 'string') return emoji;
+  // Prefer the set derived from the server's emoji list; fall back to the
+  // built-in one when the standard list hasn't loaded.
+  const base = this._emojiModifierBase || EMOJI_MODIFIER_BASE;
   const cps = [...emoji];
-  if (cps.filter(c => EMOJI_MODIFIER_BASE.has(c)).length !== 1) return emoji;
+  if (cps.filter(c => base.has(c)).length !== 1) return emoji;
   const out = [];
   for (let i = 0; i < cps.length; i++) {
     out.push(cps[i]);
-    if (EMOJI_MODIFIER_BASE.has(cps[i])) {
+    if (base.has(cps[i])) {
       out.push(mod);
       if (cps[i + 1] === '\uFE0F') i++; // skip VS16: the modifier already implies emoji style
     }
