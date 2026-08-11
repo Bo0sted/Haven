@@ -59,4 +59,29 @@ const VALID_ROLE_PERMS = [
   'view_audit_log', 'manage_display_names'
 ];
 
-module.exports = { utcStamp, isString, isInt, sanitizeText, isValidUploadPath, VALID_ROLE_PERMS };
+// ── Idle-online decision (pure, so it can be unit-tested) ──
+// Given each online user's timing and live status, return those that have been
+// connected and showing green for at least thresholdMs with no deliberate
+// activity for at least that long. Away/dnd/invisible are excluded on purpose:
+// a real client trips auto-away, so an account that is still 'online' and
+// silent after hours is the bot-shaped case we want to surface. Longest-idle
+// first. `entries`: [{ id, username, isAdmin, createdAt, onlineSince(ms),
+// lastActiveAt(ms), status }].
+function filterIdleOnline(entries, thresholdMs, nowMs) {
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const out = [];
+  for (const e of entries || []) {
+    if (!e || e.status !== 'online') continue;
+    const onlineForMs = now - e.onlineSince;
+    const idleForMs = now - e.lastActiveAt;
+    if (onlineForMs < thresholdMs || idleForMs < thresholdMs) continue;
+    out.push({
+      id: e.id, username: e.username, isAdmin: !!e.isAdmin, createdAt: e.createdAt || null,
+      onlineForMs, idleForMs, onlineSince: new Date(e.onlineSince).toISOString()
+    });
+  }
+  out.sort((a, b) => b.idleForMs - a.idleForMs);
+  return out;
+}
+
+module.exports = { utcStamp, isString, isInt, sanitizeText, isValidUploadPath, VALID_ROLE_PERMS, filterIdleOnline };

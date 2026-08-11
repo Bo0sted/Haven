@@ -8,7 +8,7 @@ module.exports = function register(socket, ctx) {
     io, db, state, userHasPermission, getUserEffectiveLevel,
     getUserPermissions, getUserRoles, getUserHighestRole,
     emitOnlineUsers, broadcastChannelLists, generateChannelCode,
-    logAudit, fireWebhookEvent, onReferrerPolicyChange, automod
+    logAudit, fireWebhookEvent, onReferrerPolicyChange, automod, getIdleOnlineUsers
   } = ctx;
   const { channelUsers } = state;
 
@@ -1158,6 +1158,35 @@ module.exports = function register(socket, ctx) {
     rows.forEach(r => { r.created_at = utcStamp(r.created_at); });
     socket.emit('automod-domain-list', rows);
   }
+
+  // ── Idle-online accounts (v3.46.0) ──────────────────────
+  // Surfaces accounts that have sat connected and showing green for hours
+  // without posting, joining voice, or changing status. That is the signature
+  // of a client parked to log the server rather than a person: a real client
+  // trips auto-away. Read-only and non-destructive — it's a light to look at,
+  // not an action. Gated to admins and moderators (kick/ban/audit), the same
+  // people who can already see the full member list.
+  function _canSeeOversight() {
+    return socket.user.isAdmin ||
+           userHasPermission(socket.user.id, 'view_audit_log') ||
+           userHasPermission(socket.user.id, 'ban_user') ||
+           userHasPermission(socket.user.id, 'kick_user') ||
+           userHasPermission(socket.user.id, 'view_all_members');
+  }
+
+  socket.on('get-idle-online', (data) => {
+    if (!_canSeeOversight()) return socket.emit('idle-online-list', { thresholdHours: 4, users: [] });
+    // Admin-tunable threshold, default 4h, clamped to something sane.
+    let hours = 4;
+    if (data && Number.isFinite(data.hours)) hours = Math.min(168, Math.max(1, Math.floor(data.hours)));
+    let users = [];
+    try {
+      users = (typeof getIdleOnlineUsers === 'function')
+        ? getIdleOnlineUsers(hours * 3600 * 1000)
+        : [];
+    } catch (err) { console.error('get-idle-online error:', err); }
+    socket.emit('idle-online-list', { thresholdHours: hours, users });
+  });
 
   // Media cache size, so an admin can see what proxying costs them on disk
   // before deciding whether to leave it on. (v3.43.0)

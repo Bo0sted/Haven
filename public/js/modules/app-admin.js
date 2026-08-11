@@ -837,6 +837,19 @@ _syncSettingsNav() {
     if (adminTab) adminTab.style.display = '';
     if (adminNavGroup) adminNavGroup.style.display = '';
   }
+
+  // Moderation section (idle-online oversight, v3.46.0). Visible to admins and
+  // to moderators who can act on it — the same bar the server enforces. A
+  // non-admin mod sees ONLY this section, not the admin-only ones, because
+  // every other admin nav item stays display:none unless isAdmin.
+  const canSeeOversight = isAdmin || this._hasPerm('view_audit_log') ||
+    this._hasPerm('ban_user') || this._hasPerm('kick_user') || this._hasPerm('view_all_members');
+  const modNavItem = document.querySelector('.settings-nav-item[data-target="section-moderation"]');
+  if (modNavItem) modNavItem.style.display = canSeeOversight ? '' : 'none';
+  if (canSeeOversight && !hasAnyAdminAccess) {
+    if (adminTab) adminTab.style.display = '';
+    if (adminNavGroup) adminNavGroup.style.display = '';
+  }
   // Also show save bar for users with manage_server perm (when admin tab active)
   if (saveBar && !isAdmin && this._hasPerm('manage_server')) {
     const adminTabActive = adminTab?.classList.contains('active');
@@ -5903,6 +5916,40 @@ _initAutomodPanel() {
     if (clearBtn) clearBtn.addEventListener('click', () => this.socket.emit('clear-media-cache'));
   });
   this.socket.emit('get-media-cache-stats');
+
+  // Idle-online oversight (v3.46.0)
+  const idleRefresh = document.getElementById('idle-online-refresh');
+  if (idleRefresh) {
+    idleRefresh.addEventListener('click', () => {
+      const h = parseInt(document.getElementById('idle-online-hours')?.value, 10) || 4;
+      this.socket.emit('get-idle-online', { hours: h });
+    });
+  }
+  this.socket.on('idle-online-list', (data) => this._renderIdleOnline(data));
+},
+
+_renderIdleOnline(data) {
+  const el = document.getElementById('idle-online-list');
+  if (!el) return;
+  const users = (data && data.users) || [];
+  const hrs = (data && data.thresholdHours) || 4;
+  if (users.length === 0) {
+    el.innerHTML = `<p class="muted-text">No accounts have been idle-online for ${hrs}h or more.</p>`;
+    return;
+  }
+  const fmt = (ms) => {
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+  el.innerHTML = users.map(u => `
+    <div class="whitelist-item" style="align-items:flex-start">
+      <span class="whitelist-username" style="display:flex;flex-direction:column;gap:2px">
+        <span><strong>${this._escapeHtml(u.username || '(unknown)')}</strong>${u.isAdmin ? ' <span class="muted-text">(admin)</span>' : ''}</span>
+        <span class="muted-text">online ${fmt(u.onlineForMs)}, silent ${fmt(u.idleForMs)}</span>
+      </span>
+    </div>
+  `).join('');
 },
 
 // Grey out the rest of the panel when automod is off, so it is obvious that

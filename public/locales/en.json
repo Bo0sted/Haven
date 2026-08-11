@@ -711,7 +711,8 @@
       "bots": "Bots",
       "import": "Import",
       "mod_mode": "Mod Mode",
-      "security": "Security"
+      "security": "Security",
+      "moderation": "Moderation"
     },
     "language_section": {
       "title": "Language",
@@ -880,6 +881,11 @@
     },
     "admin": {
       "title": "Admin",
+      "moderation_title": "Moderation",
+      "idle_online_group": "Idle-online accounts",
+      "idle_online_desc": "Lists accounts that have been connected and showing as online for hours without posting, joining voice, or changing their status. A normal client goes idle on its own, so an account that stays green and silent for this long is often a script parked to watch the server rather than a person. This is just something to look at, not an automatic action.",
+      "idle_online_threshold": "Flag after (hours)",
+      "idle_online_check": "Check now",
       "security_title": "Security",
       "referrer_policy_group": "Referrer configuration",
       "referrer_policy_label": "Referrer policy",

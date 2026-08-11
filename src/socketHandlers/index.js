@@ -10,7 +10,7 @@ const { sendFcm, isFcmEnabled } = require('../fcm');
 const { DATA_DIR, UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = require('../paths');
 const HAVEN_VERSION = require('../../package.json').version;
 
-const { sanitizeText, utcStamp, isString, isInt, isValidUploadPath, VALID_ROLE_PERMS } = require('./helpers');
+const { sanitizeText, utcStamp, isString, isInt, isValidUploadPath, VALID_ROLE_PERMS, filterIdleOnline } = require('./helpers');
 const { socketClientIp } = require('../clientIp');
 const automod = require('../automod');
 const { resolveSpotifyToYouTube, searchYouTube, fetchYouTubePlaylist, extractYouTubeVideoId, resolveMusicMetadata } = require('./musicResolver');
@@ -69,6 +69,47 @@ function setupSocketHandlers(io, db, opts = {}) {
   const activeScreenSharers = new Map(); // code → Set<userId>
   const activeWebcamUsers   = new Map(); // code → Set<userId>
   const userFloodBuckets    = new Map(); // `${userId}:${bucket}` → number[] (send timestamps)
+  // Presence timing for the "idle but online" flag. onlineSince is set when a
+  // user goes from having zero live sockets to one; lastActiveAt advances only
+  // on deliberate human actions (posting, joining voice, changing status).
+  // Cleared when the user's last socket disconnects. Lets a mod spot an
+  // account that has sat connected and green for hours doing nothing, which is
+  // the signature of a logging bot rather than a person (a real client trips
+  // auto-away). userId → { onlineSince, lastActiveAt }
+  const presenceTimers      = new Map();
+
+  // Advance a user's activity clock. Called for the deliberate actions that
+  // mark a real, engaged human — not passive traffic like typing or
+  // visibility pings, and not the client's automatic away transition (that
+  // one is exactly what we're using to tell people from bots).
+  function touchPresenceActivity(userId) {
+    const t = presenceTimers.get(userId);
+    if (t) t.lastActiveAt = Date.now();
+  }
+
+  // The oversight query behind the flag. Returns accounts that are online,
+  // showing as 'online' (green — an auto-away client is excluded), and have
+  // had no deliberate activity for at least thresholdMs.
+  function getIdleOnlineUsers(thresholdMs) {
+    // Build one entry per online user from the presence clock plus their live
+    // status, then let the pure helper make the decision (unit-tested).
+    const entries = [];
+    for (const [userId, t] of presenceTimers) {
+      let status = null, username = null, isAdmin = false, createdAt = null;
+      for (const [, s] of io.of('/').sockets) {
+        if (s.user && s.user.id === userId) {
+          status = s.user.status || 'online';
+          username = s.user.displayName || s.user.username;
+          isAdmin = !!s.user.isAdmin;
+          createdAt = s.user.createdAt || null;
+          break;
+        }
+      }
+      entries.push({ id: userId, username, isAdmin, createdAt,
+        onlineSince: t.onlineSince, lastActiveAt: t.lastActiveAt, status });
+    }
+    return filterIdleOnline(entries, thresholdMs, Date.now());
+  }
   const streamViewers       = new Map(); // "code:sharerId" → Set<viewerUserId>
   const slowModeTracker     = new Map(); // "slow:{userId}:{channelId}" → timestamp
   const pendingTempDelete   = new Map(); // code → timeout handle (grace-period before deleting temp-voice channel)
@@ -1443,6 +1484,14 @@ function setupSocketHandlers(io, db, opts = {}) {
     console.log(`✅ ${socket.user.username} connected`);
     socket.currentChannel = null;
     socket.hasFocus = true;
+
+    // Start the presence clock the moment a user goes from offline to online.
+    // A second tab/device keeps the original onlineSince so "continuously
+    // online" means what it says. (idle-online flag)
+    if (!presenceTimers.has(socket.user.id)) {
+      const now = Date.now();
+      presenceTimers.set(socket.user.id, { onlineSince: now, lastActiveAt: now });
+    }
     socket.on('visibility-change', (data) => {
       if (data && typeof data.visible === 'boolean') socket.hasFocus = data.visible;
     });
@@ -1526,8 +1575,21 @@ function setupSocketHandlers(io, db, opts = {}) {
       'visibility-change'
     ]);
 
+    // Events that mark a real, engaged human for the idle-online flag. Kept
+    // deliberately narrow: passive traffic (typing, visibility, presence
+    // pings) and the client's automatic away transition are NOT here, because
+    // an account staying green with none of THESE happening is exactly what
+    // we're trying to surface.
+    const PRESENCE_ACTIVE_EVENTS = new Set([
+      'send-message', 'send-thread-message', 'edit-message',
+      'add-reaction', 'remove-reaction',
+      'voice-join', 'voice-rejoin', 'set-status',
+      'start-dm', 'create-channel'
+    ]);
+
     socket.use((packet, next) => {
       const eventName = packet[0];
+      if (PRESENCE_ACTIVE_EVENTS.has(eventName)) touchPresenceActivity(socket.user.id);
       if (FLOOD_EXEMPT.has(eventName)) return next();
       if (floodCheck('event')) {
         socket.emit('error-msg', 'Slow down — too many requests');
@@ -1800,6 +1862,8 @@ function setupSocketHandlers(io, db, opts = {}) {
       // Auto-moderation (v3.42.0)
       automod,
       enforceAutomod,
+      // Idle-online oversight (flag accounts sitting connected + green + silent)
+      getIdleOnlineUsers,
       onReferrerPolicyChange,
       // IP-ban cache invalidator (server.js HTTP-side cache)
       invalidateIpBanCache,
@@ -1832,6 +1896,19 @@ function setupSocketHandlers(io, db, opts = {}) {
       if (!socket.user) return;
       const detail = description && description.message ? ` (${description.message})` : '';
       console.log(`❌ ${socket.user.username} disconnected [${reason || 'unknown'}]${detail}`);
+
+      // Drop the presence clock once this user's last socket is gone, so a
+      // genuine reconnect later starts a fresh "online since". Deferred a beat
+      // so socket.io's rapid reconnect blips don't reset it constantly.
+      {
+        const uid = socket.user.id;
+        setTimeout(() => {
+          for (const [, s] of io.of('/').sockets) {
+            if (s.user && s.user.id === uid) return; // still online elsewhere
+          }
+          presenceTimers.delete(uid);
+        }, 5000);
+      }
 
       // (#5381) Guest cleanup — if this was the last live socket for an
       // ephemeral guest account, delete the users row so the username is
