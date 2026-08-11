@@ -1996,6 +1996,9 @@ _setupUI() {
   document.getElementById('messages').addEventListener('contextmenu', (e) => {
     // Images have their own Save/Copy/Open menu (handled above) — leave them.
     if (e.target.closest('.chat-image')) return;
+    // Inside the inline message-edit box, defer to the browser's native menu
+    // so spell-check suggestions work — none of our items apply while editing.
+    if (e.target.closest('.edit-textarea')) return;
     // Don't hijack right-click while picking messages to move.
     if (this._moveSelectionActive) return;
     const msgEl = e.target.closest('.message, .message-compact');
