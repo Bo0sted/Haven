@@ -11,6 +11,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.46.0] — 2026-08-10
+
+### Added
+- **A "Flag after" list of accounts that sit online and silent.** New Settings → Moderation section. An account can stay connected and showing green for hours doing nothing — no messages, no voice, no status change — which is what a script parked to watch a server looks like, since a real client trips auto-away when the person steps away. The list shows accounts that have been online and idle past a threshold you set (default 4 hours), longest-idle first. It is read-only, something to look at rather than an automatic action, and it is available to admins and to moderators who can act on it (ban, kick, audit, or view members). A moderator sees only this section, none of the admin-only ones.
+- **An invite-users permission.** Handing out invite links used to require admin or manage-server, so letting someone bring people in meant handing over the whole server. There is now a permission that covers exactly that. Holders see and edit only the links they made, capped at 25, and cannot touch the server-wide code or vanity link. Redeeming a link only ever joins public, top-level channels, same as before.
+- **The admin panel now says which settings come from an environment variable.** Server name, STUN, TURN and the GIF keys can be set in the panel or through the environment, with the stored value winning. Each of those fields now shows the environment value as a placeholder and a note saying which variable it comes from, so an admin who set `SERVER_NAME` in their compose file no longer opens Settings to a blank box with no idea whether it took. Secrets are reported as present without showing the value.
+- **A short identity reminder the first time you open a DM.** Haven does not verify who anyone is, and on an open server someone can register a name matching a person you trust and message you as them. A small dismissable notice at the top of a DM reminds people to check before sharing anything. Shows once, on both the popped-out and full-pane DM views, with a "don't show again" button.
+
+### Fixed
+- **Pasting a file into a thread posted it instantly.** A stray Ctrl+V dropped an image straight into the thread with no chance to cancel. Threads now hold pasted and dropped files as removable previews and only send them when you send the reply, like the main and DM composers already do. Reported by test1.
+- **Channel management leaked outside the channel it was granted on (#5467).** Creating a sub-channel accepted a global create-channels permission, so anyone allowed to start their own channel could add rooms inside channels they had nothing to do with. It now requires manage-sub-channels on that specific parent, and the menu only offers the Channel Functions and Create Sub-channel buttons in channels where you actually hold the permission, instead of showing buttons whose saves would be refused.
+- **Attachments outlived the messages that pointed at them.** Deleting a channel dropped its messages but left every file ever posted there orphaned in uploads. And in DMs, deleting an image you had just posted left the file behind, because the client read attachment URLs out of the last rendered batch and a just-posted image was never in it. Both now clean up the files, skipping any that another surviving message still links to.
+
 ## [3.45.0] — 2026-08-10
 
 ### Added

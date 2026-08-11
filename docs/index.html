@@ -1420,12 +1420,12 @@
       </div>
 
       <div class="download-card fade-in">
-        <h2>&#x2B21; Haven Server &mdash; v3.45.0</h2>
+        <h2>&#x2B21; Haven Server &mdash; v3.46.0</h2>
         <p class="download-version">Latest stable release &middot; Windows, macOS &amp; Linux &middot; ~5 MB</p>
 
         <div class="download-btn-group">
-          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.45.0.zip" class="btn btn-primary download-main">
-            <span class="icon">&#x2B07;</span> Download v3.45.0 (.zip)
+          <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.46.0.zip" class="btn btn-primary download-main">
+            <span class="icon">&#x2B07;</span> Download v3.46.0 (.zip)
           </a>
           <div class="download-alt-links">
             <a href="https://github.com/ancsemi/Haven" target="_blank">&#9965; View on GitHub</a>
@@ -1442,7 +1442,11 @@
           <div class="version-list">
             <div class="version-list-inner">
               <div class="version-item">
-                <div><span class="v-name">v3.45.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>Sign in with your own identity provider.</strong> Members can now sign in with an account from Authentik, Keycloak, Authelia, Auth0 or anything else that speaks OpenID Connect, instead of a Haven password. Set it up under Settings &rarr; Security. Because those members never type a password into Haven, and encrypted DMs are unlocked by a key derived from what you type, they set a separate encryption passphrase the first time they sign in and enter it again on each new device. It never reaches the server, so nobody can reset it, including the admin. Also fixed: a channel setting the server refused would still look like it had changed, the blank bar under the debug footer in the desktop app is gone, and follow-up messages now line up with the message above them on every density and theme. Thanks to @Lordingard and @Amnibro.</div>
+                <div><span class="v-name">v3.46.0</span><span class="v-tag latest">Latest</span> &mdash; <strong>A way to spot accounts parked online to watch the server, an invite-users permission, and a fix for files pasted into threads posting instantly.</strong> A new Settings &rarr; Moderation section lists accounts that have stayed connected and shown online for hours without posting, joining voice, or changing status, which is what a script logging the server looks like since a real client goes idle on its own. Threshold is yours to set, it is read-only, and moderators who can ban or kick see it too. Also adds an invite-users permission so you can let someone bring people in without handing over the whole server, shows which settings are coming from an environment variable instead of leaving the box looking empty, and puts a short &quot;Haven can&#39;t verify who anyone is&quot; note on new DMs. Fixes: pasting a file into a thread no longer posts it before you press send, channel management no longer reaches into channels it was not granted on, and deleting a channel or a DM image now cleans up the file instead of orphaning it. Thanks to @test1 and @birdcrazy.</div>
+                <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.46.0.zip">Download &rarr;</a>
+              </div>
+              <div class="version-item">
+                <div><span class="v-name">v3.45.0</span> &mdash; <strong>Sign in with your own identity provider.</strong> Members can now sign in with an account from Authentik, Keycloak, Authelia, Auth0 or anything else that speaks OpenID Connect, instead of a Haven password. Set it up under Settings &rarr; Security. Because those members never type a password into Haven, and encrypted DMs are unlocked by a key derived from what you type, they set a separate encryption passphrase the first time they sign in and enter it again on each new device. It never reaches the server, so nobody can reset it, including the admin. Also fixed: a channel setting the server refused would still look like it had changed, the blank bar under the debug footer in the desktop app is gone, and follow-up messages now line up with the message above them on every density and theme. Thanks to @Lordingard and @Amnibro.</div>
                 <a href="https://github.com/ancsemi/Haven/archive/refs/tags/v3.45.0.zip">Download &rarr;</a>
               </div>
               <div class="version-item">
