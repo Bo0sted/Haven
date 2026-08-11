@@ -11,7 +11,10 @@ const ALL_PERMS = [
   // from creating channels. Assign it channel-scoped to keep a moderator's
   // reach inside the channels they actually run.
   'manage_channel_settings',
-  'create_channel', 'create_temp_channel', 'upload_files', 'use_voice', 'use_tts', 'manage_webhooks', 'mention_everyone', 'view_history',
+  // (#5470) Hand out invite links without handing over the server. Holders
+  // see and manage only the links they made.
+  'create_channel', 'create_temp_channel', 'invite_users',
+  'upload_files', 'use_voice', 'use_tts', 'manage_webhooks', 'mention_everyone', 'view_history',
   'view_all_members', 'view_channel_members', 'manage_emojis', 'manage_stickers', 'manage_soundboard', 'manage_music_queue', 'promote_user',
   'manage_roles', 'manage_server', 'delete_channel', 'read_only_override', 'view_audit_log', 'manage_display_names'
 ];
@@ -38,6 +41,7 @@ const PERM_LABELS = {
   get manage_channel_settings() { return t('permissions.manage_channel_settings'); },
   get create_channel() { return t('permissions.create_channel'); },
   get create_temp_channel() { return t('permissions.create_temp_channel'); },
+  get invite_users() { return t('permissions.invite_users'); },
   get upload_files() { return t('permissions.upload_files'); },
   get use_voice() { return t('permissions.use_voice'); },
   get use_tts() { return t('permissions.use_tts'); },
@@ -732,7 +736,8 @@ _syncSettingsNav() {
   const canManageRoles = isAdmin || this._hasPerm('manage_roles');
   const canManageServer = isAdmin || this._hasPerm('manage_server');
   const canManageWebhooks = isAdmin || this._hasPerm('manage_webhooks');
-  const hasAnyAdminAccess = isAdmin || canManageEmojis || canManageStickers || canManageSounds || canManageRoles || canManageServer || canManageWebhooks;
+  const canInviteUsers = isAdmin || this._hasPerm('invite_users'); // (#5470)
+  const hasAnyAdminAccess = isAdmin || canManageEmojis || canManageStickers || canManageSounds || canManageRoles || canManageServer || canManageWebhooks || canInviteUsers;
 
   // Show/hide individual admin nav items (default: hidden for non-admins)
   document.querySelectorAll('.settings-nav-admin').forEach(el => {
@@ -801,6 +806,23 @@ _syncSettingsNav() {
       if (navItem) navItem.style.display = '';
     });
   }
+  // (#5470) invite_users reaches the Invite Links block and nothing else in
+  // that section. The server code, the vanity link and the default-join list
+  // are server configuration and stay behind manage_server, so hide those
+  // rather than showing controls whose saves would be refused.
+  const inviteNavItem = document.querySelector('.settings-nav-item[data-target="section-invite"]');
+  const inviteLinksOnly = !isAdmin && !canManageServer && canInviteUsers;
+  if (!isAdmin && !canManageServer) {
+    if (inviteNavItem) inviteNavItem.style.display = canInviteUsers ? '' : 'none';
+    const inviteSection = document.getElementById('section-invite');
+    if (inviteSection) inviteSection.style.display = canInviteUsers ? '' : 'none';
+  }
+  document.querySelectorAll('#section-invite .invite-server-config').forEach(el => {
+    el.style.display = inviteLinksOnly ? 'none' : '';
+  });
+  // With everything above it hidden, the block's divider has nothing to divide.
+  document.getElementById('invite-links-block')
+    ?.classList.toggle('invite-links-flush', inviteLinksOnly);
   // Show Bots tab for users with manage_webhooks permission
   const botsNavItem = document.querySelector('.settings-nav-item[data-target="section-bots"]');
   if (botsNavItem && !isAdmin && canManageWebhooks) {

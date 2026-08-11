@@ -10350,6 +10350,21 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 }
 .settings-hint.error { color: #e94560; }
 .settings-hint.success { color: #43b581; }
+/* Invite Links closes out the Server Invite Code section, so it carries a
+   divider. For someone holding only invite_users the rest of that section is
+   hidden and the block stands alone, leaving a rule with nothing above it to
+   separate — .invite-links-flush drops it. (#5470) */
+#invite-links-block {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+#invite-links-block.invite-links-flush {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 /* Note on a setting that also has a value in the server's environment, so the
    admin can see which of the two is actually live. (#5489) */
 .settings-hint.env-setting-hint {

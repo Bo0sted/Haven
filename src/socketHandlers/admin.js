@@ -420,8 +420,30 @@ module.exports = function register(socket, ctx) {
   });
 
   // ── Managed invite links (multi-code menu) ──────────────
+  // (#5470) invite_users lets a trusted member hand out invite links without
+  // being handed the whole server with them. What an invite can actually do
+  // is already bounded: redeeming one only ever joins public, top-level
+  // channels (see _resolveAutoJoinChannels), so a link can't reach a private
+  // channel no matter which ids it names. What still needs bounding is other
+  // people's links — a member with invite_users has no business revoking the
+  // admin's server-wide link — so they only see and edit their own.
   const _canManageInvites = () =>
+    socket.user.isAdmin ||
+    userHasPermission(socket.user.id, 'manage_server') ||
+    userHasPermission(socket.user.id, 'invite_users');
+
+  // True for the people who own the invite system as a whole, rather than
+  // just their own links.
+  const _canManageAllInvites = () =>
     socket.user.isAdmin || userHasPermission(socket.user.id, 'manage_server');
+
+  // The row, but only if this user is allowed to touch it.
+  const _ownedInvite = (id) => {
+    const row = db.prepare('SELECT * FROM invite_codes WHERE id = ?').get(id);
+    if (!row) return null;
+    if (_canManageAllInvites()) return row;
+    return row.created_by === socket.user.id ? row : null;
+  };
 
   // True if `code` already names a channel, the server code, the legacy vanity
   // code, or another invite link — anything join-channel could ambiguously
@@ -454,12 +476,16 @@ module.exports = function register(socket, ctx) {
   };
 
   const _emitInviteCodes = (target = socket) => {
+    // invite_users on its own sees only the links it made. (#5470)
+    const mineOnly = !_canManageAllInvites();
     const rows = db.prepare(`
       SELECT ic.*,
         (SELECT COUNT(*) FROM invite_code_uses u WHERE u.invite_code_id = ic.id) AS use_count,
         (ic.expires_at IS NOT NULL AND ic.expires_at <= CURRENT_TIMESTAMP) AS is_expired
-      FROM invite_codes ic ORDER BY ic.created_at DESC
-    `).all();
+      FROM invite_codes ic
+      ${mineOnly ? 'WHERE ic.created_by = ?' : ''}
+      ORDER BY ic.created_at DESC
+    `).all(...(mineOnly ? [socket.user.id] : []));
     rows.forEach(r => {
       r.created_at = utcStamp(r.created_at);
       if (r.expires_at) r.expires_at = utcStamp(r.expires_at);
@@ -478,8 +504,19 @@ module.exports = function register(socket, ctx) {
   });
 
   socket.on('create-invite-code', (data) => {
-    if (!_canManageInvites()) return socket.emit('error-msg', 'Only admins can manage invite links');
+    if (!_canManageInvites()) return socket.emit('error-msg', 'You don\'t have permission to manage invite links');
     if (!data || typeof data !== 'object') return;
+
+    // A delegated inviter shouldn't be able to fill the table. Admins and
+    // manage_server are uncapped as before. (#5470)
+    if (!_canManageAllInvites()) {
+      const mine = db.prepare(
+        'SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?'
+      ).get(socket.user.id).n;
+      if (mine >= 25) {
+        return socket.emit('error-msg', 'You already have 25 invite links. Delete one before making another.');
+      }
+    }
 
     const label = typeof data.label === 'string' ? data.label.trim().slice(0, 60) : '';
     const channels = _normaliseInviteChannels(data.channels);
@@ -517,11 +554,11 @@ module.exports = function register(socket, ctx) {
   });
 
   socket.on('update-invite-code', (data) => {
-    if (!_canManageInvites()) return socket.emit('error-msg', 'Only admins can manage invite links');
+    if (!_canManageInvites()) return socket.emit('error-msg', 'You don\'t have permission to manage invite links');
     if (!data || typeof data !== 'object') return;
     const id = parseInt(data.id);
     if (!Number.isInteger(id)) return;
-    const row = db.prepare('SELECT * FROM invite_codes WHERE id = ?').get(id);
+    const row = _ownedInvite(id);
     if (!row) return socket.emit('error-msg', 'Invite link not found');
 
     const sets = [];
@@ -555,11 +592,11 @@ module.exports = function register(socket, ctx) {
   });
 
   socket.on('delete-invite-code', (data) => {
-    if (!_canManageInvites()) return socket.emit('error-msg', 'Only admins can manage invite links');
+    if (!_canManageInvites()) return socket.emit('error-msg', 'You don\'t have permission to manage invite links');
     if (!data || typeof data !== 'object') return;
     const id = parseInt(data.id);
     if (!Number.isInteger(id)) return;
-    const row = db.prepare('SELECT code FROM invite_codes WHERE id = ?').get(id);
+    const row = _ownedInvite(id);
     if (!row) return;
     db.prepare('DELETE FROM invite_codes WHERE id = ?').run(id);
     if (typeof logAudit === 'function') {
