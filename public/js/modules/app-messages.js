@@ -370,7 +370,10 @@ _renderMessages(messages, lastReadMessageId) {
   this._decryptE2EFiles(container);
   // DMs are ciphertext server-side, so their links can only be judged
   // here, after decryption and before anyone can click. (#5483)
-  if (this._isDmContainer((container))) this._enforceDmLinkPolicy((container));
+  if (this._isDmContainer((container))) {
+    this._enforceDmLinkPolicy((container));
+    this._maybeShowDmSafetyNotice?.(container);
+  }
   // Wire burn-after-read placeholders + countdowns (#5280)
   this._wireBurnMessages?.(container);
   // Mark as read (last message ID)

@@ -9606,6 +9606,41 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   vertical-align: baseline;
 }
 
+/* One-time identity disclosure at the top of a DM. Haven doesn't verify who
+   anyone is, so this reminds people to check before trusting a name. z-index
+   keeps it above the DM PiP's decorative banner backdrop. */
+.dm-safety-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+  margin: 0.5rem 0.5rem 0.75rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent, #5865f2);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.dm-safety-icon { flex: 0 0 auto; font-size: 0.95rem; }
+.dm-safety-text { flex: 1 1 auto; }
+.dm-safety-dismiss {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.dm-safety-dismiss:hover { border-color: var(--accent); color: var(--accent); }
+
 /* Spoiler toggle on a queued image thumbnail */
 .image-queue-spoiler {
   position: absolute;

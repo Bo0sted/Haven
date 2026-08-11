@@ -3175,6 +3175,7 @@ _renderDMPiPHistory(messages) {
   // DM PiP is unambiguously a DM view, so enforce directly rather than
   // routing through _isDmContainer. (#5483)
   try { this._enforceDmLinkPolicy?.(list); } catch {}
+  try { this._maybeShowDmSafetyNotice?.(list); } catch {}
   try { this._wireBurnMessages?.(list); } catch {}
   list.scrollTop = list.scrollHeight;
 },
@@ -3891,6 +3892,32 @@ _checkLinkPolicy(text) {
 _dmLinkBlocked(text) {
   if (!this._linkPolicy || !this._linkPolicy.scanDms) return null;
   return this._checkLinkPolicy(text);
+},
+
+// One-time identity disclosure on DMs. Haven does not verify who anyone is,
+// and on an open server someone can register a display name that matches a
+// person you trust (the owner, a mod) and DM you as them. This is a nudge to
+// check, not a control. Dismissed globally, remembered in localStorage.
+_maybeShowDmSafetyNotice(container) {
+  if (!container) return;
+  try { if (localStorage.getItem('haven_dm_safety_dismissed') === '1') return; } catch {}
+  // Already present in this container — don't stack copies on re-render.
+  if (container.querySelector(':scope > .dm-safety-notice')) return;
+
+  const notice = document.createElement('div');
+  notice.className = 'dm-safety-notice';
+  notice.innerHTML =
+    '<span class="dm-safety-icon" aria-hidden="true">🛡️</span>' +
+    '<span class="dm-safety-text">Haven can\'t verify anyone\'s identity. Names aren\'t unique, so make sure you actually know who you\'re talking to before sharing anything.</span>' +
+    '<button type="button" class="dm-safety-dismiss">Got it, don\'t show again</button>';
+
+  notice.querySelector('.dm-safety-dismiss').addEventListener('click', () => {
+    try { localStorage.setItem('haven_dm_safety_dismissed', '1'); } catch {}
+    // Clear it everywhere it might be showing (main pane + any open PiP).
+    document.querySelectorAll('.dm-safety-notice').forEach(n => n.remove());
+  });
+
+  container.insertBefore(notice, container.firstChild);
 },
 
 // Neutralise disallowed links in an already-rendered DM message container.
