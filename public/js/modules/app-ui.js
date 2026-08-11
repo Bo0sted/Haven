@@ -2267,34 +2267,29 @@ _setupUI() {
     threadInput.addEventListener('paste', (e) => {
       const items = e.clipboardData?.items;
       if (!items) return;
-      const parentId = this._activeThreadParent;
-      if (!parentId) return;
+      if (!this._activeThreadParent) return;
       for (const item of items) {
         if (item.kind === 'file') {
           const file = item.getAsFile();
           if (!file) continue;
           e.preventDefault();
-          const maxMb = parseInt(this.serverSettings?.max_upload_mb) || 25;
-          if (file.size > maxMb * 1024 * 1024) {
-            this._showToast(`File too large (max ${maxMb} MB)`, 'error');
-            return;
-          }
-          const formData = new FormData();
-          formData.append('file', file);
-          this._uploadWithProgress('/api/upload-file', formData).then(data => {
-            if (data.error) { this._showToast(data.error, 'error'); return; }
-            let content;
-            if (data.isImage) {
-              content = data.url;
-            } else {
-              const sizeStr = this._formatFileSize(data.fileSize);
-              content = `[file:${data.originalName}](${data.url}|${sizeStr})`;
-            }
-            this.socket.emit('send-thread-message', { parentId, content });
-          }).catch(err => this._showToast(err.message || 'Upload failed', 'error'));
+          // Hold it, don't post it. Flushed on send. (#thread-paste-instant)
+          this._queueThreadFile(file);
           return;
         }
       }
+    });
+
+    // Drag & drop parity with the other composers — queue, never insta-post.
+    const threadArea = threadInput.closest('.thread-input-area') || threadInput;
+    threadArea.addEventListener('dragover', (e) => { e.preventDefault(); threadArea.classList.add('drag-over'); });
+    threadArea.addEventListener('dragleave', () => threadArea.classList.remove('drag-over'));
+    threadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      threadArea.classList.remove('drag-over');
+      if (!this._activeThreadParent) return;
+      const file = e.dataTransfer?.files[0];
+      if (file) this._queueThreadFile(file);
     });
   }
 

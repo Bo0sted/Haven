@@ -8639,6 +8639,26 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   display: block;
 }
 
+/* Non-image attachment held in a composer queue (e.g. a pasted file in a
+   thread): show the filename instead of a thumbnail. */
+.image-queue-thumb.is-file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+}
+.image-queue-filename {
+  font-size: 0.6rem;
+  line-height: 1.2;
+  color: var(--text-muted);
+  text-align: center;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
 .image-queue-remove {
   position: absolute;
   top: 2px;

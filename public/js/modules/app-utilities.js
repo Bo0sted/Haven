@@ -3425,19 +3425,29 @@ _sendThreadMessage() {
   const input = document.getElementById('thread-input');
   if (!input) return;
   const content = input.value.trim();
-  if (!content) return;
   const parentId = this._activeThreadParent;
   if (!parentId) return;
+  const hasPending = !!(this._threadPending && this._threadPending.length);
+  // Nothing to send — no text and no held attachments.
+  if (!content && !hasPending) return;
   const replyTo = this._threadReplyingTo ? this._threadReplyingTo.id : null;
 
-  this.socket.emit('send-thread-message', { parentId, content, replyTo }, (resp) => {
-    if (resp && resp.error) {
-      this._showToast(resp.error, 'error');
-      return;
-    }
-    this._clearThreadReply();
-  });
-  input.value = '';
+  if (content) {
+    this.socket.emit('send-thread-message', { parentId, content, replyTo }, (resp) => {
+      if (resp && resp.error) {
+        this._showToast(resp.error, 'error');
+        return;
+      }
+      this._clearThreadReply();
+    });
+    input.value = '';
+  }
+
+  // Flush any pasted/dropped attachments that were held until now.
+  if (hasPending) {
+    this._flushThreadPending?.(parentId);
+    if (!content) this._clearThreadReply();
+  }
 },
 
 _appendThreadMessage(msg) {

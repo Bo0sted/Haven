@@ -247,6 +247,103 @@ async _flushPiPImageQueue(bundled = false) {
   }
 },
 
+// ── Thread attachment queue (#thread-paste-instant) ──────────────────
+// Pasting or dropping a file into a thread used to upload and post it
+// immediately, so an accidental Ctrl+V dumped an image into the thread with
+// no chance to cancel. Hold attachments here instead and flush them only when
+// the reply is actually sent, matching the main and DM composers.
+_queueThreadFile(file) {
+  if (!file) return;
+  const _maxMb = parseInt(this.serverSettings?.max_upload_mb) || 25;
+  if (file.size > _maxMb * 1024 * 1024) {
+    return this._showToast(`File too large (max ${_maxMb} MB)`, 'error');
+  }
+  if (!this._threadPending) this._threadPending = [];
+  if (this._threadPending.length >= 5) {
+    return this._showToast('Max 5 attachments at once', 'error');
+  }
+  this._threadPending.push(file);
+  this._renderThreadPending();
+  document.getElementById('thread-input')?.focus();
+},
+
+_renderThreadPending() {
+  const bar = document.getElementById('thread-image-queue-bar');
+  if (!bar) return;
+  if (!this._threadPending || this._threadPending.length === 0) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  bar.style.display = 'flex';
+  bar.innerHTML = '';
+  this._threadPending.forEach((file, idx) => {
+    const isImage = file.type && file.type.startsWith('image/');
+    const thumb = document.createElement('div');
+    thumb.className = 'image-queue-thumb' + (isImage ? '' : ' is-file');
+    if (isImage) {
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.alt = file.name;
+      img.onload = () => URL.revokeObjectURL(img.src);
+      thumb.appendChild(img);
+    } else {
+      const label = document.createElement('span');
+      label.className = 'image-queue-filename';
+      label.textContent = file.name || 'file';
+      thumb.appendChild(label);
+    }
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'image-queue-remove';
+    removeBtn.title = 'Remove';
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', () => {
+      this._threadPending.splice(idx, 1);
+      this._renderThreadPending();
+    });
+    thumb.appendChild(removeBtn);
+    bar.appendChild(thumb);
+  });
+  if (this._threadPending.length > 1) {
+    const clearAll = document.createElement('button');
+    clearAll.className = 'image-queue-clear-all';
+    clearAll.textContent = 'Clear All';
+    clearAll.addEventListener('click', () => {
+      this._threadPending = [];
+      this._renderThreadPending();
+    });
+    bar.appendChild(clearAll);
+  }
+},
+
+// Upload each held attachment and post it as a thread reply. Runs from
+// _sendThreadMessage after the text so the ordering feels natural.
+async _flushThreadPending(parentId) {
+  if (!this._threadPending || this._threadPending.length === 0) return;
+  if (!parentId) return;
+  const files = [...this._threadPending];
+  this._threadPending = [];
+  this._renderThreadPending();
+  for (const file of files) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const data = await this._uploadWithProgress('/api/upload-file', formData);
+      if (!data || data.error) { this._showToast(data?.error || 'Upload failed', 'error'); continue; }
+      let content;
+      if (data.isImage) {
+        content = data.url;
+      } else {
+        const sizeStr = this._formatFileSize(data.fileSize);
+        content = `[file:${data.originalName}](${data.url}|${sizeStr})`;
+      }
+      this.socket.emit('send-thread-message', { parentId, content });
+    } catch (err) {
+      this._showToast(err.message || 'Upload failed', 'error');
+    }
+  }
+},
+
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // AVATAR / PFP CUSTOMIZER
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
