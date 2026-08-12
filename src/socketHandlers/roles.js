@@ -41,8 +41,11 @@ module.exports = function register(socket, ctx) {
   // Expose on ctx so other modules can use it if needed
   ctx.applyRoleChannelAccess = applyRoleChannelAccess;
 
-  // ── Notify helper: refresh a user's role state on all sockets ──
-  function refreshUserRoles(userId) {
+  // ── Notify helper: push one user's recomputed role state to their sockets ──
+  // Recomputes from the DB, so it's correct whether the change was to the
+  // user's role ASSIGNMENTS (assign/revoke/promote) or to the PERMISSIONS of a
+  // role they already hold (update-role / reset-roles-to-default).
+  function pushUserRoleState(userId) {
     for (const [, s] of io.sockets.sockets) {
       if (s.user && s.user.id === userId) {
         s.user.roles = getUserRoles(userId);
@@ -55,6 +58,11 @@ module.exports = function register(socket, ctx) {
         });
       }
     }
+  }
+
+  // Same, plus a member-list refresh everywhere (role badges/ordering change).
+  function refreshUserRoles(userId) {
+    pushUserRoleState(userId);
     for (const [code] of channelUsers) { emitOnlineUsers(code); }
   }
 
@@ -327,6 +335,16 @@ module.exports = function register(socket, ctx) {
     freshRoles.forEach(r => { r.permissions = pm[r.id] || []; });
 
     for (const [code] of channelUsers) { emitOnlineUsers(code); }
+
+    // Editing a role's PERMISSIONS changes what every member of that role can
+    // do, so each of them needs their own recomputed permission set pushed.
+    // The broadcast below carries no payload — it's only a "the server's role
+    // list changed" nudge for open Role Management modals — so without this
+    // loop a moderator granted e.g. ban_ip kept their stale permission set
+    // (and the hidden IP-ban option) until they reconnected.
+    const affected = db.prepare('SELECT DISTINCT user_id FROM user_roles WHERE role_id = ?').all(roleId);
+    for (const row of affected) pushUserRoleState(row.user_id);
+
     socket.broadcast.emit('roles-updated');
     cb({ success: true, roles: freshRoles });
     _audit({ actor: socket.user, action: 'role_update',
@@ -397,6 +415,13 @@ module.exports = function register(socket, ctx) {
       }
 
       for (const [code] of channelUsers) { emitOnlineUsers(code); }
+      // Every role was just torn down and rebuilt, so every connected user's
+      // permission set changed. Push each one their own recomputed state —
+      // the payload-less broadcast below only nudges open role managers.
+      const seen = new Set();
+      for (const [, s] of io.sockets.sockets) {
+        if (s.user && !seen.has(s.user.id)) { seen.add(s.user.id); pushUserRoleState(s.user.id); }
+      }
       io.emit('roles-updated');
       cb({ success: true });
     } catch (err) {

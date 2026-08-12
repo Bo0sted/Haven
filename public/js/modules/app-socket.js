@@ -75,8 +75,15 @@ _setupSocketListeners() {
     document.getElementById('sidebar-members-btn').style.display = (this.user.isAdmin || canModerate || this._hasPerm('view_all_members') || this._hasPerm('view_channel_members')) ? '' : 'none';
   });
 
-  // Roles updated (from admin assigning/revoking)
+  // Roles updated (from admin assigning/revoking, or editing a role we hold)
   this.socket.on('roles-updated', (data) => {
+    // The server also fires this with NO payload as a plain "the server's role
+    // list changed" nudge (role edited, roles reset, admin role display
+    // changed) for anyone with the Role Management modal open. There's no
+    // per-user permission set to apply then. Bail instead of throwing on
+    // `data.roles` — that TypeError also aborted every roles-updated listener
+    // registered after this one, including the modal's own _loadRoles refresh.
+    if (!data) return;
     this.user.roles = data.roles || [];
     this.user.effectiveLevel = data.effectiveLevel || 0;
     this.user.permissions = data.permissions || [];
