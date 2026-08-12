@@ -15,9 +15,10 @@ const fs = require('fs');
 const path = require('path');
 const { DATA_DIR } = require('./paths');
 
-// The draft directory carries no version in its path, so it always serves the
-// newest published emoji-test.txt — I believe this URL tracks the latest release.
-const EMOJI_TEST_URL = 'https://unicode.org/Public/draft/emoji/emoji-test.txt';
+// The latest directory tracks Unicode's newest *published* release, so we only
+// pick up glyphs that shipped OS fonts can already render. (draft/ carries the
+// in-progress version, whose newest emoji render as empty boxes.)
+const EMOJI_TEST_URL = 'https://unicode.org/Public/emoji/latest/emoji-test.txt';
 const EMOJI_FILE = path.join(DATA_DIR, 'emoji-test.txt');       // runtime copy
 const FALLBACK_FILE = path.join(__dirname, 'emoji-test.txt');   // committed fallback
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;                    // refetch after ~1 month
@@ -130,10 +131,17 @@ async function downloadEmojiFile() {
 }
 
 /**
- * Runs once at startup. Keeps the runtime emoji-test.txt current with the least
- * possible work: a single stat, at most one network request, at most one write.
+ * Refreshes the runtime emoji-test.txt with the least possible work: a single
+ * stat, at most one network request, at most one write. Runs at startup and
+ * again whenever an admin enables the feature.
+ *
+ * `autoUpdate` is resolved by the caller (env override → admin setting → off).
+ * When false, Haven never reaches out and serves whatever is already on disk —
+ * the last downloaded copy, or the committed fallback if none was ever fetched.
  */
-async function ensureEmojiData() {
+async function ensureEmojiData(autoUpdate) {
+  if (!autoUpdate) return;    // opted out → serve whatever's on disk (runtime copy or committed fallback)
+
   const stat = fs.existsSync(EMOJI_FILE) ? fs.statSync(EMOJI_FILE) : null;
 
   // Runtime copy is under a month old → nothing to do (no network, no write).
@@ -154,4 +162,16 @@ async function ensureEmojiData() {
   }
 }
 
-module.exports = { ensureEmojiData, getEmojiData };
+/**
+ * Resolve whether auto-update should run. The UNICODE_EMOJI_AUTO_UPDATE env var
+ * wins when set to true/false (for locked-down deployments); otherwise the admin
+ * setting decides, defaulting off. Shared by the boot path and the admin toggle
+ * so both honour the same precedence.
+ */
+function autoUpdateEnabled(settingValue) {
+  const env = (process.env.UNICODE_EMOJI_AUTO_UPDATE || '').trim().toLowerCase();
+  if (env === 'true' || env === 'false') return env === 'true';
+  return settingValue === 'true';
+}
+
+module.exports = { ensureEmojiData, getEmojiData, autoUpdateEnabled };

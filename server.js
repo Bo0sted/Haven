@@ -4363,7 +4363,12 @@ const db = initDatabase();
 try { seedStarterStickers(); } catch {}
 
 // Download / refresh the Unicode emoji list (non-blocking, best-effort).
-require('./src/emoji').ensureEmojiData();
+// Opt-in: off unless the admin enables it or UNICODE_EMOJI_AUTO_UPDATE forces it.
+{
+  const emoji = require('./src/emoji');
+  const row = db.prepare("SELECT value FROM server_settings WHERE key = 'unicode_emoji_auto_update'").get();
+  emoji.ensureEmojiData(emoji.autoUpdateEnabled(row?.value));
+}
 
 // Load the admin-configured Referrer-Policy into the in-memory cache.
 try {

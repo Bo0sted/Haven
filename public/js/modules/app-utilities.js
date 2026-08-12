@@ -374,8 +374,10 @@ _isEmojiOnly(str) {
   });
   let s = str.replace(/:([a-zA-Z0-9_-]+):/g, ' ');
   try {
-    // Strip unicode emoji, modifiers, ZWJ, variation selectors, flags
-    s = s.replace(/[\p{Extended_Pictographic}\u{FE00}-\u{FEFF}\u{200D}\u{20E3}\u{1F1E0}-\u{1F1FF}]/gu, '');
+    // Strip unicode emoji, skin-tone modifiers, ZWJ, variation selectors, flags.
+    // Skin tones (1F3FB–1F3FF) are Emoji_Modifier, not Extended_Pictographic, so
+    // they need their own range or a toned emoji leaves a leftover and misses jumbo.
+    s = s.replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{FE00}-\u{FEFF}\u{200D}\u{20E3}\u{1F1E0}-\u{1F1FF}]/gu, '');
   } catch {
     s = s.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FEFF}\u{200D}\u{20E3}]/gu, '');
   }
