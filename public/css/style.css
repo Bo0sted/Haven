@@ -8912,6 +8912,27 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   font-size: 0.85em;
 }
 
+/* Persona autocomplete (::Name) avatar — scale/crop to a small circle the way
+   the sent-message avatar does, rather than showing the raw, oversized image. */
+.persona-dd-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.persona-dd-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary, var(--bg-secondary));
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 /* :emoji autocomplete dropdown */
 .emoji-dropdown {
   position: absolute;
@@ -9530,6 +9551,39 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   user-select: auto;
 }
 
+/* Custom emoji render as <img>, which `color: transparent` can't hide, so
+   they'd otherwise show through an unrevealed text spoiler. Keep them laid
+   out (the blur box stays the right size) but invisible until revealed. */
+.spoiler:not(.revealed) .custom-emoji {
+  visibility: hidden;
+}
+
+/* Inline code sets its own color and background, so `color: transparent`
+   can't hide it and it would show through an unrevealed spoiler. It's a
+   single line, so the spoiler's own bar covers it — just hide the element
+   (keeping its layout box) until revealed. */
+.spoiler:not(.revealed) .inline-code {
+  visibility: hidden;
+}
+
+/* Fenced code blocks are tall block-level boxes, but .spoiler is an inline
+   span whose background only paints the first and last line — the middle of
+   the block would be hidden-but-uncovered (transparent) instead of showing a
+   spoiler bar. So rather than hide the block, repaint it as the bar itself:
+   the muted background, transparent text, no border, and no language tag,
+   until revealed. */
+.spoiler:not(.revealed) .code-block {
+  background: var(--text-muted);
+  border-color: transparent;
+  color: transparent;
+}
+.spoiler:not(.revealed) .code-block code {
+  color: transparent;
+}
+.spoiler:not(.revealed) .code-block-lang {
+  visibility: hidden;
+}
+
 /* Spoiler images (sender marked the image as a spoiler) — blurred behind a
    label until clicked. The inner .chat-image is the actual image. */
 .spoiler-media {
@@ -9578,6 +9632,29 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   cursor: pointer;
 }
 .spoiler-media.revealed .spoiler-media-tag {
+  display: none;
+}
+
+/* A link wrapped in a || spoiler || carries the spoiler onto its embed card:
+   blur the card behind the shared spoiler tag until it's clicked to reveal.
+   Only the children are blurred and made click-through, so the card itself
+   catches the reveal click — same mechanic as .spoiler-media above. */
+.link-preview.lp-spoiler {
+  position: relative;
+  cursor: pointer;
+}
+.link-preview.lp-spoiler:not(.revealed) {
+  overflow: hidden;
+}
+.link-preview.lp-spoiler:not(.revealed) > *:not(.spoiler-media-tag) {
+  filter: blur(22px);
+  transform: scale(1.02);
+  pointer-events: none;
+}
+.link-preview.lp-spoiler.revealed {
+  cursor: default;
+}
+.link-preview.lp-spoiler.revealed > .spoiler-media-tag {
   display: none;
 }
 

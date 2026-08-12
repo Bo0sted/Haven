@@ -1525,6 +1525,7 @@ _fetchLinkPreviews(containerEl) {
         // in the query string. That was the whole reason for same-origin.
         `<div class="lp-content"><div class="link-preview-yt"><iframe src="https://www.youtube.com/embed/${this._escapeHtml(ytVideoId)}?rel=0" width="100%" height="270" frameborder="0" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div></div>`;
       this._wireEmbedControls(wrapper, url);
+      this._applyEmbedSpoiler(wrapper, link);
       msgContent.appendChild(wrapper);
       if (this._coupledToBottom) this._scrollToBottom(true);
       return; // skip generic link preview for YouTube
@@ -1640,6 +1641,7 @@ _fetchLinkPreviews(containerEl) {
             stats +
           '</div>';
         this._wireEmbedControls(card, url);
+        this._applyEmbedSpoiler(card, link);
 
         const wasAtBottom = this._coupledToBottom;
         msgContent.appendChild(card);
@@ -1712,6 +1714,21 @@ _runLinkPreviewTask(task) {
 // _applyEmbedSize live in app-media.js); the per-card ⤢ button is a quick cycle
 // through Full→Medium→Small (Off stays Settings-only so the button can't hide
 // itself), and the ▾/▸ caret collapses a single embed for this session.
+
+// A link wrapped in a || spoiler || carries that spoiler onto its embed
+// card: the card is blurred behind the same tag used for spoiler images
+// until it is clicked to reveal (handled by _maybeRevealConcealed). We read
+// the rendered DOM — the <a> sits inside the .spoiler span — so detection
+// stays in sync with however the message was marked up (auto-link, masked
+// [text](url), YouTube, etc.).
+_applyEmbedSpoiler(embedEl, link) {
+  if (!link || !link.closest('.spoiler')) return;
+  embedEl.classList.add('lp-spoiler');
+  const tag = document.createElement('span');
+  tag.className = 'spoiler-media-tag';
+  tag.textContent = '\u{1F441}\u{FE0F} ' + ((typeof t === 'function' && t('app.messages.spoiler')) || 'Spoiler');
+  embedEl.appendChild(tag);
+},
 
 /** Header row markup: site name (accent), size cycle button, collapse caret. */
 _embedHeaderHtml(siteName, collapsed) {

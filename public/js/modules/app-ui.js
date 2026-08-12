@@ -1996,6 +1996,9 @@ _setupUI() {
   document.getElementById('messages').addEventListener('contextmenu', (e) => {
     // Images have their own Save/Copy/Open menu (handled above) — leave them.
     if (e.target.closest('.chat-image')) return;
+    // Inside the inline message-edit box, defer to the browser's native menu
+    // so spell-check suggestions work — none of our items apply while editing.
+    if (e.target.closest('.edit-textarea')) return;
     // Don't hijack right-click while picking messages to move.
     if (this._moveSelectionActive) return;
     const msgEl = e.target.closest('.message, .message-compact');
@@ -6304,6 +6307,15 @@ _maybeRevealConcealed(e) {
   const sp = e.target.closest && e.target.closest('.spoiler-media');
   if (sp && !sp.classList.contains('revealed')) {
     sp.classList.add('revealed');
+    return true;
+  }
+  // Spoilered link embed (the link was wrapped in ||spoiler||) → reveal the
+  // card in place; blurred children have pointer-events disabled, so the
+  // click lands on the card and this consumes it before the embed's own
+  // controls or link fire.
+  const lp = e.target.closest && e.target.closest('.link-preview.lp-spoiler');
+  if (lp && !lp.classList.contains('revealed')) {
+    lp.classList.add('revealed');
     return true;
   }
   return false;

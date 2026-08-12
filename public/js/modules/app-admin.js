@@ -2385,7 +2385,13 @@ _checkEmojiTrigger(inputEl) {
     if (ch === ' ' || ch === '\n') break; // stop at whitespace
   }
 
-  if (colonIdx === -1) { this._hideEmojiDropdown(); return; }
+  // No emoji token under the cursor — bail and close any open dropdown. A
+  // leading "::" counts as "no token": it's the persona trigger, and since no
+  // emoji shortcode starts with ':', that colon can only belong to a persona.
+  if (colonIdx === -1 || (colonIdx === 1 && text.startsWith('::'))) {
+    this._hideEmojiDropdown();
+    return;
+  }
 
   const query = text.substring(colonIdx + 1, cursor).toLowerCase();
   if (query.length < 2) { this._hideEmojiDropdown(); return; }
