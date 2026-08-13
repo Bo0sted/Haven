@@ -558,6 +558,23 @@ Haven comes with 6 themes. Switch between them using the theme buttons at the bo
 
 Your theme choice is saved per browser.
 
+### Bundled optional themes and plugins
+
+Haven also ships a couple of extras that are **installed but switched off by default**, so you will not see them until an admin turns them on. They are already on your server, including in the Docker image. There is nothing to download.
+
+| File | What it is |
+|------|-----------|
+| `themes/braid.theme.css` | Braid, a dark mint theme |
+| `themes/braid-light.theme.css` | Braid Light |
+| `plugins/BraidLayout.plugin.js` | Braid's layout changes |
+| `plugins/MessageTimestamps.plugin.js` | Adds timestamps to messages |
+
+To make a bundled theme available to everyone, go to **Settings → Admin → 🏠 Branding → Custom Themes** and publish it. Publishing is what adds its button to the theme picker in the sidebar. Until then it stays hidden even though the file is present, which is the usual reason a theme "looks missing" after an update.
+
+Custom themes work the same way. Drop a `<name>.theme.css` file into the `themes/` folder, restart, then publish it in the same place. A theme can also be set as the server **default** from that section, which applies to anyone who has not already picked a theme of their own. It is a default rather than a lock, so a user who chooses a different theme keeps their choice.
+
+> **Docker users:** `themes/` and `plugins/` live inside the image, not in the `/data` volume, so pulling a newer image is all you need to get new bundled files. Remember to recreate the container afterwards (`docker compose up -d`), since pulling alone leaves the old container running the old image. If you bind-mount over `/app`, your host folder wins and you will need to add the files there yourself.
+
 ---
 
 ## 🎤 Voice Chat
