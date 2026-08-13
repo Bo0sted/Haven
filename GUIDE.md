@@ -599,6 +599,10 @@ TURN_SECRET=YOUR_RANDOM_SECRET_HERE
 
 Restart Haven, and voice/screen sharing will work across any network.
 
+> **You can set this in the app instead:** **Settings → Admin → 📡 Voice & Connectivity** configures the same STUN and TURN servers without touching `.env`, and it applies without restarting.
+
+> **Which one wins:** a TURN server set in Settings takes precedence, and the `TURN_*` environment variables are ignored while it's filled in. The env vars only apply when the in-app TURN field is empty. If you set `TURN_URL` in `.env` and nothing seems to change, open Settings and clear the field there. `TURN_SECRET` (time-limited HMAC credentials) is environment-only, and is skipped entirely once a TURN server is configured in the app.
+
 > **Docker users:** Add `TURN_URL` and `TURN_SECRET` as environment variables in your `docker-compose.yml`. See the commented example in the default compose file.
 
 > **Oracle Cloud / cloud VMs:** Make sure ports 3478 (UDP+TCP) and 49152–65535 (UDP) are open in your security group / firewall rules. These are needed for TURN relay traffic.
