@@ -311,11 +311,19 @@ module.exports = function register(socket, ctx) {
     try { const u = new URL(endpoint); if (u.protocol !== 'https:') return; } catch { return; }
 
     try {
-      db.prepare(`
-        INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id, endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth
-      `).run(socket.user.id, endpoint, keys.p256dh, keys.auth);
+      // One endpoint is one browser/device, and only one account is signed
+      // into it at a time. Because the table is UNIQUE(user_id, endpoint), a
+      // previous account's row for this same device would otherwise survive,
+      // and fan-out only skips rows whose user_id is the sender, so that stale
+      // row pushed the sender their own messages. Claim it for this user.
+      db.transaction(() => {
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id != ?').run(endpoint, socket.user.id);
+        db.prepare(`
+          INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(user_id, endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth
+        `).run(socket.user.id, endpoint, keys.p256dh, keys.auth);
+      })();
       socket.emit('push-subscribed');
     } catch (err) {
       console.error('Push subscribe error:', err);
@@ -340,11 +348,22 @@ module.exports = function register(socket, ctx) {
   socket.on('register-fcm-token', (data) => {
     if (!data || typeof data.token !== 'string' || !data.token.trim()) return;
     try {
-      db.prepare(`
-        INSERT INTO fcm_tokens (user_id, token)
-        VALUES (?, ?)
-        ON CONFLICT(user_id, token) DO NOTHING
-      `).run(socket.user.id, data.token.trim());
+      // Same device-ownership rule as push_subscriptions above. An FCM token
+      // belongs to one app install, so a token still filed under a previously
+      // signed-in account would push that device the current user's own
+      // messages. This matters more here than for web push: a web-push
+      // endpoint dies on resubscribe and the 410 handler prunes it, but an FCM
+      // token stays valid across an account switch, so a stale row never
+      // cleans itself up.
+      const fcmToken = data.token.trim();
+      db.transaction(() => {
+        db.prepare('DELETE FROM fcm_tokens WHERE token = ? AND user_id != ?').run(fcmToken, socket.user.id);
+        db.prepare(`
+          INSERT INTO fcm_tokens (user_id, token)
+          VALUES (?, ?)
+          ON CONFLICT(user_id, token) DO NOTHING
+        `).run(socket.user.id, fcmToken);
+      })();
     } catch (err) {
       console.error('FCM token register error:', err);
     }

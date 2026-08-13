@@ -454,11 +454,22 @@ app.post('/api/push/subscribe', express.json(), (req, res) => {
 
   try {
     const { getDb } = require('./src/database');
-    getDb().prepare(`
-      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id, endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth
-    `).run(user.id, endpoint, keys.p256dh, keys.auth);
+    const db = getDb();
+    // An endpoint identifies one browser/device, and only one account can be
+    // signed into it at a time. The table is UNIQUE(user_id, endpoint), so
+    // signing in as someone else used to leave the previous account's row
+    // behind pointing at the same device. Fan-out only skips subscriptions
+    // whose user_id matches the sender, so that stale row kept getting pushed
+    // and the sender received their own messages on their own phone. Claim the
+    // endpoint for this user.
+    db.transaction(() => {
+      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id != ?').run(endpoint, user.id);
+      db.prepare(`
+        INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth
+      `).run(user.id, endpoint, keys.p256dh, keys.auth);
+    })();
     res.json({ ok: true });
   } catch (err) {
     console.error('[push/subscribe]', err);

@@ -965,6 +965,27 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user ON fcm_tokens(user_id);
   `);
 
+  // ── Migration: one device belongs to one account ────────
+  // Both tables are UNIQUE(user_id, endpoint/token), so signing a device in
+  // as a second account used to leave the first account's row behind pointing
+  // at that same device. Push fan-out only skips rows whose user_id is the
+  // sender, so the leftover row delivered the sender their own messages to
+  // their own phone. Registration now claims the device, but installs that
+  // already collected duplicates need them cleared once: keep only the newest
+  // row per endpoint/token, which is the account that most recently signed in.
+  // A stale web-push endpoint eventually 410s and gets pruned; a stale FCM
+  // token stays valid forever, so it would never have cleaned itself up.
+  try {
+    db.exec(`
+      DELETE FROM push_subscriptions WHERE id NOT IN (
+        SELECT MAX(id) FROM push_subscriptions GROUP BY endpoint
+      );
+      DELETE FROM fcm_tokens WHERE id NOT IN (
+        SELECT MAX(id) FROM fcm_tokens GROUP BY token
+      );
+    `);
+  } catch { /* tables may not exist yet on a fresh schema race */ }
+
   // ── Migration: per-user channel notification prefs ──────
   // Before 3.20.2 these lived only in localStorage, which meant the server
   // had no way to honor them when fanning out web-push / FCM pushes — so
