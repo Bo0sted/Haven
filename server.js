@@ -1735,6 +1735,14 @@ app.get('/api/emojis', (req, res) => {
   } catch { res.json({ emojis: [] }); }
 });
 
+// Full Unicode emoji list (built from emoji-test.txt), rendered client-side
+// with the OS font. Falls back to the client's built-in list when unavailable.
+app.get('/api/standard-emojis', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token || !verifyToken(token)) return res.status(401).json({ error: 'Unauthorized' });
+  res.json(require('./src/emoji').getEmojiData() || { categories: {}, names: {}, modifierBase: [] });
+});
+
 app.delete('/api/emojis/:name', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
@@ -4364,6 +4372,14 @@ const db = initDatabase();
 
 // (#5335) Seed starter stickers now that the DB is ready.
 try { seedStarterStickers(); } catch {}
+
+// Download / refresh the Unicode emoji list (non-blocking, best-effort).
+// Opt-in: off unless the admin enables it or UNICODE_EMOJI_AUTO_UPDATE forces it.
+{
+  const emoji = require('./src/emoji');
+  const row = db.prepare("SELECT value FROM server_settings WHERE key = 'unicode_emoji_auto_update'").get();
+  emoji.ensureEmojiData(emoji.autoUpdateEnabled(row?.value));
+}
 
 // Load the admin-configured Referrer-Policy into the in-memory cache.
 try {

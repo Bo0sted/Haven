@@ -2536,6 +2536,14 @@
           <div style="margin-top:8px;">
             <button class="btn-sm btn-accent" id="open-emoji-manager-btn">⚙️ <span data-i18n="settings.admin.manage_emojis_btn">Manage Emojis</span></button>
           </div>
+          <small class="settings-group-label" style="margin-top:14px;display:block">🔄 <span data-i18n="settings.admin.emoji_auto_update_group">Built-in emoji updates</span></small>
+          <small class="settings-hint" style="display:block" data-i18n="settings.admin.emoji_auto_update_desc">Allow Haven to check Unicode.org for new emoji standards. This check is only performed at server boot, and only when the current standard file on disk was created over a month ago. If a new standard is available, Haven will automatically download the emoji pack and regenerate all your built-in emojis based on the new standard. This does not affect your custom emojis in any way.</small>
+          <small class="settings-hint" style="display:block;margin-top:6px" data-i18n="settings.admin.emoji_auto_update_disk">When this setting is turned off, Haven will use the latest available standard on disk. If a standard was never downloaded before, Haven will default to Unicode standard 16.0 which is bundled with the server.</small>
+          <label class="toggle-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.emoji_auto_update_label">Enable automatic Unicode.org upgrade</span>
+            <input type="checkbox" id="unicode-emoji-auto-update">
+          </label>
+          <small class="settings-hint" style="display:block;margin-top:6px" data-i18n="settings.admin.emoji_auto_update_ps">PS: This feature has nothing to do with emoji styling. That is entirely dependent on your OS, and rendering will vary from machine to machine. This feature only guarantees you'll have the latest available emojis built into your Haven server.</small>
         </div>
         <div class="admin-settings" id="section-stickers" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🖼️ <span data-i18n="settings.admin.stickers_title">Stickers</span></h5>

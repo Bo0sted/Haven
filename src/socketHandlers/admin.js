@@ -106,7 +106,8 @@ module.exports = function register(socket, ctx) {
       'automod_block_obfuscated', 'automod_preview_allowlist_only', 'automod_escalation',
       'automod_ban_ip', 'automod_log_channel',
       'voice_force_relay',
-      'media_proxy_enabled' // (v3.43.0) server-side fetch + cache for remote images
+      'media_proxy_enabled', // (v3.43.0) server-side fetch + cache for remote images
+      'unicode_emoji_auto_update' // monthly refresh of the built-in emoji set from unicode.org, opt-in
     ];
     if (!allowedKeys.includes(key)) return;
 
@@ -118,6 +119,7 @@ module.exports = function register(socket, ctx) {
     ];
     if (automodBools.includes(key) && !['true', 'false'].includes(value)) return;
     if (key === 'media_proxy_enabled' && !['true', 'false'].includes(value)) return;
+    if (key === 'unicode_emoji_auto_update' && !['true', 'false'].includes(value)) return;
     if (key === 'automod_link_mode' && !['off', 'allowlist', 'blocklist'].includes(value)) return;
     if (key === 'automod_link_exempt_level') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 100) return; }
     if (key === 'automod_link_min_account_hours') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 8760) return; }
@@ -346,6 +348,14 @@ module.exports = function register(socket, ctx) {
       for (const [code] of channelUsers) { emitOnlineUsers(code); }
     }
     if (key === 'referrer_policy') onReferrerPolicyChange(value);
+
+    // Turning the feature on shouldn't make the admin wait until the next boot —
+    // refresh right away. ensureEmojiData is a no-op when the on-disk copy is
+    // still current, so this stays at most one request. (env override still wins)
+    if (key === 'unicode_emoji_auto_update') {
+      const emoji = require('../emoji');
+      emoji.ensureEmojiData(emoji.autoUpdateEnabled(value)).catch(() => {});
+    }
   });
 
   // ── Whitelist management ────────────────────────────────

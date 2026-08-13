@@ -510,6 +510,10 @@ _applyServerSettings() {
     if (adminPwReset) {
       adminPwReset.checked = this.serverSettings.admin_password_reset_enabled === 'true';
     }
+    const emojiAutoUpdate = document.getElementById('unicode-emoji-auto-update');
+    if (emojiAutoUpdate) {
+      emojiAutoUpdate.checked = this.serverSettings.unicode_emoji_auto_update === 'true';
+    }
 
     // ── Voice & Connectivity (STUN/TURN) — #5399 ───
     const stunUrls = document.getElementById('stun-urls-input');
@@ -880,6 +884,7 @@ _snapshotAdminSettings() {
     max_message_chars: this.serverSettings.max_message_chars || '2000',
     update_banner_admin_only: this.serverSettings.update_banner_admin_only || 'false',
     admin_password_reset_enabled: this.serverSettings.admin_password_reset_enabled || 'false',
+    unicode_emoji_auto_update: this.serverSettings.unicode_emoji_auto_update || 'false',
     registration_captcha_enabled: this.serverSettings.registration_captcha_enabled || 'false',
     turnstile_site_key: this.serverSettings.turnstile_site_key || '',
     turnstile_secret_key: this.serverSettings.turnstile_secret_key || '',
@@ -1047,6 +1052,12 @@ _saveAdminSettings() {
   const adminPwReset = document.getElementById('admin-password-reset-enabled')?.checked ? 'true' : 'false';
   if (adminPwReset !== (snap.admin_password_reset_enabled || 'false')) {
     this.socket.emit('update-server-setting', { key: 'admin_password_reset_enabled', value: adminPwReset });
+    changed = true;
+  }
+
+  const emojiAutoUpdate = document.getElementById('unicode-emoji-auto-update')?.checked ? 'true' : 'false';
+  if (emojiAutoUpdate !== (snap.unicode_emoji_auto_update || 'false')) {
+    this.socket.emit('update-server-setting', { key: 'unicode_emoji_auto_update', value: emojiAutoUpdate });
     changed = true;
   }
 

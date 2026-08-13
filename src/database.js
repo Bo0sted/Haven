@@ -418,6 +418,7 @@ function initDatabase() {
   insertSetting.run('max_sound_kb', '1024');              // max soundboard file size in KB (256–10240)
   insertSetting.run('max_emoji_kb', '256');               // max emoji file size in KB (64–1024)
   insertSetting.run('max_sticker_kb', '1024');            // max sticker file size in KB (256–10240) — #5392
+  insertSetting.run('unicode_emoji_auto_update', 'false'); // monthly refresh of the built-in emoji set from unicode.org, opt-in, defaults off (UNICODE_EMOJI_AUTO_UPDATE env overrides)
   insertSetting.run('setup_wizard_complete', 'false');   // first-time admin setup wizard
   insertSetting.run('update_banner_admin_only', 'false'); // hide update banner from non-admins
   insertSetting.run('session_duration_days', '0');       // login token lifetime in days; 0 = never expire (default for new installs, #5391). Existing installs that were seeded with '7' keep that value until the admin changes it.
