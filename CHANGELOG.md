@@ -11,6 +11,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [3.47.0] — 2026-08-13
+
+### Added
+- **The emoji picker is now built from Unicode's own list instead of a hand-written one.** The old list was maintained by hand and had gaps. The server now builds the whole categorised set from Unicode's published `emoji-test.txt` and serves it, and your device draws the glyphs with its own font, so they look the way they do everywhere else on your machine. A copy of the current standard ships with Haven, so this works with no internet at all. There is also an optional monthly check for a newer standard under Settings → Admin → Emojis, off by default, which you can pin on or off for the whole server with `UNICODE_EMOJI_AUTO_UPDATE` if you would rather it never reached out. Custom emojis are untouched either way, and the bundled flag images stay, since Unicode's own flags do not render on every system. Thanks to @Bo0sted.
+
+### Fixed
+- **Giving a role a new permission did nothing until everyone reconnected.** Ticking a box in Role Management saved correctly but never reached the people who held that role, so a moderator granted, say, the IP-ban permission kept the old set and the option stayed missing from their ban menu until they signed out and back in. Everyone holding an edited role now gets their permissions refreshed on the spot. The same event was also throwing an error in the background, which stopped the Role Management window refreshing for any other admin watching it.
+- **Sending a message could push a notification of it back to your own phone.** If a device had ever been signed into a second account, the earlier account's notification registration stayed behind pointing at that same device. Notifications skip whoever sent the message, but that leftover registration counted as somebody else, so it was a valid target that happened to be your own phone. Signing in now takes the device over from any previous account, and existing duplicates are cleared once on startup. This mattered most on the Android app, where the registration never expires on its own, so it would not have sorted itself out with time. Thanks to @Bo0sted.
+- **White button text on light themes.** Buttons like Join and Send draw their label in white on the theme's accent colour, which is fine on the default purple but close to invisible on the lighter themes. Tron, Ice, CRT, Nord, Dracula, Minecraft, Zelda, HALO, LoTR, Elden Ring, Dark Souls, Scripture, FFX and Daylight now use a dark label taken from their own palette, as does the bundled Braid theme, which was the worst of them. Custom themes can set `--accent-text` to do the same. Matrix and Fallout are unchanged, since their buttons were already dark with a glowing outline by design.
+- **The Voice & Connectivity settings had no entry in the sidebar (#5493).** The STUN and TURN section was reachable only by scrolling past Limits and noticing it, unlike every other admin section. It now has its own sidebar entry. The guide also explains it, including the part that catches people out: a TURN server set in Settings wins, and your `TURN_*` environment variables are ignored while it is filled in. Thanks to @josolanes.
+- **Clearing a message while editing it now offers to delete it** rather than quietly cancelling the edit. Thanks to @Bo0sted.
+- **Spoilers no longer leak their contents.** Custom emojis, inline code and code blocks all showed straight through an unrevealed spoiler, and a link wrapped in a spoiler hid its own text while its preview card sat below showing the title, description and image in full. All of them are now hidden until the spoiler is opened. Thanks to @Bo0sted.
+- **Typing `::` to pick a persona no longer fights the emoji autocomplete**, and the persona avatar in that list is cropped to a small circle instead of rendering full size. Right-clicking a misspelled word while editing a message now opens the browser's own spell-check menu instead of Haven's. Thanks to @Bo0sted.
+- **Emoji with a skin tone were not being enlarged** when sent on their own, because the tone counted as leftover text. Thanks to @Bo0sted.
+
+### Documentation
+- The bundled Braid themes and the two bundled plugins are now covered in the guide. They ship switched off, so an admin has to publish a theme before it appears in the picker, which is the usual reason one looks missing after an update. The Docker note explains that themes and plugins live in the image rather than the data volume. Thanks to @birdcrazy.
+
 ## [3.46.0] — 2026-08-10
 
 ### Added
