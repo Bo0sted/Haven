@@ -20,6 +20,11 @@
   --accent-hover:  #9478ff;
   --accent-dim:    #5a3fd4;
   --accent-glow:   rgba(124, 92, 252, 0.25);
+  /* Text drawn on top of an --accent background (buttons, active tabs).
+     White by default; themes with a light accent override it so the label
+     stays readable instead of white-on-near-white. Custom themes can set
+     it too. */
+  --accent-text:   #fff;
 
   --text-primary:  #e2e4f0;
   --text-secondary:#9498b3;
@@ -184,6 +189,7 @@
   --accent:        #6fecff;
   --accent-hover:  #9df3ff;
   --accent-dim:    #3ec6df;
+  --accent-text:   #0c141f;
   --accent-glow:   rgba(111, 236, 255, 0.3);
 
   --text-primary:  #d4f6ff;
@@ -228,6 +234,7 @@
   --accent:        #d4a020;
   --accent-hover:  #e8b832;
   --accent-dim:    #b08818;
+  --accent-text:   #0d1a0d;
   --accent-glow:   rgba(212, 160, 32, 0.35);
 
   --text-primary:  #d4e0c8;
@@ -279,6 +286,7 @@
   --accent:        #d4a844;
   --accent-hover:  #e0be66;
   --accent-dim:    #b08830;
+  --accent-text:   #1a1510;
   --accent-glow:   rgba(212, 168, 68, 0.3);
 
   --text-primary:  #e8dcc8;
@@ -374,6 +382,7 @@
   --accent:        #88c0d0;
   --accent-hover:  #8fbcbb;
   --accent-dim:    #5e81ac;
+  --accent-text:   #2e3440;
   --accent-glow:   rgba(136, 192, 208, 0.25);
 
   --text-primary:  #eceff4;
@@ -415,6 +424,7 @@
   --accent:        #bd93f9;
   --accent-hover:  #caa6fc;
   --accent-dim:    #9d73d9;
+  --accent-text:   #1a1b26;
   --accent-glow:   rgba(189, 147, 249, 0.3);
 
   --text-primary:  #f8f8f2;
@@ -506,6 +516,7 @@
   --accent:        #00d4ff;
   --accent-hover:  #40e0ff;
   --accent-dim:    #00a8cc;
+  --accent-text:   #0a1520;
   --accent-glow:   rgba(0, 212, 255, 0.35);
 
   --text-primary:  #d8f0ff;
@@ -602,6 +613,7 @@
   --accent:        #c8a84e;
   --accent-hover:  #dcc06a;
   --accent-dim:    #a08030;
+  --accent-text:   #0c0a08;
   --accent-glow:   rgba(200, 168, 78, 0.35);
 
   --text-primary:  #d8ccb0;
@@ -647,6 +659,7 @@
   --accent:        #d4a832;
   --accent-hover:  #e8c050;
   --accent-dim:    #b08820;
+  --accent-text:   #08080e;
   --accent-glow:   rgba(212, 168, 50, 0.35);
 
   --text-primary:  #e0d8c8;
@@ -692,6 +705,7 @@
   --accent:        #55bb55;
   --accent-hover:  #70d070;
   --accent-dim:    #3a8a3a;
+  --accent-text:   #1a1a1a;
   --accent-glow:   rgba(85, 187, 85, 0.3);
 
   --text-primary:  #e8e8e8;
@@ -738,6 +752,7 @@
   --accent:        #40a8e0;
   --accent-hover:  #60c0f0;
   --accent-dim:    #2080b0;
+  --accent-text:   #080e1a;
   --accent-glow:   rgba(64, 168, 224, 0.3);
 
   --text-primary:  #d0e4f0;
@@ -783,6 +798,7 @@
   --accent:        #44bb44;
   --accent-hover:  #60d060;
   --accent-dim:    #2a8a2a;
+  --accent-text:   #0a120a;
   --accent-glow:   rgba(68, 187, 68, 0.3);
 
   --text-primary:  #d8e8d0;
@@ -916,6 +932,7 @@
   --accent:        #c8a84c;
   --accent-hover:  #dcc06a;
   --accent-dim:    #a08030;
+  --accent-text:   #1a1610;
   --accent-glow:   rgba(200, 168, 76, 0.25);
 
   --text-primary:  #e8dcc8;
@@ -1211,6 +1228,7 @@
   --accent:        #ffb000;
   --accent-hover:  #ffc844;
   --accent-dim:    #cc8800;
+  --accent-text:   #080808;
   --accent-glow:   rgba(255, 176, 0, 0.3);
 
   --text-primary:  #ffb000;
@@ -1756,6 +1774,7 @@
   --accent:        #d47f30;
   --accent-hover:  #e09545;
   --accent-dim:    #b86a22;
+  --accent-text:   #000000;
   --accent-glow:   rgba(212, 127, 48, 0.18);
 
   --text-primary:  #2c2418;
@@ -1897,7 +1916,7 @@ a { color: var(--text-link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 button { font-family: inherit; cursor: pointer; border: none; outline: none; }
 input, textarea { font-family: inherit; outline: none; border: none; }
-::selection { background: var(--accent); color: white; }
+::selection { background: var(--accent); color: var(--accent-text); }
 
 /* ── Range Input Track (slider background) ──────────────── */
 /* Slider classes set --track-bg / --track-h / --track-r to override
@@ -3040,7 +3059,7 @@ html.rgb-cycling *::after {
 }
 
 .auth-tab:hover { color: var(--text-primary); }
-.auth-tab.active { background: var(--accent); color: white; }
+.auth-tab.active { background: var(--accent); color: var(--accent-text); }
 
 .auth-form { display: flex; flex-direction: column; gap: 1rem; }
 
@@ -3083,7 +3102,7 @@ html.rgb-cycling *::after {
 .btn-primary {
   padding: 0.6875rem 1.25rem;
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
   border-radius: var(--radius);
   font-size: 0.9375rem;
   font-weight: 600;
@@ -3332,7 +3351,7 @@ html.rgb-cycling *::after {
 }
 
 .btn-sm:hover { background: var(--bg-hover); color: var(--text-primary); }
-.btn-sm.btn-accent { background: var(--accent); color: white; font-size: 1rem; padding: 0.4375rem 0.625rem; line-height: 1; }
+.btn-sm.btn-accent { background: var(--accent); color: var(--accent-text); font-size: 1rem; padding: 0.4375rem 0.625rem; line-height: 1; }
 .btn-sm.btn-accent:hover { background: var(--accent-hover); }
 .btn-sm.btn-danger { background: var(--danger, #e74c3c); color: white; font-size: 1rem; padding: 0.4375rem 0.625rem; line-height: 1; }
 .btn-sm.btn-danger:hover { filter: brightness(1.15); }
@@ -4244,7 +4263,7 @@ html.rgb-cycling *::after {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   padding: 0.125rem 0.5rem;
   border-radius: 0.625rem;
 }
@@ -4295,7 +4314,7 @@ html.rgb-cycling *::after {
   align-items: center;
   gap: 0.375rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
@@ -4587,7 +4606,7 @@ select.cfn-select.cfn-input {
 }
 .jump-to-bottom:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -4838,7 +4857,7 @@ select.cfn-select.cfn-input {
   color: var(--text-secondary); cursor: pointer; transition: background 0.15s, color 0.15s;
 }
 .sound-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
-.sound-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sound-tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .sound-tab-content { display: none; }
 .sound-tab-content.active { display: block; }
 
@@ -5089,7 +5108,7 @@ details.sound-section:not([open]) .sound-section-label::before {
   width: 2.625rem;
   height: 2.625rem;
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
   border-radius: var(--radius);
   display: flex;
   align-items: center;
@@ -5569,7 +5588,7 @@ details.sound-section:not([open]) .sound-section-label::before {
 
 .profile-dm-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 .profile-dm-btn:hover { background: var(--accent-hover); }
 
@@ -7238,7 +7257,7 @@ details.sound-section:not([open]) .sound-section-label::before {
 .emoji-section-tab.active {
   opacity: 1;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 /* Pack switcher row inside the sticker section */
@@ -7271,7 +7290,7 @@ details.sound-section:not([open]) .sound-section-label::before {
 .sticker-pack-btn.active {
   opacity: 1;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 /* Sticker picker grid */
@@ -7407,7 +7426,7 @@ details.sound-section:not([open]) .sound-section-label::before {
 .gif-tab.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .gif-picker-header {
@@ -7581,7 +7600,7 @@ details.sound-section:not([open]) .sound-section-label::before {
   border: none;
   border-radius: 0.25rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font-size: 0.8125rem;
   cursor: pointer;
 }
@@ -8563,7 +8582,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   align-items: center;
   justify-content: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
@@ -8762,7 +8781,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 .custom-select-option:hover { background: var(--bg-tertiary); }
 .custom-select-option.selected {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 /* File queue chip — non-image attachments queued before send (#5417) */
@@ -8903,7 +8922,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .mention-item:hover, .mention-item.active {
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
 }
 
 .mention-item-handle {
@@ -8960,7 +8979,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 }
 .emoji-ac-item:hover, .emoji-ac-item.active {
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
 }
 .emoji-ac-preview {
   flex-shrink: 0;
@@ -9008,7 +9027,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .slash-item:hover, .slash-item.active {
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
 }
 
 .slash-cmd {
@@ -9090,7 +9109,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 .search-filter-tag {
   display: inline-block;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font-size: 0.6875rem;
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
@@ -9506,7 +9525,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .edit-save-btn {
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
 }
 
 .edit-save-btn:hover { background: var(--accent-hover); }
@@ -9830,7 +9849,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   letter-spacing: 0.3px;
   transition: background 0.15s, transform 0.1s;
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
 }
 .btn-admin-save:hover { filter: brightness(1.15); }
 .btn-admin-save:active { transform: scale(0.97); }
@@ -10044,7 +10063,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 }
 .settings-tab.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .settings-close-btn { margin-left: 0; }
@@ -10145,7 +10164,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .settings-nav-item.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .settings-nav-group.settings-nav-admin {
@@ -10701,7 +10720,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   padding: 0.0625rem 0.3125rem;
   border-radius: 0.1875rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font-weight: 500;
 }
 
@@ -11148,7 +11167,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .mobile-srv-add-btn:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -12052,7 +12071,7 @@ body.is-ios.ios-keyboard-open .message-input-area {
 
 .btn-game:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -12251,7 +12270,7 @@ body.is-ios.ios-keyboard-open .message-input-area {
   font-size: 0.6875rem;
   border-radius: 0.75rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border: none;
   cursor: pointer;
   margin-left: 0.5rem;
@@ -13897,7 +13916,7 @@ ul.chat-list { list-style-type: disc; }
   font-size: 0.5625rem;
   font-weight: 700;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   padding: 0.0625rem 0.3125rem;
   border-radius: 0.5rem;
   margin-left: auto;
@@ -14096,7 +14115,7 @@ ul.chat-list { list-style-type: disc; }
 .connection-row .btn-sm.btn-accent {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font-size: 0.75rem;
   padding: 0.375rem 0.875rem;
   line-height: normal;
@@ -18033,7 +18052,7 @@ ul.chat-list { list-style-type: disc; }
   min-width: 1.125rem;
   text-align: center;
 }
-.media-tab.active .media-tab-count { background: var(--accent); color: #fff; }
+.media-tab.active .media-tab-count { background: var(--accent); color: var(--accent-text); }
 .media-gallery-body {
   flex: 1 1 auto;
   overflow-y: auto;

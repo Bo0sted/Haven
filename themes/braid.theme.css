@@ -29,6 +29,9 @@
   --accent-hover:  #2ce8a0;
   --accent-dim:    #00c97c;
   --accent-glow:   rgba(0, 255, 157, .32);
+  /* Label colour on accent-filled buttons. The mint accent is very light, so
+     the default white left buttons like Join unreadable (1.33:1). */
+  --accent-text:   #0b0d12;
 
   /* ── Text ──────────────────────────────────────── */
   --text-primary:  #eef1f6;
