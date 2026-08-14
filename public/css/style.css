@@ -8634,6 +8634,23 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   color: var(--text-muted);
   white-space: nowrap;
 }
+.upload-progress-cancel {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.upload-progress-cancel:hover { color: var(--danger); background: var(--bg-secondary); }
 
 .image-queue-thumb {
   position: relative;

@@ -207,6 +207,7 @@
     "2fa_disabled": "Two-factor authentication disabled",
     "plugins_refreshing": "Refreshing plugins & themes…",
     "upload_failed": "Upload failed",
+    "upload_cancelled": "Upload cancelled",
     "image_too_large": "Image too large (max {{max}} MB)",
     "encrypted_image_failed": "Encrypted image upload failed",
     "display_name_too_short": "Display name must be at least 2 characters",
@@ -1789,7 +1790,8 @@
   "common": {
     "copy": "Copy",
     "copied": "Copied",
-    "uploading": "Uploading..."
+    "uploading": "Uploading...",
+    "cancel_upload": "Cancel upload"
   },
   "reactions": {
     "search_placeholder": "Search emojis..."

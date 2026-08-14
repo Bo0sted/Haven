@@ -2992,7 +2992,10 @@ _uploadGeneralFile(file, targetCode) {
       this.notifications.play('sent');
       if (code === this.currentChannel) this._clearReply();
     })
-    .catch(err => this._showToast(err.message || t('settings.admin.upload_failed'), 'error'));
+    .catch(err => {
+      if (err?.aborted) return;
+      this._showToast(err.message || t('settings.admin.upload_failed'), 'error');
+    });
   });
 },
 
@@ -3046,6 +3049,7 @@ async _maybeUploadEncryptedDmFile(file, code, ch) {
     if (code === this.currentChannel) this._clearReply();
     return true;
   } catch (err) {
+    if (err?.aborted) return true;
     console.error('[E2E] File encryption failed:', err);
     const _detail = err?.message ? ` — ${err.message}` : '';
     this._showToast(`${t('toasts.encrypted_image_failed') || 'Encrypted upload failed'}${_detail}`, 'error');

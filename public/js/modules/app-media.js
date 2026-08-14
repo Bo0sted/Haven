@@ -131,8 +131,10 @@ async _flushImageQueue(bundled = false, personaPrefix = '') {
   if (!this._imageQueue || this._imageQueue.length === 0) return;
   const files = [...this._imageQueue];
   this._clearImageQueue();
+  this._uploadsCancelled = false;
   for (const file of files) {
     await this._uploadImage(file, undefined, bundled, personaPrefix);
+    if (this._uploadsCancelled) break;   // × on the progress bar stops the batch
   }
 },
 
@@ -242,8 +244,10 @@ async _flushPiPImageQueue(bundled = false) {
   this._pipImageQueue = [];
   this._pipImageQueueTarget = null;
   this._renderPiPImageQueue();
+  this._uploadsCancelled = false;
   for (const file of files) {
     await this._uploadImage(file, target, bundled);
+    if (this._uploadsCancelled) break;
   }
 },
 
@@ -324,6 +328,7 @@ async _flushThreadPending(parentId) {
   const files = [...this._threadPending];
   this._threadPending = [];
   this._renderThreadPending();
+  this._uploadsCancelled = false;
   for (const file of files) {
     try {
       const formData = new FormData();
@@ -339,6 +344,7 @@ async _flushThreadPending(parentId) {
       }
       this.socket.emit('send-thread-message', { parentId, content });
     } catch (err) {
+      if (err?.aborted) break;
       this._showToast(err.message || 'Upload failed', 'error');
     }
   }

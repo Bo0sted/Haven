@@ -2504,6 +2504,11 @@ _setupUI() {
     this._clearReply();
   });
 
+  // Cancel whatever is currently uploading
+  document.getElementById('upload-cancel-btn')?.addEventListener('click', () => {
+    this._cancelUploads();
+  });
+
   // Messages container — move-selection mode intercept (supports Shift+click range)
   document.getElementById('messages').addEventListener('click', (e) => {
     if (!this._moveSelectionActive) return;
@@ -6250,6 +6255,10 @@ _saveRename() {
 },
 
 // ── Upload with progress bar ───────────────────────────
+// Every in-flight request is kept in _activeUploads so the bar's × can abort
+// them. The general file queue fires its uploads without awaiting, so there
+// can be several at once — hence a set, and hence hiding the bar only once
+// the last one settles rather than whenever any single one does.
 _uploadWithProgress(url, formData) {
   return new Promise((resolve, reject) => {
     const bar = document.getElementById('upload-progress-bar');
@@ -6259,9 +6268,16 @@ _uploadWithProgress(url, formData) {
     if (fill) { fill.style.width = '0%'; }
     if (text) { text.textContent = t('common.uploading'); }
 
+    if (!this._activeUploads) this._activeUploads = new Set();
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
     xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+
+    const settle = () => {
+      this._activeUploads.delete(xhr);
+      if (bar && this._activeUploads.size === 0) bar.style.display = 'none';
+    };
 
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
@@ -6272,7 +6288,7 @@ _uploadWithProgress(url, formData) {
     });
 
     xhr.addEventListener('load', () => {
-      if (bar) bar.style.display = 'none';
+      settle();
       if (xhr.status >= 200 && xhr.status < 300) {
         try { resolve(JSON.parse(xhr.responseText)); }
         catch { reject(new Error('Invalid JSON response')); }
@@ -6284,17 +6300,33 @@ _uploadWithProgress(url, formData) {
     });
 
     xhr.addEventListener('error', () => {
-      if (bar) bar.style.display = 'none';
+      settle();
       reject(new Error('Upload failed — check your connection'));
     });
 
     xhr.addEventListener('abort', () => {
-      if (bar) bar.style.display = 'none';
-      reject(new Error('Upload cancelled'));
+      settle();
+      // Flagged so the callers can skip their own "upload failed" toast —
+      // cancelling on purpose isn't an error, and the cancel already toasts.
+      const err = new Error('Upload cancelled');
+      err.aborted = true;
+      reject(err);
     });
 
+    this._activeUploads.add(xhr);
     xhr.send(formData);
   });
+},
+
+// The × on the progress bar. Aborts everything currently in flight and tells
+// the queue loops to stop, since cancelling one file out of a batch and then
+// watching the rest go up anyway isn't what the button looks like it does.
+_cancelUploads() {
+  const active = this._activeUploads ? [...this._activeUploads] : [];
+  if (active.length === 0) return;
+  this._uploadsCancelled = true;
+  active.forEach(xhr => { try { xhr.abort(); } catch { /* already settled */ } });
+  this._showToast(t('toasts.upload_cancelled'), 'info');
 },
 
 // Intercept clicks on concealed media. Returns true when the click was
@@ -6362,6 +6394,7 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
       });
       this.notifications.play('sent');
     } catch (err) {
+      if (err?.aborted) return;
       console.error('[E2E] Image encryption failed:', err);
       const detail = err?.message ? ` — ${err.message}` : '';
       this._showToast(`${t('toasts.encrypted_image_failed')}${detail}`, 'error');
@@ -6392,6 +6425,7 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
     });
     this.notifications.play('sent');
   } catch (err) {
+    if (err?.aborted) return;
     this._showToast(err.message || t('toasts.upload_failed'), 'error');
   }
 },
