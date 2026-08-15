@@ -472,8 +472,14 @@ _openChannelCtxMenu(code, btnEl) {
   const moveToBtn = menu.querySelector('[data-action="move-to-parent"]');
   if (moveToBtn && ch) {
     const hasChildren = this.channels.some(c => c.parent_channel_id === ch.id);
-    // Can move if: admin, not a DM, and has no children (can't nest 2 levels)
-    moveToBtn.style.display = (canManageSubs && !ch.is_dm && !hasChildren) ? '' : 'none';
+    // (#5492) Mirror the server's rule instead of approximating it: you need
+    // the current parent if there is one, plus at least one destination you
+    // actually manage. A top-level channel has no parent to answer to, so
+    // managing a destination is enough to pull it in — otherwise the entry
+    // hid an action the server would have allowed.
+    const sourceOk = !ch.parent_channel_id || canManageSubs;
+    const hasTarget = this._reparentTargets(ch).length > 0;
+    moveToBtn.style.display = (sourceOk && hasTarget && !ch.is_dm && !hasChildren) ? '' : 'none';
   }
   // Show "Promote to Channel" only for sub-channels
   const promoteBtn = menu.querySelector('[data-action="promote-channel"]');
@@ -1016,6 +1022,22 @@ _createSubPanelTile(ch, isSubbed) {
 
 /* ── Re-parent channel modal (move to / promote) ───── */
 
+/**
+ * Top-level channels `ch` may legitimately be moved under. (#5492) Filtered to
+ * the ones this user can actually manage, so the picker stops offering
+ * destinations the server is only going to refuse.
+ */
+_reparentTargets(ch) {
+  const isAdmin = !!(this.user && this.user.isAdmin);
+  return this.channels.filter(c =>
+    !c.is_dm &&
+    !c.parent_channel_id &&          // Must be a top-level channel
+    c.id !== ch.id &&                 // Can't parent under self
+    c.id !== ch.parent_channel_id &&  // Skip current parent (already there)
+    (isAdmin || c.canManageSubs)      // Must be a parent we may add a child to
+  ).sort((a, b) => (a.position || 0) - (b.position || 0));
+},
+
 _openReparentModal(code) {
   const ch = this.channels.find(c => c.code === code);
   if (!ch) return;
@@ -1028,12 +1050,7 @@ _openReparentModal(code) {
   descEl.textContent = t('channels.move_channel_desc', { name: ch.name });
 
   // Build list of valid parent targets (top-level channels that aren't this one)
-  const targets = this.channels.filter(c =>
-    !c.is_dm &&
-    !c.parent_channel_id &&  // Must be a top-level channel
-    c.id !== ch.id &&         // Can't parent under self
-    c.id !== ch.parent_channel_id  // Skip current parent (already there)
-  ).sort((a, b) => (a.position || 0) - (b.position || 0));
+  const targets = this._reparentTargets(ch);
 
   let html = '';
 
