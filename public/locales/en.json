@@ -120,6 +120,7 @@
     },
     "actions": {
       "logout": "Logout",
+      "invite": "Invite Users",
       "change_display_name": "Change display name",
       "close_sidebar": "Close sidebar",
       "message_actions": "Message actions",
@@ -908,6 +909,7 @@
       "members_online_only": "Online Only",
       "members_all": "All Members",
       "members_hidden": "Hidden",
+      "view_invite_btn": "Invite Users",
       "view_bans_btn": "View Bans",
       "view_deleted_btn": "View Deleted Users",
       "bulk_cleanup_btn": "Cleanup",
