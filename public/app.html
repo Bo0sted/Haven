@@ -1028,6 +1028,15 @@
           <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">
         </div>
         <small class="muted-text" style="display:block;margin-top:-4px;margin-bottom:8px;opacity:0.6" data-i18n="modals.edit_profile.avatar_hint">JPG, PNG, GIF (animated!), WebP · Max 2 MB</small>
+        <h5 class="settings-section-subtitle" data-i18n="modals.edit_profile.border_title">Border</h5>
+        <div class="avatar-upload-row" style="margin-bottom: 10px;">
+          <div class="avatar-upload-preview" id="border-upload-preview"></div>
+          <button type="button" class="btn-sm" id="border-upload-btn" data-i18n="modals.edit_profile.upload_btn">Upload</button>
+          <button type="button" class="btn-sm" id="border-crop-btn" data-i18n="modals.edit_profile.edit_btn">Edit</button>
+          <button type="button" class="btn-sm" id="border-remove-btn" data-i18n="modals.edit_profile.clear_btn">Clear</button>
+          <input type="file" id="border-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">
+        </div>
+        <small class="muted-text" style="display:block;margin-top:-4px;margin-bottom:8px;opacity:0.6" data-i18n="modals.edit_profile.border_hint">JPG, PNG, GIF (animated!), WebP · Max 2 MB</small>
         <h5 class="settings-section-subtitle" data-i18n="modals.edit_profile.shape_title">Shape</h5>
         <div class="avatar-shape-picker" id="avatar-shape-picker">
           <button type="button" class="avatar-shape-btn active" data-shape="circle" title="Circle"><div class="shape-preview shape-circle"></div></button>
@@ -1067,6 +1076,62 @@
         <span id="avatar-save-status" class="settings-hint" style="flex:1"></span>
         <button class="btn-sm" id="cancel-rename-btn" data-i18n="modals.common.cancel">Cancel</button>
         <button class="btn-sm btn-accent" id="save-rename-btn" data-i18n="modals.common.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Border Edit Modal. An append-only op log is the source of truth: each tool
+       appends one fraction-based op (crop / move / resize / rotate / distort),
+       folded in order as nested CSS wrappers. The right-side list shows the log
+       with per-entry undo. Nothing is baked; the same fold drives real rendering. -->
+  <div class="modal-overlay" id="border-crop-modal" style="display:none">
+    <div class="modal">
+      <h3 data-i18n="modals.border_crop.title">Edit</h3>
+      <div class="border-crop-body">
+        <div class="border-crop-main">
+          <div class="border-crop-modes" id="border-crop-modes">
+            <button type="button" class="border-crop-mode-btn active" data-mode="crop" data-i18n="modals.border_crop.mode_crop">Crop</button>
+            <button type="button" class="border-crop-mode-btn" data-mode="move" data-i18n="modals.border_crop.mode_move">Move</button>
+            <button type="button" class="border-crop-mode-btn" data-mode="resize" data-i18n="modals.border_crop.mode_resize">Resize</button>
+            <button type="button" class="border-crop-mode-btn" data-mode="rotate" data-i18n="modals.border_crop.mode_rotate">Rotate</button>
+            <button type="button" class="border-crop-mode-btn" data-mode="distort" data-i18n="modals.border_crop.mode_distort">Distort</button>
+            <button type="button" class="border-crop-mode-btn" data-mode="opacity" data-i18n="modals.border_crop.mode_opacity">Opacity</button>
+          </div>
+          <button type="button" class="border-crop-autocrop-btn" id="border-crop-autocrop-btn" data-i18n="modals.border_crop.autocrop">Crop out invisible pixels</button>
+          <div class="border-crop-rotate-actions" id="border-crop-rotate-actions">
+            <button type="button" class="btn-sm" id="border-rotate-ccw">-90°</button>
+            <button type="button" class="btn-sm" id="border-rotate-cw">+90°</button>
+          </div>
+          <div class="border-crop-opacity-actions" id="border-crop-opacity-actions">
+            <input type="range" id="border-opacity-slider" min="1" max="100" value="100">
+            <span class="border-opacity-value" id="border-opacity-value">100%</span>
+          </div>
+          <div class="border-crop-stage">
+            <div class="border-crop-preview mode-crop" id="border-crop-preview">
+              <div class="border-crop-layers" id="border-crop-layers"></div>
+              <div class="border-crop-box" id="border-crop-box">
+                <div class="border-crop-handle crop-edge crop-top" data-edge="top" title="Crop top"></div>
+                <div class="border-crop-handle crop-edge crop-right" data-edge="right" title="Crop right"></div>
+                <div class="border-crop-handle crop-edge crop-bottom" data-edge="bottom" title="Crop bottom"></div>
+                <div class="border-crop-handle crop-edge crop-left" data-edge="left" title="Crop left"></div>
+                <div class="border-crop-handle corner-handle corner-tl" data-corner="tl" title="Distort corner"></div>
+                <div class="border-crop-handle corner-handle corner-tr" data-corner="tr" title="Distort corner"></div>
+                <div class="border-crop-handle corner-handle corner-bl" data-corner="bl" title="Distort corner"></div>
+                <div class="border-crop-handle corner-handle corner-br" data-corner="br" title="Distort corner"></div>
+                <div class="border-crop-handle scale-handle" title="Resize">⤢</div>
+                <div class="border-crop-handle rotate-handle" title="Rotate">⟳</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="border-crop-side">
+          <h5 class="border-crop-side-title" data-i18n="modals.border_crop.history_title">Edits</h5>
+          <div class="border-crop-history" id="border-crop-history"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-sm" id="border-crop-reset-btn" data-i18n="modals.border_crop.discard">Discard</button>
+        <button class="btn-sm btn-accent" id="border-crop-cancel-btn" data-i18n="modals.common.done">Done</button>
       </div>
     </div>
   </div>

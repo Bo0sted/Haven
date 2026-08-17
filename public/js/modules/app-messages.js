@@ -845,6 +845,8 @@ _createMessageEl(msg, prevMsg) {
     // even when the author is not in the online users list (e.g. offline).
     if (msg.avatar) el.dataset.avatar = msg.avatar;
     if (msg.avatar_shape) el.dataset.avatarShape = msg.avatar_shape;
+    if (msg.border) el.dataset.border = msg.border;
+    if (msg.borderTransform) el.dataset.borderTransform = JSON.stringify(msg.borderTransform);
     el.innerHTML = `
       <span class="compact-time">${new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
       <div class="message-body">
@@ -959,7 +961,7 @@ _createMessageEl(msg, prevMsg) {
   if (msg.poll && msg.poll.anonymous) el.dataset.pollAnonymous = '1';
   el.innerHTML = `
     <div class="message-row">
-      ${avatarHtml}
+      ${this._avatarWithBorder(avatarHtml, msg)}
       <div class="message-body">
         ${replyHtml}
         <div class="message-header">
@@ -1021,6 +1023,10 @@ _promoteCompactToFull(compactEl) {
   const msgShape = compactEl.dataset.avatarShape || (onlineUser && onlineUser.avatarShape) || 'circle';
   const shapeClass = 'avatar-' + msgShape;
   const avatar = compactEl.dataset.avatar || (onlineUser && onlineUser.avatar) || null;
+  // Border fit stored on the compact element (offline-safe), same as avatar above.
+  const border = compactEl.dataset.border || (onlineUser && onlineUser.border) || null;
+  let borderTransform = (onlineUser && onlineUser.borderTransform) || null;
+  try { if (compactEl.dataset.borderTransform) borderTransform = JSON.parse(compactEl.dataset.borderTransform); } catch {}
   const avatarHtml = avatar
     ? `<img class="message-avatar message-avatar-img ${shapeClass}" src="${this._escapeHtml(avatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`
     : `<div class="message-avatar ${shapeClass}" style="background-color:${color}">${initial}</div>`;
@@ -1055,7 +1061,7 @@ _promoteCompactToFull(compactEl) {
   if (isPinned) compactEl.dataset.pinned = '1';
   compactEl.innerHTML = `
     <div class="message-row">
-      ${avatarHtml}
+      ${this._avatarWithBorder(avatarHtml, { border, borderTransform })}
       <div class="message-body">
         <div class="message-header">
           ${msgRoleIconBefore2}

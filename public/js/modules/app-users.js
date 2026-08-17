@@ -255,7 +255,7 @@ _renderUserItem(u, scoreLookup) {
     : `<div class="user-item-avatar ${shapeClass}" style="background-color:${color}">${initial}</div>`;
 
   // Wrap avatar + status dot together (Discord-style overlay)
-  const avatarHtml = `<div class="user-avatar-wrapper">${avatarImg}<span class="user-status-dot${statusClass ? ' ' + statusClass : ''}"></span></div>`;
+  const avatarHtml = `<div class="user-avatar-wrapper">${avatarImg}${this._pfpBorderMarker(u.border, u.borderTransform)}<span class="user-status-dot${statusClass ? ' ' + statusClass : ''}"></span></div>`;
 
   // Role: color dot to the left of name + tooltip on hover
   // Role display mode
@@ -787,6 +787,7 @@ _showProfilePopup(profile) {
     </div>
     <div class="profile-popup-avatar-wrapper">
       ${avatarHtml}
+      ${this._pfpBorderMarker(profile.border, profile.borderTransform)}
       <span class="profile-popup-status-dot ${statusClass}" title="${statusLabel}"></span>
     </div>
     <div class="profile-popup-body">
@@ -895,6 +896,7 @@ _showProfilePopup(profile) {
       const bioInput = document.getElementById('edit-profile-bio');
       if (bioInput) bioInput.value = this.user.bio || '';
       this._updateAvatarPreview();
+      this._resetBorderEditState();
       const picker = document.getElementById('avatar-shape-picker');
       if (picker) {
         const currentShape = this.user.avatarShape || localStorage.getItem('haven_avatar_shape') || 'circle';

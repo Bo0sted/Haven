@@ -31,6 +31,14 @@ _setupSocketListeners() {
         });
       }
     }
+    // Sync border (pfp overlay) from server, authoritative like avatar shape
+    if (data.border !== undefined) {
+      this.user.border = data.border || null;
+    }
+    // Sync the border fit (op log) so the editor restores it and pfps render it
+    if (data.borderTransform !== undefined) {
+      this.user.borderTransform = Array.isArray(data.borderTransform) ? data.borderTransform : null;
+    }
     localStorage.setItem('haven_user', JSON.stringify(this.user));
     // (#5394) Merge server-stored nicknames. Server is authoritative for any
     // key it knows about; localStorage keeps anything the server doesn't have yet.
@@ -63,6 +71,7 @@ _setupSocketListeners() {
     if (loginEl) loginEl.textContent = `@${this.user.username}`;
     // Update avatar preview in settings if present
     this._updateAvatarPreview();
+    this._updateBorderPreview();
     // Show admin/mod controls based on role level
     const canModerate = this.user.isAdmin || this.user.effectiveLevel >= 25;
     const canCreateChannel = this.user.isAdmin || this._hasGlobalPerm('create_channel');

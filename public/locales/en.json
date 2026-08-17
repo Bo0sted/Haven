@@ -1330,6 +1330,10 @@
       "upload_btn": "Upload",
       "clear_btn": "Clear",
       "avatar_hint": "JPG, PNG, GIF (animated!), WebP · Max 2 MB",
+      "border_title": "Border",
+      "border_hint": "JPG, PNG, GIF (animated!), WebP · Max 2 MB",
+      "crop_btn": "Crop",
+      "edit_btn": "Edit",
       "shape_title": "Shape",
       "display_name_desc": "Letters, numbers, underscores, and spaces (2–20 chars)",
       "display_name_label": "Display Name",
@@ -1337,6 +1341,21 @@
       "bio_label": "Bio",
       "bio_max": "(max 190 chars)",
       "bio_placeholder": "Tell people about yourself…"
+    },
+    "border_crop": {
+      "title": "Edit",
+      "mode_crop": "Crop",
+      "mode_move": "Move",
+      "mode_distort": "Distort",
+      "mode_resize": "Resize",
+      "mode_rotate": "Rotate",
+      "mode_opacity": "Opacity",
+      "history_title": "Edits",
+      "autocrop": "Crop out invisible pixels",
+      "no_edits": "No edits yet",
+      "undo": "Undo this and later edits",
+      "discard": "Discard",
+      "reset": "Reset"
     },
     "admin_action": {
       "title": "Moderate User",
