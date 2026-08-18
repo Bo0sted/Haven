@@ -1315,7 +1315,7 @@ _setupAvatarUpload() {
     }
 
     // Done → commit the in-progress draft (commit-on-leave) and close.
-    if (e.target.closest('#border-crop-cancel-btn')) {
+    if (e.target.closest('#border-crop-done-btn')) {
       e.preventDefault();
       this._commitBorderDraft();
       const modal = document.getElementById('border-crop-modal');
@@ -1384,8 +1384,8 @@ _setupAvatarUpload() {
     if (e.target && e.target.id === 'border-file-input') {
       const file = e.target.files[0];
       if (!file) return;
-      if (file.size > 5 * 1024 * 1024) return this._showToast('Image too large (max 5 MB)', 'error');
-      if (!file.type.startsWith('image/')) return this._showToast('Not an image file', 'error');
+      if (file.size > 5 * 1024 * 1024) return this._showToast((window.t && window.t('toasts.image_too_large', { max: 5 })) || 'Image too large (max 5 MB)', 'error');
+      if (!file.type.startsWith('image/')) return this._showToast((window.t && window.t('toasts.not_an_image')) || 'Not an image file', 'error');
 
       this._pendingBorderFile = file;
       this._pendingBorderRemoved = false;

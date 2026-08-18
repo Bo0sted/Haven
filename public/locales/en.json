@@ -211,6 +211,7 @@
     "upload_failed": "Upload failed",
     "upload_cancelled": "Upload cancelled",
     "image_too_large": "Image too large (max {{max}} MB)",
+    "not_an_image": "Not an image file",
     "encrypted_image_failed": "Encrypted image upload failed",
     "display_name_too_short": "Display name must be at least 2 characters",
     "display_name_invalid_chars": "Letters, numbers, underscores, and spaces only",
