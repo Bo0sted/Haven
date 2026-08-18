@@ -39,6 +39,10 @@ _setupSocketListeners() {
     if (data.borderTransform !== undefined) {
       this.user.borderTransform = Array.isArray(data.borderTransform) ? data.borderTransform : null;
     }
+    // Sync the animation policy (trigger/disabled) so the editor seeds it and pfps honor it
+    if (data.animateProfile !== undefined) {
+      this.user.animateProfile = data.animateProfile === 'disabled' ? 'disabled' : 'trigger';
+    }
     localStorage.setItem('haven_user', JSON.stringify(this.user));
     // (#5394) Merge server-stored nicknames. Server is authoritative for any
     // key it knows about; localStorage keeps anything the server doesn't have yet.

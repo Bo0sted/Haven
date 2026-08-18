@@ -938,6 +938,24 @@ app.post('/api/set-avatar-shape', express.json(), (req, res) => {
   }
 });
 
+// ── Animated-profile policy endpoint ──
+// How this user's animated avatar/border play for everyone, mirroring set-avatar-shape.
+app.post('/api/set-animate-profile', express.json(), (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const valid = ['trigger', 'disabled'];
+  const mode = valid.includes(req.body.mode) ? req.body.mode : 'trigger';
+  try {
+    const { getDb } = require('./src/database');
+    getDb().prepare('UPDATE users SET animate_profile = ? WHERE id = ?').run(mode, user.id);
+    res.json({ mode });
+  } catch (err) {
+    console.error('Animate profile error:', err);
+    res.status(500).json({ error: 'Failed to save animation policy' });
+  }
+});
+
 // ── Webhook/Bot avatar upload endpoint ──
 app.post('/api/upload-webhook-avatar', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];

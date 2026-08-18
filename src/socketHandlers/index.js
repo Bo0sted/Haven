@@ -717,8 +717,8 @@ function setupSocketHandlers(io, db, opts = {}) {
 
     const statusMap = {};
     try {
-      const statusRows = db.prepare('SELECT id, status, status_text, avatar, avatar_shape, border, border_transform, is_guest FROM users').all();
-      statusRows.forEach(r => { statusMap[r.id] = { status: r.status || 'online', statusText: r.status_text || '', avatar: r.avatar || null, avatarShape: r.avatar_shape || 'circle', border: r.border || null, borderTransform: parseBorderTransform(r.border_transform), isGuest: !!r.is_guest }; });
+      const statusRows = db.prepare('SELECT id, status, status_text, avatar, avatar_shape, border, border_transform, animate_profile, is_guest FROM users').all();
+      statusRows.forEach(r => { statusMap[r.id] = { status: r.status || 'online', statusText: r.status_text || '', avatar: r.avatar || null, avatarShape: r.avatar_shape || 'circle', border: r.border || null, borderTransform: parseBorderTransform(r.border_transform), animateProfile: r.animate_profile || 'trigger', isGuest: !!r.is_guest }; });
     } catch { /* columns may not exist yet */ }
 
     const channel = db.prepare('SELECT id FROM channels WHERE code = ?').get(code);
@@ -754,6 +754,7 @@ function setupSocketHandlers(io, db, opts = {}) {
         avatarShape: statusMap[m.id]?.avatarShape || 'circle',
         border: statusMap[m.id]?.border || null,
         borderTransform: statusMap[m.id]?.borderTransform || null,
+        animateProfile: statusMap[m.id]?.animateProfile || 'trigger',
         isGuest: statusMap[m.id]?.isGuest || false,
         role: getUserHighestRole(m.id, channel ? channel.id : null),
         // null unless the user opted in; getPublicActivity applies their
@@ -773,6 +774,7 @@ function setupSocketHandlers(io, db, opts = {}) {
             avatarShape: statusMap[s.user.id]?.avatarShape || s.user.avatar_shape || 'circle',
             border: statusMap[s.user.id]?.border || s.user.border || null,
             borderTransform: statusMap[s.user.id]?.borderTransform || s.user.borderTransform || null,
+            animateProfile: statusMap[s.user.id]?.animateProfile || s.user.animate_profile || 'trigger',
             isGuest: statusMap[s.user.id]?.isGuest || !!s.user.isGuest,
             role: getUserHighestRole(s.user.id, channel ? channel.id : null),
             activity: activity.getPublicActivity(s.user.id)
@@ -1402,7 +1404,7 @@ function setupSocketHandlers(io, db, opts = {}) {
 
     try {
       // created_at feeds the automod new-account link gate (v3.42.0).
-      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, border, border_transform, password_version, is_guest, created_at, oidc_subject FROM users WHERE id = ?').get(user.id);
+      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, border, border_transform, animate_profile, password_version, is_guest, created_at, oidc_subject FROM users WHERE id = ?').get(user.id);
       if (!uRow || uRow.username !== user.username) {
         return next(new Error('Session expired'));
       }
@@ -1416,6 +1418,7 @@ function setupSocketHandlers(io, db, opts = {}) {
       socket.user.avatar_shape = uRow.avatar_shape || 'circle';
       socket.user.border = uRow.border || null;
       socket.user.borderTransform = parseBorderTransform(uRow.border_transform);
+      socket.user.animate_profile = uRow.animate_profile || 'trigger';
       socket.user.isGuest = !!uRow.is_guest;
       socket.user.createdAt = uRow.created_at || null;
       // (#12) The client needs this to ask for the right secret: an SSO
@@ -1531,6 +1534,7 @@ function setupSocketHandlers(io, db, opts = {}) {
       avatarShape: socket.user.avatar_shape || 'circle',
       border: socket.user.border || null,
       borderTransform: socket.user.borderTransform || null,
+      animateProfile: socket.user.animate_profile || 'trigger',
       version: HAVEN_VERSION,
       roles: socket.user.roles || [],
       effectiveLevel: socket.user.effectiveLevel || 0,

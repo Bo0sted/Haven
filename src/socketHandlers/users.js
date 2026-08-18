@@ -197,6 +197,25 @@ module.exports = function register(socket, ctx) {
     }
   });
 
+  socket.on('set-animate-profile', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const valid = ['trigger', 'disabled'];
+    const mode = valid.includes(data.mode) ? data.mode : 'trigger';
+    try {
+      db.prepare('UPDATE users SET animate_profile = ? WHERE id = ?').run(mode, socket.user.id);
+      socket.user.animate_profile = mode;
+      for (const [code, users] of channelUsers) {
+        if (users.has(socket.user.id)) {
+          users.get(socket.user.id).animate_profile = mode;
+          emitOnlineUsers(code);
+        }
+      }
+      socket.emit('animate-profile-updated', { mode });
+    } catch (err) {
+      console.error('Set animate profile error:', err);
+    }
+  });
+
   // ── Status ──────────────────────────────────────────────
   socket.on('set-status', (data) => {
     if (!data || typeof data !== 'object') return;
@@ -236,7 +255,7 @@ module.exports = function register(socket, ctx) {
     try {
       const row = db.prepare(
         `SELECT u.id, u.username, COALESCE(u.display_name, u.username) as displayName,
-                u.avatar, u.avatar_shape, u.border, u.border_transform, u.status, u.status_text, u.bio, u.created_at
+                u.avatar, u.avatar_shape, u.border, u.border_transform, u.animate_profile, u.status, u.status_text, u.bio, u.created_at
          FROM users u WHERE u.id = ?`
       ).get(data.userId);
       if (!row) return;
@@ -300,6 +319,7 @@ module.exports = function register(socket, ctx) {
         avatarShape: row.avatar_shape || 'circle',
         border: row.border || null,
         borderTransform: parseBorderTransform(row.border_transform),
+        animateProfile: row.animate_profile || 'trigger',
         status: row.status || 'online',
         statusText: row.status_text || '',
         bio: row.bio || '',

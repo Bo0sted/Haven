@@ -589,6 +589,13 @@ function initDatabase() {
     db.exec("ALTER TABLE users ADD COLUMN avatar_shape TEXT DEFAULT 'circle'");
   }
 
+  // ── Migration: animate_profile column (pfp animation policy) ──
+  try {
+    db.prepare("SELECT animate_profile FROM users LIMIT 0").get();
+  } catch {
+    db.exec("ALTER TABLE users ADD COLUMN animate_profile TEXT DEFAULT 'trigger'");
+  }
+
   // ── Migration: border column (pfp overlay, mirrors avatar) ──
   try {
     db.prepare("SELECT border FROM users LIMIT 0").get();

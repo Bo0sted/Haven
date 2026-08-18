@@ -129,7 +129,8 @@ function sanitizeBorderTransform(raw) {
     } else if (op.type === 'resize') {
       const scale = num(op.scale, 0.1, 4);
       if (scale === null) continue;
-      out.push({ type: 'resize', scale });
+      const anchor = op.anchor === 'corner' ? 'corner' : 'center';
+      out.push({ type: 'resize', scale, anchor });
     } else if (op.type === 'rotate') {
       const deg = num(op.deg, -360, 360);
       if (deg === null) continue;

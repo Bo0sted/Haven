@@ -4862,6 +4862,9 @@ select.cfn-select.cfn-input {
 .border-crop-rotate-actions .btn-sm { flex: 1; text-align: center; }
 
 /* Shown only for the Opacity tool (toggled in _renderBorderEditor). */
+.border-crop-resize-actions { display: none; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+.border-crop-resize-actions #border-resize-anchor { flex: 1; }
+.border-resize-anchor-label { font-size: 0.8125rem; color: var(--text-secondary); white-space: nowrap; }
 .border-crop-opacity-actions { display: none; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
 .border-crop-opacity-actions #border-opacity-slider { flex: 1; }
 .border-opacity-value { min-width: 3ch; text-align: right; font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); }

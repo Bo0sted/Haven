@@ -847,6 +847,7 @@ _createMessageEl(msg, prevMsg) {
     if (msg.avatar_shape) el.dataset.avatarShape = msg.avatar_shape;
     if (msg.border) el.dataset.border = msg.border;
     if (msg.borderTransform) el.dataset.borderTransform = JSON.stringify(msg.borderTransform);
+    if (msg.animateProfile) el.dataset.animateProfile = msg.animateProfile;
     el.innerHTML = `
       <span class="compact-time">${new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
       <div class="message-body">
@@ -875,13 +876,13 @@ _createMessageEl(msg, prevMsg) {
   if (msg.imported_from === 'discord') {
     const discordAvatar = msg.webhook_avatar;
     if (discordAvatar) {
-      avatarHtml = `<img class="message-avatar message-avatar-img ${shapeClass}" src="${this._escapeHtml(discordAvatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`;
+      avatarHtml = `<img class="message-avatar message-avatar-img ${shapeClass}"${this._animAttr(msg.animateProfile)} src="${this._escapeHtml(discordAvatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`;
     } else {
       // Generic Discord-style avatar (colored circle with initial)
       avatarHtml = `<div class="message-avatar ${shapeClass} discord-import-avatar" style="background-color:#5865f2">${initial}</div>`;
     }
   } else if (msg.avatar) {
-    avatarHtml = `<img class="message-avatar message-avatar-img ${shapeClass}" src="${this._escapeHtml(msg.avatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`;
+    avatarHtml = `<img class="message-avatar message-avatar-img ${shapeClass}"${this._animAttr(msg.animateProfile)} src="${this._escapeHtml(msg.avatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`;
   } else {
     avatarHtml = `<div class="message-avatar ${shapeClass}" style="background-color:${color}">${initial}</div>`;
   }
@@ -1027,8 +1028,9 @@ _promoteCompactToFull(compactEl) {
   const border = compactEl.dataset.border || (onlineUser && onlineUser.border) || null;
   let borderTransform = (onlineUser && onlineUser.borderTransform) || null;
   try { if (compactEl.dataset.borderTransform) borderTransform = JSON.parse(compactEl.dataset.borderTransform); } catch {}
+  const animateProfile = compactEl.dataset.animateProfile || (onlineUser && onlineUser.animateProfile) || 'trigger';
   const avatarHtml = avatar
-    ? `<img class="message-avatar message-avatar-img ${shapeClass}" src="${this._escapeHtml(avatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`
+    ? `<img class="message-avatar message-avatar-img ${shapeClass}"${this._animAttr(animateProfile)} src="${this._escapeHtml(avatar)}" loading="lazy" alt="${initial}"><div class="message-avatar ${shapeClass}" style="background-color:${color};display:none">${initial}</div>`
     : `<div class="message-avatar ${shapeClass}" style="background-color:${color}">${initial}</div>`;
 
   // Multi-role aware (compact-to-full path) — mirror of _createMessageEl above.
@@ -1061,7 +1063,7 @@ _promoteCompactToFull(compactEl) {
   if (isPinned) compactEl.dataset.pinned = '1';
   compactEl.innerHTML = `
     <div class="message-row">
-      ${this._avatarWithBorder(avatarHtml, { border, borderTransform })}
+      ${this._avatarWithBorder(avatarHtml, { border, borderTransform, animateProfile })}
       <div class="message-body">
         <div class="message-header">
           ${msgRoleIconBefore2}
@@ -1080,6 +1082,11 @@ _promoteCompactToFull(compactEl) {
       <button class="msg-dots-btn" aria-label="${t('app.actions.message_actions')}">⋯</button>
     </div>
   `;
+  // A compact row is usually promoted while hovered; mark its pfp as playing so
+  // the freeze observer leaves it animating until the pointer actually leaves.
+  if (compactEl.matches(':hover')) {
+    compactEl.querySelectorAll('img[data-animate="trigger"]').forEach((i) => { i.dataset.animPlaying = '1'; });
+  }
 },
 
 _appendSystemMessage(text) {

@@ -400,6 +400,14 @@ _resetBorderEditState() {
     ? this.user.borderTransform.map(op => ({ ...op }))
     : [];
   this._borderDraft = null;
+  // Seed the animated-profile control from the saved policy (same Save button).
+  // Reseed the baseline too (not just the pending value): this.user.animateProfile
+  // is authoritative here (session-info has populated it), whereas the setup-time
+  // baseline predates it, so diffing against that stale value could drop a save.
+  this._pendingAnimateProfile = this.user.animateProfile === 'disabled' ? 'disabled' : 'trigger';
+  this._animateProfile = this._pendingAnimateProfile;
+  const animSel = document.getElementById('animate-profile-select');
+  if (animSel) animSel.value = this._pendingAnimateProfile;
 },
 
 // The border editor is event sourced: this._borderOps is an append-only log of
@@ -423,11 +431,22 @@ _borderOverflowFrac() {
 // crop trims relative to the current box, move shifts. Rotate and distort leave the
 // box unchanged (approximate; they are bounded at their own handles). This is the
 // single per-op rule shared by _committedContentBox and the crop render/handles.
+// Origin a resize scales about (stage fractions). 'center' (default) is the stage
+// centre; 'corner' pins the content-box corner nearest the edge it sits toward, so
+// enlarging grows away from that corner (inward) instead of drifting it out of frame.
+// box is the content box beneath the op, so the choice is fixed for the engagement.
+_resizeOrigin(op, box) {
+  if (!op || op.anchor !== 'corner') return [0.5, 0.5];
+  const cx = (box.left + box.right) / 2, cy = (box.top + box.bottom) / 2;
+  return [cx < 0.5 ? box.left : box.right, cy < 0.5 ? box.top : box.bottom];
+},
+
 _advanceBox(cb, op) {
   let { left: l, top: t, right: r, bottom: b } = cb;
   if (op.type === 'resize') {
-    l = 0.5 + (l - 0.5) * op.scale; r = 0.5 + (r - 0.5) * op.scale;
-    t = 0.5 + (t - 0.5) * op.scale; b = 0.5 + (b - 0.5) * op.scale;
+    const [ox, oy] = this._resizeOrigin(op, cb);
+    l = ox + (l - ox) * op.scale; r = ox + (r - ox) * op.scale;
+    t = oy + (t - oy) * op.scale; b = oy + (b - oy) * op.scale;
   } else if (op.type === 'crop') {
     const w = r - l, h = b - t;
     l += op.left * w; r -= op.right * w; t += op.top * h; b -= op.bottom * h;
@@ -472,7 +491,7 @@ _resizeMaxScale() {
 _borderOpBase(tool) {
   if (tool === 'crop')    return { type: 'crop', top: 0, right: 0, bottom: 0, left: 0 };
   if (tool === 'move')    return { type: 'move', x: 0, y: 0 };
-  if (tool === 'resize')  return { type: 'resize', scale: 1 };
+  if (tool === 'resize')  return { type: 'resize', scale: 1, anchor: this._resizeAnchor || 'center' };
   if (tool === 'rotate')  return { type: 'rotate', deg: 0 };
   if (tool === 'opacity') return { type: 'opacity', value: 1 };
   return { type: 'distort', tl: [0, 0], tr: [0, 0], bl: [0, 0], br: [0, 0] };
@@ -510,7 +529,10 @@ _borderWrapperStyle(op, W, H, cb = { left: 0, top: 0, right: 1, bottom: 1 }) {
     return `clip-path: inset(${pct(t)} ${pct(r)} ${pct(b)} ${pct(l)});`;
   }
   if (op.type === 'move')    return `transform: translate(${op.x * 100}%, ${op.y * 100}%);`;
-  if (op.type === 'resize')  return `transform: scale(${op.scale}); transform-origin: center;`;
+  if (op.type === 'resize') {
+    const [ox, oy] = this._resizeOrigin(op, cb);
+    return `transform: scale(${op.scale}); transform-origin: ${(ox * 100).toFixed(4)}% ${(oy * 100).toFixed(4)}%;`;
+  }
   if (op.type === 'rotate')  return `transform: rotate(${op.deg}deg); transform-origin: center;`;
   if (op.type === 'opacity') return `opacity: ${op.value};`;
   if (op.type === 'distort') {
@@ -534,10 +556,11 @@ _borderWrapperStyle(op, W, H, cb = { left: 0, top: 0, right: 1, bottom: 1 }) {
 // Sites emit an empty marker via _pfpBorderMarker; a MutationObserver folds it
 // into nested op wrappers once it is in the DOM, so distort can be sized to the
 // avatar. The fold reuses _borderWrapperStyle, exactly like the editor.
-_pfpBorderMarker(border, transform) {
+_pfpBorderMarker(border, transform, animate) {
   if (!border) return '';
   const ops = Array.isArray(transform) ? transform : [];
-  return `<span class="pfp-border" data-border="${this._escapeHtml(border)}" data-bt="${this._escapeHtml(JSON.stringify(ops))}"></span>`;
+  const mode = animate === 'disabled' ? 'disabled' : 'trigger';
+  return `<span class="pfp-border" data-border="${this._escapeHtml(border)}" data-bt="${this._escapeHtml(JSON.stringify(ops))}" data-animate="${mode}"></span>`;
 },
 
 // Fold one marker: measure its box (= the avatar), then wrap the border image
@@ -551,7 +574,10 @@ _foldPfpBorder(el) {
   try { ops = JSON.parse(el.dataset.bt || '[]'); } catch { ops = []; }
   const W = el.clientWidth || el.offsetWidth || 100;
   const H = el.clientHeight || el.offsetHeight || W;
-  let stack = `<img class="pfp-border-img" src="${this._escapeHtml(border)}" alt="">`;
+  // Carry the owner's animation policy onto the border image so the freeze
+  // observer treats it exactly like an avatar image.
+  const animAttr = el.dataset.animate === 'disabled' ? ' data-animate="disabled"' : ' data-animate="trigger"';
+  let stack = `<img class="pfp-border-img"${animAttr} src="${this._escapeHtml(border)}" alt="">`;
   let cb = { left: 0, top: 0, right: 1, bottom: 1 };
   for (const op of ops) {
     stack = `<div class="bce-op" style="${this._borderWrapperStyle(op, W, H, cb)}">${stack}</div>`;
@@ -568,6 +594,9 @@ _setupPfpBorderObserver() {
     if (!node || node.nodeType !== 1) return;
     if (node.matches && node.matches('.pfp-border')) this._foldPfpBorder(node);
     if (node.querySelectorAll) node.querySelectorAll('.pfp-border:not([data-pfp-done])').forEach((el) => this._foldPfpBorder(el));
+    // Freeze animated avatar / border images to their first frame per the owner's policy.
+    if (node.matches && node.matches('img[data-animate]:not([data-anim-done])')) this._freezePfpImg(node);
+    if (node.querySelectorAll) node.querySelectorAll('img[data-animate]:not([data-anim-done])').forEach((img) => this._freezePfpImg(img));
   };
   const obs = new MutationObserver((muts) => {
     for (const m of muts) m.addedNodes.forEach(foldIn);
@@ -575,12 +604,113 @@ _setupPfpBorderObserver() {
   obs.observe(document.body, { childList: true, subtree: true });
   this._pfpBorderObserver = obs;
   document.querySelectorAll('.pfp-border:not([data-pfp-done])').forEach((el) => this._foldPfpBorder(el));
+  document.querySelectorAll('img[data-animate]:not([data-anim-done])').forEach((img) => this._freezePfpImg(img));
 },
 
 // Wrap an avatar's HTML with its owner's border overlay (or return it unchanged).
 _avatarWithBorder(avatarHtml, user) {
-  const marker = user ? this._pfpBorderMarker(user.border, user.borderTransform) : '';
+  const marker = user ? this._pfpBorderMarker(user.border, user.borderTransform, user.animateProfile) : '';
   return marker ? `<span class="pfp-host">${avatarHtml}${marker}</span>` : avatarHtml;
+},
+
+// ── Animated-profile policy (freeze animated pfps to their first frame) ──
+// The owner's policy rides on each pfp <img> as data-animate. Freezing is pure
+// client side: the first frame is captured to a data URL via <canvas>, so no
+// static file or server work is needed. 'disabled' stays frozen for everyone;
+// 'trigger' is played only while the viewer hovers the message or opens the
+// profile card (see _setPfpAnimation). Same-origin uploads keep the canvas
+// untainted; if a privacy mode blocks the read the image is simply left animated.
+
+// data-animate attribute (with leading space) for an avatar <img>.
+_animAttr(mode) {
+  return mode === 'disabled' ? ' data-animate="disabled"' : ' data-animate="trigger"';
+},
+
+// Only these formats can carry animation; skip the rest (e.g. jpeg) entirely.
+_animCanAnimate(url) {
+  return /\.(gif|apng|png|webp)(\?|#|$)/i.test(url || '');
+},
+
+// One frozen-frame data URL per unique image URL, deduped across every render.
+// Returns a Promise resolving to the data URL, or null if capture is blocked.
+_frozenFrame(url) {
+  if (!this._frozenFrames) this._frozenFrames = new Map();
+  const cached = this._frozenFrames.get(url);
+  if (cached) return cached;
+  const p = new Promise((resolve) => {
+    const im = new Image();
+    im.decoding = 'async';
+    im.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = im.naturalWidth || 1;
+        c.height = im.naturalHeight || 1;
+        c.getContext('2d').drawImage(im, 0, 0);
+        resolve(c.toDataURL('image/png'));
+      } catch { resolve(null); }
+    };
+    im.onerror = () => resolve(null);
+    im.src = url;
+  });
+  this._frozenFrames.set(url, p);
+  return p;
+},
+
+// Freeze one pfp <img> to its first frame (idempotent via data-anim-done). The
+// live URL is stashed on data-animated-src so 'trigger' can play it on demand.
+_freezePfpImg(img) {
+  if (!img || img.dataset.animDone) return;
+  const mode = img.dataset.animate;
+  if (mode !== 'trigger' && mode !== 'disabled') { img.dataset.animDone = '1'; return; }
+  const url = img.getAttribute('src') || '';
+  if (url.startsWith('data:') || !this._animCanAnimate(url)) { img.dataset.animDone = '1'; return; }
+  img.dataset.animDone = '1';
+  img.dataset.animatedSrc = url;
+  // Inside a live trigger context (an open profile card) leave it animating.
+  if (mode === 'trigger' && img.closest && img.closest('[data-anim-play]')) img.dataset.animPlaying = '1';
+  this._frozenFrame(url).then((frozen) => {
+    // Do not clobber an in-flight hover/profile play, and only swap if still the live src.
+    if (frozen && img.dataset.animPlaying !== '1' && img.getAttribute('src') === url) img.src = frozen;
+  });
+},
+
+// Play (loop) or re-freeze every 'trigger' pfp image inside a container.
+_setPfpAnimation(container, play) {
+  if (!container || !container.querySelectorAll) return;
+  container.querySelectorAll('img[data-animate="trigger"][data-animated-src]').forEach((img) => {
+    if (play) {
+      img.dataset.animPlaying = '1';
+      img.src = img.dataset.animatedSrc; // reassigning restarts the loop from frame 1
+    } else {
+      img.dataset.animPlaying = '';
+      this._frozenFrame(img.dataset.animatedSrc).then((f) => {
+        if (f && img.dataset.animPlaying !== '1') img.src = f;
+      });
+    }
+  });
+},
+
+// Wire the two trigger contexts: hovering a message row, and (handled at build
+// time) opening a profile card. Set up once.
+_setupPfpAnimationTriggers() {
+  if (this._pfpAnimTriggersSet) return;
+  const messages = document.getElementById('messages');
+  if (!messages) return; // messages container not mounted yet; retried on next setup
+  this._pfpAnimTriggersSet = true;
+  messages.addEventListener('mouseover', (e) => {
+    const row = e.target.closest('.message, .message-compact');
+    if (!row) return;
+    const from = e.relatedTarget;
+    if (from && row.contains(from)) return; // moved within the same row
+    this._setPfpAnimation(row, true);
+  });
+  messages.addEventListener('mouseout', (e) => {
+    const row = e.target.closest('.message, .message-compact');
+    if (!row) return;
+    const to = e.relatedTarget;
+    if (to && row.contains(to)) return; // still within the row
+    this._setPfpAnimation(row, false);
+  });
 },
 
 // Rebuild the whole preview from the log: the shaped avatar as the fixed base,
@@ -633,6 +763,12 @@ _renderBorderEditor() {
   }
   const rotateActions = document.getElementById('border-crop-rotate-actions');
   if (rotateActions) rotateActions.style.display = (this._borderTool === 'rotate' && borderUrl) ? 'flex' : 'none';
+  const resizeActions = document.getElementById('border-crop-resize-actions');
+  if (resizeActions) {
+    resizeActions.style.display = (this._borderTool === 'resize' && borderUrl) ? 'flex' : 'none';
+    const anchorSel = document.getElementById('border-resize-anchor');
+    if (anchorSel) anchorSel.value = this._resizeAnchor || 'center';
+  }
   const opacityActions = document.getElementById('border-crop-opacity-actions');
   if (opacityActions) {
     opacityActions.style.display = (this._borderTool === 'opacity' && borderUrl) ? 'flex' : 'none';
@@ -786,6 +922,20 @@ _renderBorderHistory() {
   ).join('');
 },
 
+// Would committing this op push the content clearly out of frame? Only resize/crop/
+// move move the box, and crop/move are already clamped at their handles, so in practice
+// this only catches a resize that drifts a moved (off-centre) frame out.
+// The guards let a frame overhang the avatar by _borderOverflowFrac() (of); an off-centre
+// frame (moved, or auto-cropped from an off-centre image) legitimately resizes a bit past
+// [-of, 1+of], so we only refuse once it overhangs by another full allowance (2*of) — i.e.
+// genuinely out of frame, not merely at the guard's edge. Widen the 2x multiplier to be
+// more permissive.
+_borderBoxExceeds(op) {
+  const box = this._advanceBox(this._committedContentBox(), op);
+  const lim = 2 * this._borderOverflowFrac();
+  return box.left < -lim || box.top < -lim || box.right > 1 + lim || box.bottom > 1 + lim;
+},
+
 // Commit-on-leave: keep the draft only if it actually changed something.
 _commitBorderDraft() {
   const d = this._borderDraft;
@@ -797,7 +947,17 @@ _commitBorderDraft() {
     if (this._borderOpChanged(d)) this._borderOps.push(d);
     return;
   }
-  if (this._borderOpChanged(d)) this._borderOps.push(d);
+  if (!this._borderOpChanged(d)) return;
+  // The per-tool guards keep legitimate edits inside the avatar, but resize scales
+  // about the stage centre, so enlarging a frame that was first moved into a corner
+  // can drift it out of frame. Rather than persist an out-of-frame fit, discard the
+  // change and tell the user (this runs at the commit a tool switch / Done triggers).
+  if (this._borderBoxExceeds(d)) {
+    const msg = (window.t && window.t('modals.border_crop.exceeds_frame')) || 'The border exceeds the avatar frame, discarded changes';
+    this._showToast(msg, 'error');
+    return;
+  }
+  this._borderOps.push(d);
 },
 
 // Switch tools (or re-enter the same one): commit the current draft, then start a
@@ -1026,6 +1186,16 @@ _setupBorderEditor() {
     this._setOpacity(e.target.value);
   });
 
+  // Resize anchor: a sticky Center/Corner choice applied to resize ops.
+  const anchorSel = document.getElementById('border-resize-anchor');
+  if (anchorSel) anchorSel.addEventListener('change', (e) => {
+    this._resizeAnchor = e.target.value === 'corner' ? 'corner' : 'center';
+    if (this._borderDraft && this._borderDraft.type === 'resize') {
+      this._borderDraft.anchor = this._resizeAnchor;
+      this._renderBorderEditor();
+    }
+  });
+
   // Discard drops the current uncommitted draft only; committed ops are untouched.
   const discardBtn = document.getElementById('border-crop-reset-btn');
   if (discardBtn) {
@@ -1064,6 +1234,10 @@ _setupAvatarUpload() {
   this._pendingBorderFile = null;
   this._pendingBorderPreviewUrl = null;
   this._pendingBorderRemoved = false;
+
+  // Animated-profile policy, saved through the same Save button
+  this._animateProfile = this.user.animateProfile === 'disabled' ? 'disabled' : 'trigger';
+  this._pendingAnimateProfile = this._animateProfile;
 
   // Initialize preview + shape buttons
   this._updateAvatarPreview();
@@ -1131,6 +1305,7 @@ _setupAvatarUpload() {
       if (!Array.isArray(this._borderOps)) this._borderOps = [];
       this._borderDraft = null;
       this._borderTool = 'crop';
+      this._resizeAnchor = 'center';
       this._setupBorderEditor();
       const modal = document.getElementById('border-crop-modal');
       // Show the modal first so the stage has real dimensions before rendering.
@@ -1174,6 +1349,12 @@ _setupAvatarUpload() {
 
   // File input change → stage the file, show local preview
   document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'animate-profile-select') {
+      this._pendingAnimateProfile = e.target.value === 'disabled' ? 'disabled' : 'trigger';
+      this._markAvatarUnsaved();
+      return;
+    }
+
     if (e.target && e.target.id === 'avatar-file-input') {
       const file = e.target.files[0];
       if (!file) return;
@@ -1231,6 +1412,7 @@ _setupAvatarUpload() {
   });
 
   this._setupPfpBorderObserver();
+  this._setupPfpAnimationTriggers();
   console.log('[Avatar Setup v6] Ready.');
 },
 
@@ -1377,6 +1559,25 @@ async _commitAvatarSettings() {
       localStorage.setItem('haven_user', JSON.stringify(this.user));
       
       if (this.socket) this.socket.emit('set-avatar-shape', { shape: this._pendingAvatarShape });
+    }
+
+    // 4. Save animated-profile policy via HTTP
+    if (this._pendingAnimateProfile !== this._animateProfile) {
+      const resp = await fetch('/api/set-animate-profile', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mode: this._pendingAnimateProfile })
+      });
+      if (!resp.ok) throw new Error('Failed to save animation policy');
+
+      this._animateProfile = this._pendingAnimateProfile;
+      this.user.animateProfile = this._pendingAnimateProfile;
+      localStorage.setItem('haven_user', JSON.stringify(this.user));
+
+      if (this.socket) this.socket.emit('set-animate-profile', { mode: this._pendingAnimateProfile });
     }
 
     if (status) { status.textContent = '✅ Saved!'; status.style.color = 'var(--success, #6f6)'; }
