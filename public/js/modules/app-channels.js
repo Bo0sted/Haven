@@ -458,7 +458,7 @@ _openChannelCtxMenu(code, btnEl) {
   }
   // Only display the divider when the "rename-channel" and/or "create-sub-channel" buttons are visible.
   // this eliminates a double divider being displayed when both of these buttons are not displayed
-  const renameOrCreateSubDivider = menu.querySelector('[class="channel-ctx-sep rename-or-createSub"]');
+  const renameOrCreateSubDivider = menu.querySelector('.channel-ctx-sep.rename-or-createSub');
   if (renameOrCreateSubDivider && ch) {
     const renameCtxBtn_visible = renameCtxBtn && renameCtxBtn.style.display !== 'none';
     const createSubBtn_visible = createSubBtn && createSubBtn.style.display !== 'none';
