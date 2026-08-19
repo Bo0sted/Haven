@@ -6236,12 +6236,17 @@ _reportThemeColor() {
 
 _saveRename() {
   const input = document.getElementById('rename-input');
-  const newName = input.value.trim().replace(/\s+/g, ' ');
-  if (!newName || newName.length < 2) {
+  // Mirrors normalizeDisplayName on the server (#5509) so a name in any
+  // script gets an instant answer here rather than a bare error-msg back.
+  const newName = input.value.normalize('NFC').trim().replace(/\s+/g, ' ');
+  if (!newName || [...newName].length < 2) {
     return this._showToast(t('toasts.display_name_too_short'), 'error');
   }
-  if (!/^[a-zA-Z0-9_ ]+$/.test(newName)) {
+  if (!/^[\p{L}\p{N}\p{M}_ ]+$/u.test(newName)) {
     return this._showToast(t('toasts.display_name_invalid_chars'), 'error');
+  }
+  if (/\p{M}{4,}/u.test(newName)) {
+    return this._showToast(t('toasts.display_name_too_many_marks'), 'error');
   }
   this.socket.emit('rename-user', { username: newName });
   // Save bio
