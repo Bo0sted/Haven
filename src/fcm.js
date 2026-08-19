@@ -39,31 +39,41 @@ function initFcm(dataDir) {
     || findServiceAccount(dataDir)
     || findServiceAccount(__dirname);
 
+  let via = null;
+  let mode = 'disabled';
+
   if (saPath && fs.existsSync(saPath)) {
     try {
       serviceAccount = JSON.parse(fs.readFileSync(saPath, 'utf-8'));
       projectId = serviceAccount.project_id;
-      console.log(`🔔 FCM direct mode: ${projectId}`);
-      return { mode: 'direct' };
+      via = `direct API, project ${projectId}`;
+      mode = 'direct';
     } catch (err) {
       console.warn('⚠️  Failed to parse Firebase service account:', err.message);
     }
   }
 
-  // Fall back to relay mode — uses Haven Global Relay by default
-  relayUrl = process.env.FCM_RELAY_URL || DEFAULT_RELAY;
-  relayKey = process.env.FCM_PUSH_KEY || DEFAULT_KEY;
-
-  if (relayUrl && relayKey) {
-    if (relayUrl === DEFAULT_RELAY) {
-      console.log('🔔 FCM enabled via Haven Global Relay');
-    } else {
-      console.log(`🔔 FCM enabled via Custom Relay: ${relayUrl}`);
+  if (!serviceAccount) {
+    // Fall back to relay mode, using the Haven Global Relay by default.
+    relayUrl = process.env.FCM_RELAY_URL || DEFAULT_RELAY;
+    relayKey = process.env.FCM_PUSH_KEY || DEFAULT_KEY;
+    if (relayUrl && relayKey) {
+      via = relayUrl === DEFAULT_RELAY ? 'Haven Global Relay' : `Custom Relay ${relayUrl}`;
+      mode = 'relay';
     }
-    return { mode: 'relay' };
   }
 
-  return { mode: 'disabled' };
+  if (!via) return { mode: 'disabled' };
+
+  // The log reflects the effective state, not just the configuration: FCM can
+  // be wired up here yet still switched off by the admin under Settings >
+  // Security > FCM Privacy. adminEnabled is loaded from the DB before this runs.
+  if (adminEnabled) {
+    console.log(`🔔 FCM enabled via ${via}`);
+  } else {
+    console.log(`🔕 FCM configured via ${via}, but turned off in Settings > Security > FCM Privacy`);
+  }
+  return { mode };
 }
 
 /**

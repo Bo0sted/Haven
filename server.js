@@ -4429,13 +4429,14 @@ if (process.env.ADMIN_RESET_PASSWORD) {
   delete process.env.ADMIN_RESET_PASSWORD;
 }
 
-initFcm(DATA_DIR);
-// Load the admin FCM toggle (Settings → Security → FCM Privacy) into memory so
-// isFcmEnabled() reflects it without a per-message database read. Default on.
+// Load the admin FCM toggle (Settings → Security → FCM Privacy) into memory
+// before initFcm, so both the startup log line and isFcmEnabled() reflect it
+// without a per-message database read. Default on.
 try {
   const fe = db.prepare("SELECT value FROM server_settings WHERE key = 'fcm_enabled'").get()?.value;
   setFcmAdminEnabled(fe !== 'false');
 } catch {}
+initFcm(DATA_DIR);
 app.set('io', io);   // expose to auth routes (session invalidation on password change)
 activityRef.engine = setupSocketHandlers(io, db, {
   invalidateIpBanCache,
