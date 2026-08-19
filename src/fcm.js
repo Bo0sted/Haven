@@ -19,6 +19,10 @@ let cachedTokenExpiry = 0;
 let relayUrl = '';
 let relayKey = '';
 let projectId = '';
+// In-memory mirror of the fcm_enabled server setting (Settings → Security → FCM
+// Privacy). Kept in sync by setFcmAdminEnabled so the hot message path never
+// has to read the database. Default on so nothing breaks before it's loaded.
+let adminEnabled = true;
 
 const FCM_SCOPES = 'https://www.googleapis.com/auth/firebase.messaging';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -213,10 +217,20 @@ async function sendFcm(tokens, title, body, data = {}) {
 }
 
 /**
- * Check if FCM is available (either direct or relay mode).
+ * Check if FCM is available: configured (direct or relay mode) AND not turned
+ * off by the admin under Settings → Security → FCM Privacy.
  */
 function isFcmEnabled() {
-  return !!(serviceAccount || (relayUrl && relayKey));
+  return adminEnabled && !!(serviceAccount || (relayUrl && relayKey));
+}
+
+/**
+ * Sync the in-memory admin toggle. Called once at startup from the stored
+ * setting and again whenever an admin changes it, so isFcmEnabled() stays
+ * current without touching the database on the message hot path.
+ */
+function setFcmAdminEnabled(enabled) {
+  adminEnabled = enabled !== false;
 }
 
 /**
@@ -228,4 +242,4 @@ function getRelayKey() {
   return process.env.HAVEN_PUSH_KEY || null;
 }
 
-module.exports = { initFcm, sendFcm, isFcmEnabled, getRelayKey };
+module.exports = { initFcm, sendFcm, isFcmEnabled, setFcmAdminEnabled, getRelayKey };
