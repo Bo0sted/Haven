@@ -48,6 +48,11 @@ const { Server } = require('socket.io');
 const crypto = require('crypto');
 const helmet = require('helmet');
 const multer = require('multer');
+const diskGuard = require('./src/diskGuard');
+
+// (#5505) Refuse uploads that would eat into the reserved disk headroom, so a
+// full volume can never leave admins unable to delete the files that filled it.
+const uploadDiskGuard = diskGuard.guardUploads();
 
 console.log(`📂 Data directory: ${DATA_DIR}`);
 
@@ -685,7 +690,7 @@ app.get('/api/ice-servers', (req, res) => {
 });
 
 // ── Avatar upload endpoint (saves to /uploads, updates DB) ──
-app.post('/api/upload-avatar', uploadLimiter, (req, res) => {
+app.post('/api/upload-avatar', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -786,7 +791,7 @@ app.post('/api/set-avatar-shape', express.json(), (req, res) => {
 });
 
 // ── Webhook/Bot avatar upload endpoint ──
-app.post('/api/upload-webhook-avatar', uploadLimiter, (req, res) => {
+app.post('/api/upload-webhook-avatar', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -979,7 +984,7 @@ app.delete('/api/personas/:id', (req, res) => {
 });
 
 // Persona avatar upload — same validation as user avatar (2 MB, magic-byte check)
-app.post('/api/upload-persona-avatar', uploadLimiter, (req, res) => {
+app.post('/api/upload-persona-avatar', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1333,7 +1338,7 @@ function uploadLimiter(req, res, next) {
 setInterval(() => { const now = Date.now(); for (const [ip, t] of uploadLimitStore) { const f = t.filter(x => now - x < 60000); if (!f.length) uploadLimitStore.delete(ip); else uploadLimitStore.set(ip, f); } }, 5 * 60 * 1000);
 
 // ── Image upload (authenticated + not banned) ────────────
-app.post('/api/upload', uploadLimiter, (req, res) => {
+app.post('/api/upload', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1406,7 +1411,7 @@ app.post('/api/upload', uploadLimiter, (req, res) => {
 });
 
 // ── General file upload (authenticated + not banned) ─────
-app.post('/api/upload-file', uploadLimiter, (req, res) => {
+app.post('/api/upload-file', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1536,7 +1541,7 @@ function createSoundUpload() {
   });
 }
 
-app.post('/api/upload-sound', uploadLimiter, (req, res) => {
+app.post('/api/upload-sound', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1665,7 +1670,7 @@ function createEmojiUpload() {
   });
 }
 
-app.post('/api/upload-emoji', uploadLimiter, (req, res) => {
+app.post('/api/upload-emoji', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1691,7 +1696,7 @@ app.post('/api/upload-emoji', uploadLimiter, (req, res) => {
 });
 
 // ── Bulk emoji upload (multiple files, auto-named from filenames) ──
-app.post('/api/upload-emojis', uploadLimiter, (req, res) => {
+app.post('/api/upload-emojis', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1828,7 +1833,7 @@ function createStickerUpload() {
   });
 }
 
-app.post('/api/upload-sticker', uploadLimiter, (req, res) => {
+app.post('/api/upload-sticker', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1856,7 +1861,7 @@ app.post('/api/upload-sticker', uploadLimiter, (req, res) => {
   });
 });
 
-app.post('/api/upload-stickers', uploadLimiter, (req, res) => {
+app.post('/api/upload-stickers', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -1971,7 +1976,7 @@ function fetchGifs(kind, q, limit, cfg) {
 }
 
 // ── Server icon upload (admin only, image only, max 2 MB) ──
-app.post('/api/upload-server-icon', uploadLimiter, (req, res) => {
+app.post('/api/upload-server-icon', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -2006,7 +2011,7 @@ app.post('/api/upload-server-icon', uploadLimiter, (req, res) => {
 });
 
 // ── Role icon upload (admin only, image only, max 512 KB) ──
-app.post('/api/upload-role-icon', uploadLimiter, (req, res) => {
+app.post('/api/upload-role-icon', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -2437,7 +2442,7 @@ app.post('/api/admin/restore', (req, res) => {
 });
 
 // ── Server banner upload (admin only, image only, max 4 MB) ──
-app.post('/api/upload-server-banner', uploadLimiter, (req, res) => {
+app.post('/api/upload-server-banner', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -3834,7 +3839,7 @@ const importUpload = multer({
 });
 
 // ── Step 1: Upload & parse → return preview ──────────────
-app.post('/api/import/discord/upload', uploadLimiter, (req, res) => {
+app.post('/api/import/discord/upload', uploadLimiter, uploadDiskGuard, (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const user = token ? verifyToken(token) : null;
   if (!user || !verifyAdminFromDb(user)) return res.status(403).json({ error: 'Admin only' });
