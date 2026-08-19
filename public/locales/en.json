@@ -490,7 +490,8 @@
       "message_unpinned": "A message was unpinned",
       "protected_by": "{{name}} protected a message from cleanup",
       "message_unprotected": "A message was unprotected"
-    }
+    },
+    "thread_list": "View threads"
   },
   "media": {
     "upload_file_title": "Upload File",
@@ -1864,5 +1865,14 @@
       "unavailable_title": "GIF Search Not Available",
       "unavailable_desc": "An admin needs to set up a GIF provider API key before GIF search can work."
     }
+  },
+  "thread_list": {
+    "title": "Threads",
+    "search_placeholder": "Search threads…",
+    "loading": "Loading…",
+    "empty": "No threads in this channel yet",
+    "no_matches": "No threads match that search",
+    "reply_one": "1 reply",
+    "reply_other": "{{count}} replies"
   }
 }

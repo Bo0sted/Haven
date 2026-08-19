@@ -89,6 +89,10 @@ async switchChannel(code) {
   document.getElementById('pinned-toggle-btn').style.display = '';
   const _galleryBtn = document.getElementById('gallery-toggle-btn');
   if (_galleryBtn) _galleryBtn.style.display = isDm ? 'none' : '';
+  // (#5506) Same reasoning as the gallery: DM content is end-to-end encrypted,
+  // so a server-built list of it would have nothing readable to show.
+  const _threadsBtn = document.getElementById('threads-toggle-btn');
+  if (_threadsBtn) _threadsBtn.style.display = isDm ? 'none' : '';
   // Auto-close pinned panel and Pins PiP on channel switch so stale pins don't linger
   document.getElementById('pinned-panel').style.display = 'none';
   this._closePinsPiP?.();
