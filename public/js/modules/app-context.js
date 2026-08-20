@@ -515,6 +515,25 @@ _setupNotifications() {
   // credentials for, so we don't offer a button that can only fail.
   this.socket?.emit('get-connections');
 
+  // ── Navidrome rich presence (companion Havidrome plugin) ──
+  // A single on/off switch: on generates a webhook token the plugin posts to,
+  // off removes it. The read-only URL box is only shown once we have a token.
+  const navidromeToggle = document.getElementById('navidrome-enabled');
+  const navidromeUrlRow = document.getElementById('navidrome-url-row');
+  const navidromeUrlInput = document.getElementById('navidrome-url');
+  // Selecting the whole URL on focus makes copy-paste one gesture.
+  navidromeUrlInput?.addEventListener('focus', () => navidromeUrlInput.select());
+  this._applyNavidromeState = (token) => {
+    const on = !!token;
+    if (navidromeToggle) navidromeToggle.checked = on;
+    if (navidromeUrlInput) navidromeUrlInput.value = on ? `${location.origin}/api/webhooks/navidrome/${token}` : '';
+    if (navidromeUrlRow) navidromeUrlRow.hidden = !on;
+  };
+  navidromeToggle?.addEventListener('change', () => {
+    this.socket?.emit('set-navidrome', { enabled: navidromeToggle.checked });
+  });
+  this.socket?.emit('get-navidrome');
+
   // Coming back from a Steam/Spotify redirect? Report the outcome once.
   this._handleConnectRedirect?.();
 

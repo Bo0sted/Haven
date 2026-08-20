@@ -1469,6 +1469,22 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_user_connections_provider ON user_connections(provider);
   `);
 
+  // ── Navidrome rich-presence webhook tokens ──────────────
+  // Per-user bearer secret for the reserved /api/webhooks/navidrome/:token
+  // path that the companion Havidrome plugin posts to. Stored (not derived)
+  // so a leaked URL can be revoked: regenerating replaces the row and the old
+  // token stops resolving on the next request. One row per user; the token is
+  // removed when the user turns the feature off, and cascades away with the
+  // account.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS navidrome_tokens (
+      user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      token      TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_navidrome_tokens_token ON navidrome_tokens(token);
+  `);
+
   return db;
 }
 

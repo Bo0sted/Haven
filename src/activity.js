@@ -354,6 +354,117 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
     if (entry.listening && entry.listening.source === provider) setSlot(userId, 'listening', null);
   }
 
+  // ── Navidrome presence webhook token ────────────────────
+  // A per-user bearer secret for the reserved /api/webhooks/navidrome/:token
+  // path. Stored rather than derived so it can be revoked: regenerating
+  // replaces the row and the old token 404s on its next request, since the
+  // webhook does a live lookup with no cache. 32 random bytes → 64 hex chars,
+  // matching the length the webhook routes already validate against.
+  function getNavidromeToken(userId) {
+    try {
+      return db.prepare('SELECT token FROM navidrome_tokens WHERE user_id = ?').get(userId)?.token || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function enableNavidrome(userId) {
+    const token = crypto.randomBytes(32).toString('hex');
+    db.prepare(
+      `INSERT INTO navidrome_tokens (user_id, token) VALUES (?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET token = excluded.token, created_at = CURRENT_TIMESTAMP`
+    ).run(userId, token);
+    return token;
+  }
+
+  function disableNavidrome(userId) {
+    try {
+      db.prepare('DELETE FROM navidrome_tokens WHERE user_id = ?').run(userId);
+    } catch { /* nothing to remove */ }
+    clearNavidromePresence(userId);
+  }
+
+  // ── Source: Navidrome (Havidrome webhook) ───────────────
+  // Push-based, unlike the polled sources. Cover art arrives as raw bytes and
+  // is kept in memory only, served back as an image URL so presence payloads
+  // stay small. One entry per user, replaced each track.
+  const navidromeCovers = new Map(); // userId -> { buf, contentType, version }
+  const navidromeTimers = new Map(); // userId -> timeout that clears at track end
+
+  function setNavidromePresence(userId, { title, artist, album, position, duration, cover, coverType, paused }) {
+    // Ignore offline users so nothing renders for a closed app.
+    if (!title || !getOnlineUserIds().includes(userId)) return;
+
+    const entry = activity.get(userId) || { playing: null, listening: null };
+    // Haven's own voice-channel player owns the listening slot when active.
+    if (entry.listening && entry.listening.source === 'haven') return;
+
+    const name = clean(title, 120);
+    const cur = entry.listening && entry.listening.source === 'navidrome' ? entry.listening : null;
+    const sameTrack = cur && cur.name === name;
+    const durationMs = Math.max(0, Number(duration) || 0) * 1000;
+    const positionMs = Math.max(0, Number(position) || 0) * 1000;
+    // Navidrome reports an accurate position, so anchoring the clock to it is
+    // self-correcting and needs no cross-poll preservation.
+    const startedAt = Date.now() - positionMs;
+
+    // Skip redundant same-track pings so we don't re-broadcast every poll.
+    if (sameTrack && cur.paused === !!paused && !(cover && cover.length)) {
+      const unchanged = paused ? cur.positionMs === positionMs : Math.abs(cur.startedAt - startedAt) < 2000;
+      if (unchanged) return;
+    }
+
+    // Cover only rides along on track changes; keep the current one when a
+    // pause/resume update for the same track arrives without new bytes.
+    let image;
+    if (cover && cover.length) {
+      const version = crypto.createHash('sha1').update(cover).digest('hex').slice(0, 12);
+      navidromeCovers.set(userId, { buf: cover, contentType: coverType, version });
+      image = `/api/activity/navidrome-cover/${userId}?v=${version}`;
+    } else if (sameTrack && navidromeCovers.has(userId)) {
+      image = cur.image;
+    } else {
+      navidromeCovers.delete(userId);
+      image = null;
+    }
+
+    entry.listening = {
+      type: 'listening',
+      name,
+      details: clean(artist, 80),
+      album: clean(album, 120) || null,
+      image,
+      source: 'navidrome',
+      startedAt,
+      duration: durationMs,
+      paused: !!paused,
+      positionMs,
+    };
+    activity.set(userId, entry);
+    notify(userId);
+
+    // No stop event is guaranteed, so expire the slot when the track would end,
+    // but only while playing — a paused track holds its position indefinitely.
+    clearTimeout(navidromeTimers.get(userId));
+    navidromeTimers.delete(userId);
+    if (!paused && durationMs > 0) {
+      const remaining = Math.max(1000, startedAt + durationMs + 5000 - Date.now());
+      navidromeTimers.set(userId, setTimeout(() => clearNavidromePresence(userId), remaining));
+    }
+  }
+
+  function clearNavidromePresence(userId) {
+    clearTimeout(navidromeTimers.get(userId));
+    navidromeTimers.delete(userId);
+    navidromeCovers.delete(userId);
+    const entry = activity.get(userId);
+    if (entry?.listening?.source === 'navidrome') setSlot(userId, 'listening', null);
+  }
+
+  function getNavidromeCover(userId) {
+    return navidromeCovers.get(userId) || null;
+  }
+
   // ── Source 2: Steam ─────────────────────────────────────
   /**
    * GetPlayerSummaries accepts up to 100 steamids per call, so the entire
@@ -678,6 +789,12 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
     saveConnection,
     removeConnection,
     getConnection,
+    getNavidromeToken,
+    enableNavidrome,
+    disableNavidrome,
+    setNavidromePresence,
+    clearNavidromePresence,
+    getNavidromeCover,
     // polling
     pollSteam,
     pollSpotifyUser,

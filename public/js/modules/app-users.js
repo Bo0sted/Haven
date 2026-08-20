@@ -669,6 +669,44 @@ _activityMeta(act) {
   };
 },
 
+/** Milliseconds → "m:ss". */
+_formatClock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+},
+
+/** Playback progress bar for a listen that reports duration (Navidrome). */
+_activityProgressHtml(act) {
+  if (!act || act.type !== 'listening' || !act.duration || !act.startedAt) return '';
+  const elapsed = act.paused
+    ? Math.min(act.duration, Math.max(0, act.positionMs || 0))
+    : Math.min(act.duration, Math.max(0, Date.now() - act.startedAt));
+  const pct = act.duration ? (elapsed / act.duration) * 100 : 0;
+  return `
+    <span class="profile-activity-progress${act.paused ? ' is-paused' : ''}" data-started="${act.startedAt}" data-duration="${act.duration}" data-paused="${act.paused ? 1 : 0}">
+      <span class="pap-track"><span class="pap-fill" style="width:${pct}%"></span><span class="pap-dot" style="left:${pct}%"></span></span>
+      <span class="pap-times"><span class="pap-elapsed">${this._formatClock(elapsed)}</span><span class="pap-total">${this._formatClock(act.duration)}</span></span>
+    </span>`;
+},
+
+/** Live-tick the progress bar while the popup is open (frozen when paused). */
+_startActivityProgress(root) {
+  clearInterval(this._activityProgressTimer);
+  const el = root.querySelector('.profile-activity-progress');
+  if (!el || el.dataset.paused === '1') return;
+  const started = Number(el.dataset.started), duration = Number(el.dataset.duration);
+  const fill = el.querySelector('.pap-fill'), dot = el.querySelector('.pap-dot'), elapsedEl = el.querySelector('.pap-elapsed');
+  const tick = () => {
+    const elapsed = Math.min(duration, Math.max(0, Date.now() - started));
+    const pct = duration ? (elapsed / duration) * 100 : 0;
+    fill.style.width = pct + '%';
+    dot.style.left = pct + '%';
+    elapsedEl.textContent = this._formatClock(elapsed);
+  };
+  tick();
+  this._activityProgressTimer = setInterval(tick, 1000);
+},
+
 /**
  * Single-line form for the member list. Games win over music when a user is
  * doing both, so the sidebar never grows a second line per person.
@@ -703,9 +741,10 @@ _profileActivityHtml(activity) {
         <div class="profile-activity-row">
           ${art}
           <span class="profile-activity-text">
-            <span class="profile-activity-verb">${meta.verb}</span>
+            <span class="profile-activity-verb">${act.type === 'listening' && act.paused ? '⏸ Paused' : meta.verb}</span>
             <span class="profile-activity-name">${this._escapeHtml(act.name)}</span>
             ${details}
+            ${this._activityProgressHtml(act)}
           </span>
         </div>`;
     })
@@ -817,6 +856,9 @@ _showProfilePopup(profile) {
 
   // Position near the anchor element
   this._positionProfilePopup(popup);
+
+  // Keep the music progress bar moving while the popup is open.
+  this._startActivityProgress(popup);
 
   // Hover-mode: no interactive handlers needed — the popup is pointer-events:none.
   // Safety-net auto-close in case the mouseover handler misses.
@@ -974,6 +1016,7 @@ _positionProfilePopup(popup) {
 },
 
 _closeProfilePopup() {
+  clearInterval(this._activityProgressTimer);
   const existing = document.getElementById('profile-popup');
   if (existing) existing.remove();
   if (this._profilePopupOutsideHandler) {

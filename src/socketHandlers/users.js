@@ -660,6 +660,27 @@ module.exports = function register(socket, ctx) {
     if (socket.currentChannel) emitOnlineUsers(socket.currentChannel);
   });
 
+  // ── Navidrome rich presence webhook (companion Havidrome plugin) ──
+  // A per-user webhook token the plugin posts presence to. Enabling generates
+  // and stores a token; disabling removes it. Only the token travels to the
+  // client — it builds the full URL from its own origin, so the server never
+  // needs to know its public address.
+  socket.on('get-navidrome', () => {
+    if (!activity) return;
+    socket.emit('navidrome-state', { token: activity.getNavidromeToken(socket.user.id) });
+  });
+
+  socket.on('set-navidrome', (data) => {
+    if (!activity) return;
+    let token = null;
+    if (data && data.enabled) {
+      token = activity.enableNavidrome(socket.user.id);
+    } else {
+      activity.disableNavidrome(socket.user.id);
+    }
+    socket.emit('navidrome-state', { token });
+  });
+
   // ── High Scores ─────────────────────────────────────────
   socket.on('submit-high-score', (data) => {
     if (!data || typeof data !== 'object') return;
