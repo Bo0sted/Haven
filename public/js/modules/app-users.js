@@ -4,6 +4,7 @@ export default {
 
 _renderOnlineUsers(users) {
   this._lastOnlineUsers = users;
+  this._refreshOpenProfileActivity();
   const el = document.getElementById('online-users');
   if (users.length === 0) {
     el.innerHTML = `<p class="muted-text">${t('users.no_one_here')}</p>`;
@@ -689,6 +690,21 @@ _activityProgressHtml(act) {
     </span>`;
 },
 
+/**
+ * Re-render an open profile card's activity from the latest presence, so pause,
+ * resume, track changes and clears show without reopening it. Driven by the
+ * online-users broadcasts the client already receives.
+ */
+_refreshOpenProfileActivity() {
+  if (this._openProfileUserId == null) return;
+  const slot = document.getElementById('profile-popup-activity-slot');
+  if (!slot) return;
+  const u = (this._lastOnlineUsers || []).find(u => u.id === this._openProfileUserId);
+  if (!u) return; // not in this broadcast, leave the card as-is
+  slot.innerHTML = this._profileActivityHtml(u.activity);
+  this._startActivityProgress(slot);
+},
+
 /** Live-tick the progress bar while the popup is open (frozen when paused). */
 _startActivityProgress(root) {
   clearInterval(this._activityProgressTimer);
@@ -837,7 +853,7 @@ _showProfilePopup(profile) {
       ${statusTextHtml}
       ${bioHtml}
       <div class="profile-popup-divider"></div>
-      ${this._profileActivityHtml(profile.activity)}
+      <div id="profile-popup-activity-slot">${this._profileActivityHtml(profile.activity)}</div>
       ${rolesHtml ? `<div class="profile-popup-section-label">${t('users.profile_roles_label')}</div><div class="profile-popup-roles">${rolesHtml}</div>` : ''}
       ${joinDate ? `<div class="profile-popup-section-label">${t('users.member_since_label')}</div><div class="profile-popup-join-date">${joinDate}</div>` : ''}
       <div class="profile-popup-actions">${actionsHtml}</div>
@@ -857,7 +873,9 @@ _showProfilePopup(profile) {
   // Position near the anchor element
   this._positionProfilePopup(popup);
 
-  // Keep the music progress bar moving while the popup is open.
+  // Keep the music progress bar moving, and let presence updates refresh the
+  // card live (pause, resume, track change, clear) while it's open.
+  this._openProfileUserId = profile.id;
   this._startActivityProgress(popup);
 
   // Hover-mode: no interactive handlers needed — the popup is pointer-events:none.
@@ -1017,6 +1035,7 @@ _positionProfilePopup(popup) {
 
 _closeProfilePopup() {
   clearInterval(this._activityProgressTimer);
+  this._openProfileUserId = null;
   const existing = document.getElementById('profile-popup');
   if (existing) existing.remove();
   if (this._profilePopupOutsideHandler) {
