@@ -35,6 +35,11 @@ const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
 function setupSocketHandlers(io, db, opts = {}) {
   const invalidateIpBanCache = (typeof opts.invalidateIpBanCache === 'function') ? opts.invalidateIpBanCache : () => {};
   const onReferrerPolicyChange = (typeof opts.onReferrerPolicyChange === 'function') ? opts.onReferrerPolicyChange : () => {};
+  // Per-member upload totals, computed by the HTTP layer that owns the
+  // uploads directory. Returns empty usage when the host did not supply it.
+  const getUploadUsage = (typeof opts.getUploadUsage === 'function')
+    ? opts.getUploadUsage
+    : () => ({ byUser: new Map(), liveBytes: 0, attributedBytes: 0, unattributedBytes: 0, fileCount: 0 });
 
   // ── Client IP + ban matching (v3.42.0) ───────────────────
   // Both delegate to the same helpers the HTTP layer uses so the two gates
@@ -1892,6 +1897,8 @@ function setupSocketHandlers(io, db, opts = {}) {
       // Idle-online oversight (flag accounts sitting connected + green + silent)
       getIdleOnlineUsers,
       onReferrerPolicyChange,
+      // Per-member upload storage totals (#5521)
+      getUploadUsage,
       // Ban-filtered channel roster used by @mention autocomplete
       getMentionableChannelMembers,
       // IP-ban cache invalidator (server.js HTTP-side cache)
