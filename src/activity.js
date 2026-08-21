@@ -390,6 +390,7 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
   // stay small. One entry per user, replaced each track.
   const navidromeCovers = new Map(); // userId -> { buf, contentType, version }
   const navidromeTimers = new Map(); // userId -> timeout that clears at track end
+  const NAVIDROME_PAUSED_TTL_MS = 5 * 60 * 1000; // drop a paused track after 5 min idle
 
   function setNavidromePresence(userId, { title, artist, album, position, duration, cover, coverType, paused }) {
     // Ignore offline users so nothing renders for a closed app.
@@ -443,13 +444,18 @@ function createActivity({ db, getOnlineUserIds, onChange, onConnectionsChanged }
     activity.set(userId, entry);
     notify(userId);
 
-    // No stop event is guaranteed, so expire the slot when the track would end,
-    // but only while playing — a paused track holds its position indefinitely.
+    // No stop event is guaranteed, so expire the slot on a timer. While playing
+    // that's when the track would end; while paused a track can't self-expire on
+    // duration, so fall back to a 5-minute idle timeout so a track left paused
+    // (or a client that dropped without a stop) can't linger and later reappear.
+    // Every update resets the timer, so an actively-paused client stays shown.
     clearTimeout(navidromeTimers.get(userId));
     navidromeTimers.delete(userId);
-    if (!paused && durationMs > 0) {
-      const remaining = Math.max(1000, startedAt + durationMs + 5000 - Date.now());
-      navidromeTimers.set(userId, setTimeout(() => clearNavidromePresence(userId), remaining));
+    const timeout = paused
+      ? NAVIDROME_PAUSED_TTL_MS
+      : (durationMs > 0 ? Math.max(1000, startedAt + durationMs + 5000 - Date.now()) : 0);
+    if (timeout > 0) {
+      navidromeTimers.set(userId, setTimeout(() => clearNavidromePresence(userId), timeout));
     }
   }
 
