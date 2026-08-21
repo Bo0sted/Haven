@@ -4,7 +4,7 @@ export default {
 
 _renderOnlineUsers(users) {
   this._lastOnlineUsers = users;
-  this._refreshOpenProfileActivity();
+  this._refreshOpenProfileCard();
   const el = document.getElementById('online-users');
   if (users.length === 0) {
     el.innerHTML = `<p class="muted-text">${t('users.no_one_here')}</p>`;
@@ -690,19 +690,56 @@ _activityProgressHtml(act) {
     </span>`;
 },
 
+/** Presence dot class (shared by the sidebar and the profile card). */
+_statusDotClass(u) {
+  return u.status === 'dnd' ? 'dnd' : u.status === 'away' ? 'away'
+    : u.status === 'invisible' ? 'invisible' : (u.online === false ? 'away' : '');
+},
+
+/** Human label for the presence dot's tooltip. */
+_statusLabel(u) {
+  return u.status === 'dnd' ? t('app.profile.dnd') : u.status === 'away' ? t('app.profile.away')
+    : u.status === 'invisible' ? t('app.profile.invisible')
+    : (u.online === false ? t('app.profile.offline') : t('app.profile.online'));
+},
+
+/** Custom-status line for the profile card (empty when there's none). */
+_profileStatusTextHtml(text) {
+  return text ? `<div class="profile-popup-status-text">${this._escapeHtml(text)}</div>` : '';
+},
+
 /**
- * Re-render an open profile card's activity from the latest presence, so pause,
- * resume, track changes and clears show without reopening it. Driven by the
- * online-users broadcasts the client already receives.
+ * Re-render an open profile card from the latest presence, so status (online/
+ * away/dnd), custom status text and activity (pause, resume, track change,
+ * clear) all update live without reopening it. Driven by the online-users
+ * broadcasts the client already receives — no new traffic.
  */
-_refreshOpenProfileActivity() {
+_refreshOpenProfileCard() {
   if (this._openProfileUserId == null) return;
-  const slot = document.getElementById('profile-popup-activity-slot');
-  if (!slot) return;
+  const popup = document.getElementById('profile-popup');
+  if (!popup) return;
+  // The broadcast is scoped to the current channel and can be visibility-
+  // filtered, so absence does NOT reliably mean offline — the user may just be
+  // in another channel. Only refresh from a record we actually have; otherwise
+  // leave the card as-is rather than wrongly flipping it to offline.
   const u = (this._lastOnlineUsers || []).find(u => u.id === this._openProfileUserId);
-  if (!u) return; // not in this broadcast, leave the card as-is
-  slot.innerHTML = this._profileActivityHtml(u.activity);
-  this._startActivityProgress(slot);
+  if (!u) return;
+
+  const dot = popup.querySelector('.profile-popup-status-dot');
+  if (dot) {
+    const cls = this._statusDotClass(u);
+    dot.className = 'profile-popup-status-dot' + (cls ? ' ' + cls : '');
+    dot.title = this._statusLabel(u);
+  }
+
+  const statusSlot = popup.querySelector('#profile-popup-status-slot');
+  if (statusSlot) statusSlot.innerHTML = this._profileStatusTextHtml(u.statusText);
+
+  const slot = popup.querySelector('#profile-popup-activity-slot');
+  if (slot) {
+    slot.innerHTML = this._profileActivityHtml(u.activity);
+    this._startActivityProgress(slot);
+  }
 },
 
 /** Live-tick the progress bar while the popup is open (frozen when paused). */
@@ -789,11 +826,9 @@ _showProfilePopup(profile) {
     ? `<img class="profile-popup-avatar ${shapeClass}" src="${this._escapeHtml(profile.avatar)}" alt="${initial}">`
     : `<div class="profile-popup-avatar profile-popup-avatar-fallback ${shapeClass}" style="background-color:${color}">${initial}</div>`;
 
-  // Status dot
-  const statusClass = profile.status === 'dnd' ? 'dnd' : profile.status === 'away' ? 'away'
-    : profile.status === 'invisible' ? 'invisible' : (!profile.online ? 'away' : '');
-  const statusLabel = profile.status === 'dnd' ? t('app.profile.dnd') : profile.status === 'away' ? t('app.profile.away')
-    : profile.status === 'invisible' ? t('app.profile.invisible') : (profile.online ? t('app.profile.online') : t('app.profile.offline'));
+  // Status dot (shared logic so the live refresh stays in sync)
+  const statusClass = this._statusDotClass(profile);
+  const statusLabel = this._statusLabel(profile);
 
   // Roles
   const rolesHtml = (profile.roles && profile.roles.length > 0)
@@ -804,9 +839,7 @@ _showProfilePopup(profile) {
     : '';
 
   // Status text badge
-  const statusTextHtml = profile.statusText
-    ? `<div class="profile-popup-status-text">${this._escapeHtml(profile.statusText)}</div>`
-    : '';
+  const statusTextHtml = this._profileStatusTextHtml(profile.statusText);
 
   // Bio (with "View Full Bio" toggle for long bios)
   const bioText = profile.bio || '';
@@ -850,7 +883,7 @@ _showProfilePopup(profile) {
         <span class="profile-popup-displayname">${this._escapeHtml(profile.displayName)}</span>
         <span class="profile-popup-username">@${this._escapeHtml(profile.username)}</span>
       </div>
-      ${statusTextHtml}
+      <div id="profile-popup-status-slot">${statusTextHtml}</div>
       ${bioHtml}
       <div class="profile-popup-divider"></div>
       <div id="profile-popup-activity-slot">${this._profileActivityHtml(profile.activity)}</div>
@@ -1015,18 +1048,24 @@ _positionProfilePopup(popup) {
     return;
   }
   const rect = anchor.getBoundingClientRect();
-  const pw = 320; // popup width
-  const ph = 400; // estimated max height
+  // Measure the real rendered box. Width is a rem value in CSS and height varies
+  // with content, so hardcoded guesses under-clamped once font-size/zoom differed
+  // and the card spilled off-screen beside the member list (desktop app + web).
+  const pw = popup.offsetWidth;
+  const ph = popup.offsetHeight;
+  const margin = 8;
 
   let left = rect.left + rect.width / 2 - pw / 2;
-  let top = rect.bottom + 8;
+  let top = rect.bottom + margin;
 
-  // Keep within viewport
-  if (left < 8) left = 8;
-  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-  if (top + ph > window.innerHeight - 8) {
-    top = rect.top - ph - 8;
-    if (top < 8) top = 8;
+  // Clamp horizontally within the viewport.
+  left = Math.max(margin, Math.min(left, window.innerWidth - pw - margin));
+
+  // Flip above the anchor if it overflows the bottom; if it fits neither way
+  // (very short viewport) clamp so the top edge stays on-screen.
+  if (top + ph > window.innerHeight - margin) {
+    const above = rect.top - ph - margin;
+    top = above >= margin ? above : Math.max(margin, window.innerHeight - ph - margin);
   }
 
   popup.style.left = left + 'px';
