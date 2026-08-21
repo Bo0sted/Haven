@@ -565,6 +565,21 @@ function setupSocketHandlers(io, db, opts = {}) {
     return channels;
   }
 
+  // ── Channel member list (@mention autocomplete source) ──
+  // A ban leaves channel_members alone on purpose, so an unban puts the person
+  // back in exactly the channels they were in. That meant banned accounts kept
+  // appearing in @mention autocomplete, so filter them here — the one place
+  // this list is built — rather than in each caller.
+  function getMentionableChannelMembers(channelId) {
+    return db.prepare(`
+      SELECT u.id, COALESCE(u.display_name, u.username) as username, u.username as loginName FROM users u
+      JOIN channel_members cm ON u.id = cm.user_id
+      LEFT JOIN bans b ON b.user_id = u.id
+      WHERE cm.channel_id = ? AND b.user_id IS NULL
+      ORDER BY COALESCE(u.display_name, u.username)
+    `).all(channelId);
+  }
+
   // ── broadcastChannelLists (debounced, shared timer) ─────
   let _broadcastPending = null;
   function broadcastChannelLists() {
@@ -1877,6 +1892,8 @@ function setupSocketHandlers(io, db, opts = {}) {
       // Idle-online oversight (flag accounts sitting connected + green + silent)
       getIdleOnlineUsers,
       onReferrerPolicyChange,
+      // Ban-filtered channel roster used by @mention autocomplete
+      getMentionableChannelMembers,
       // IP-ban cache invalidator (server.js HTTP-side cache)
       invalidateIpBanCache,
       // Constants
