@@ -231,7 +231,7 @@ function initDatabase() {
     -- Who uploaded which file, recorded at the upload endpoint. Message content
     -- is the only other record of an attachment, and in a DM that content is E2E
     -- ciphertext (the file bytes are encrypted client-side too), so scanning
-    -- messages would silently miss every private upload — which is exactly the
+    -- messages would silently miss every private upload, which is exactly the
     -- storage nobody could account for before. The upload endpoint is the one
     -- place the server still knows both the uploader and the file. Sizes are
     -- re-read from disk when the member list is built, so a file that has been

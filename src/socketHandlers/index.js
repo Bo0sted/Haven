@@ -573,8 +573,8 @@ function setupSocketHandlers(io, db, opts = {}) {
   // ── Channel member list (@mention autocomplete source) ──
   // A ban leaves channel_members alone on purpose, so an unban puts the person
   // back in exactly the channels they were in. That meant banned accounts kept
-  // appearing in @mention autocomplete, so filter them here — the one place
-  // this list is built — rather than in each caller.
+  // appearing in @mention autocomplete, so filter them here (the one place
+  // this list is built) rather than in each caller.
   function getMentionableChannelMembers(channelId) {
     return db.prepare(`
       SELECT u.id, COALESCE(u.display_name, u.username) as username, u.username as loginName FROM users u

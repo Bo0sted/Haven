@@ -1005,7 +1005,7 @@ module.exports = function register(socket, ctx) {
 
       // Upload storage per member (#5521). Moderator-only: it is a moderation
       // signal, not something every member needs to see about everyone else.
-      // The DM figure is a size, never a hint at what was sent — DM attachments
+      // The DM figure is a size, never a hint at what was sent: DM attachments
       // are encrypted client-side and stay unreadable to the server.
       let usage = null;
       if (canMod) {

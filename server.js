@@ -186,7 +186,7 @@ function uploadScopeFromRequest(req, fallback = 'channel') {
 
 // Walk the live uploads tree once and total it per owner. Reading sizes from
 // disk rather than trusting the stored byte count means a deleted, purged, or
-// moved-to-deleted-attachments file drops out on its own — no delete hook to
+// moved-to-deleted-attachments file drops out on its own, with no delete hook to
 // keep in sync, and no drift between the report and reality.
 let _uploadUsageCache = null;
 function getUploadUsage() {
@@ -216,7 +216,7 @@ function getUploadUsage() {
     for (const row of rows) {
       if (row.user_id === null) continue;
       const bytes = sizes.get(row.rel_path);
-      if (bytes === undefined) continue;   // gone from disk — stop counting it
+      if (bytes === undefined) continue;   // gone from disk, so stop counting it
       let entry = byUser.get(row.user_id);
       if (!entry) { entry = { total: 0, channel: 0, dm: 0, profile: 0, files: 0 }; byUser.set(row.user_id, entry); }
       entry.total += bytes;
