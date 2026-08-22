@@ -559,10 +559,10 @@ router.post('/register', authLimiter, async (req, res) => {
       }
     }
 
-    // Make Sure username doesn't already exist.
-    // Provide a vague error response that promts the user to change the username, -
-    // but is vague enough to not reveal existing usernames to a probing attacker or bot.
-    // check this after authenticating the capacha and invite to reduce probing risk.
+    // Make sure the username isn't taken. The error nudges the registrant to
+    // pick a different name without confirming which names already exist, and
+    // it runs after the captcha and invite checks so a bot has to clear those
+    // before it can probe at all.
     const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(username);
     if (existing) {
       return res.status(400).json({ error: 'Registration could not be completed: invalid username' });

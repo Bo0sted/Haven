@@ -4524,7 +4524,7 @@ _setupUI() {
     const picked = cbs.filter(cb => cb.checked).map(cb => parseInt(cb.dataset.cid)).filter(Number.isFinite);
     // All checked → [] = "grant all public" (future-proof as new channels appear).
     const channels = (total > 0 && picked.length === total) ? [] : picked;
-    
+
     const maxUsesValue = document.getElementById('invite-new-maxuses')?.value;
     const maxUses = maxUsesValue === '' ? 1 : parseInt(maxUsesValue);
 

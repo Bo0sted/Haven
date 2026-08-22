@@ -915,7 +915,7 @@
   // token field. Best-effort fetch — if it fails we just leave the
   // field hidden and the server will reject without the token.
   // field is also hidden if an invite link is used and is allowed to override the token requirement.
-  async function  _initRegistrationForm() {
+  async function _initRegistrationForm() {
     try {
       const r = await fetch('/api/auth/registration-info');
       if (!r.ok) return;
@@ -969,7 +969,7 @@
         if (error.toLowerCase().includes('invite link')) {
           sessionStorage.removeItem('haven_pending_invite');
           _pendingInvite = '';
-          
+
           const url = new URL(window.location.href);
           url.searchParams.delete('invite');
           window.history.replaceState({}, '', url.pathname + url.search + url.hash);
@@ -977,7 +977,7 @@
 
           await _initRegistrationForm();
         }
-        
+
         showError(error);
         return;
       }
