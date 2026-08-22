@@ -316,6 +316,11 @@
             <span class="update-pulse"></span>
             <span class="update-text">Update Available</span>
           </a>
+          <!-- Low disk warning (admins only, #5505) -->
+          <span id="disk-low-banner" class="disk-low-banner" style="display:none" role="status">
+            <span class="disk-low-dot"></span>
+            <span class="disk-low-text" data-i18n="banners.disk_low">Server disk almost full</span>
+          </span>
           <!-- Desktop app banner -->
           <!-- The dismiss button is a SIBLING of the link, not inside it. A
                <button> nested in an <a> is invalid HTML: the parser hoists it
@@ -1212,6 +1217,7 @@
             <option value="pl">🇵🇱 Polski</option>
             <option value="ru">🇷🇺 Русский</option>
             <option value="zh">🇨🇳 中文</option>
+            <option value="pt">🇧🇷 Português (Brasil)</option>
           </select>
         </label>
         <small class="settings-hint" data-i18n="settings.language_section.hint">Changes apply immediately</small>
@@ -2062,6 +2068,7 @@
                 <option value="pl">🇵🇱 Polski</option>
                 <option value="ru">🇷🇺 Русский</option>
                 <option value="zh">🇨🇳 中文</option>
+                <option value="pt">🇧🇷 Português (Brasil)</option>
               </select>
             </label>
             <small class="settings-hint" data-i18n="settings.admin.default_locale_hint">New users see Haven in this language on first visit. They can still pick their own.</small>
@@ -2194,6 +2201,13 @@
             <span data-i18n="settings.admin.voice_relay_label">Relay-only voice (hide member IPs)</span>
             <input type="checkbox" id="voice-force-relay">
           </label>
+          <small class="settings-group-label" style="margin-top:14px;display:block">🔔 <span data-i18n="settings.admin.fcm_privacy_group">FCM Privacy</span></small>
+          <small class="settings-hint" style="display:block" data-i18n-html="settings.admin.fcm_desc">FCM (Firebase Cloud Messaging) is Google's system for delivering push notifications to Android phones. It's what wakes your phone when you receive a new message while Haven is closed. This means that all notifications (including your Haven username, channel name and message content) sent to your Android phone have to pass through Google's servers to reach your phone.<br><br>While this may be fine for most users, some may prefer to keep Google completely out of the equation. <a href="https://unifiedpush.org" target="_blank" rel="noopener">UnifiedPush</a> is a decentralized notification standard that supports several notification apps, and if a UnifiedPush compatible app is installed on your phone, Haven Mobile will prioritize it over FCM.</small>
+          <small class="settings-hint" style="display:block;margin-top:8px" data-i18n-html="settings.admin.fcm_note"><strong>Dangerous Action Warning: Before disabling this, please ensure every member in your Haven server including yourself has a UnifiedPush compatible app installed on their phone. Otherwise, some members of your server will not receive any mobile notifications.</strong></small>
+          <label class="toggle-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.fcm_enabled_label">Enable Google FCM Push Notifications</span>
+            <input type="checkbox" id="fcm-enabled">
+          </label>
         </div>
         <div class="admin-settings" id="section-automod" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
           <h5 class="settings-section-subtitle">🛡️ <span data-i18n="settings.admin.automod_title">Auto-Mod</span></h5>
@@ -2291,6 +2305,10 @@
               <input type="checkbox" id="registration-token-enabled">
             </label>
             <small class="settings-hint">When enabled, anyone registering must enter the token below. Works alongside the whitelist (both checks must pass) or on its own.</small>
+            <label class="toggle-row">
+              <span>Allow invitation links to bypass token requirement</span>
+              <input type="checkbox" id="invites-bypass-registration-token">
+            </label>
             <div id="registration-token-display" style="display:flex;align-items:center;gap:6px;margin-top:6px;">
               <code id="registration-token-value" style="font-family:monospace;font-size:1rem;letter-spacing:0.05em;opacity:0.7">—</code>
               <button class="btn-sm" id="copy-registration-token-btn" title="Copy token">📋</button>
@@ -2538,7 +2556,7 @@
           <small class="settings-hint" data-i18n="settings.admin.connectivity_hint">STUN/TURN servers let voice and screen share connect between users on different networks. Leave blank to use Haven's built-in STUN pool. If users outside your local network get stuck on "ICE: Connecting...", set your own servers here.</small>
           <label class="select-row" style="margin-top:8px; align-items:flex-start">
             <span data-i18n="settings.admin.stun_urls">STUN servers</span>
-            <textarea id="stun-urls-input" rows="3" class="settings-text-input" placeholder="stun:stun.cloudflare.com:3478&#10;stun:stun.l.google.com:19302" style="flex:1; resize:vertical; font-family:monospace; font-size:0.75rem"></textarea>
+            <textarea id="stun-urls-input" rows="3" class="settings-text-input" placeholder="stun:stun.cloudflare.com:3478&#10;stun:global.stun.twilio.com:3478" style="flex:1; resize:vertical; font-family:monospace; font-size:0.75rem"></textarea>
           </label>
           <small class="settings-hint" data-i18n="settings.admin.stun_urls_hint">One stun: URI per line (or comma separated). Blank = built-in defaults.</small>
           <label class="select-row" style="margin-top:8px">
@@ -3174,8 +3192,10 @@
           <option value="offline" data-i18n="modals.all_members.filter_offline">Offline</option>
           <option value="new" data-i18n="modals.all_members.filter_new">New (7 days)</option>
           <option value="banned" data-i18n="modals.all_members.filter_banned">Banned</option>
+          <option value="storage" data-i18n="modals.all_members.filter_storage">Most storage used</option>
         </select>
       </div>
+      <div id="all-members-storage-summary" class="settings-hint" style="display:none;margin:-4px 0 8px"></div>
       <div id="all-members-list" style="overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:4px">
         <p class="muted-text" style="text-align:center;padding:20px" data-i18n="modals.common.loading">Loading...</p>
       </div>
@@ -3219,16 +3239,16 @@
           </div>
           <label class="select-row" style="align-items:center">
             <span>Max uses <small class="settings-hint" style="display:block">0 = unlimited. Counts distinct people.</small></span>
-            <input type="number" id="invite-new-maxuses" min="0" max="100000" value="0" class="settings-number-input">
+            <input type="number" id="invite-new-maxuses" min="0" max="100000" value="1" class="settings-number-input">
           </label>
           <label class="select-row" style="align-items:center">
             <span>Expires</span>
             <select id="invite-new-expiry" class="settings-number-input">
-              <option value="0" selected>Never</option>
+              <option value="0">Never</option>
               <option value="1">After 1 hour</option>
               <option value="24">After 1 day</option>
               <option value="168">After 7 days</option>
-              <option value="720">After 30 days</option>
+              <option value="720" selected>After 30 days</option>
             </select>
           </label>
           <label class="select-row" style="align-items:center">

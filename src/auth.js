@@ -238,8 +238,10 @@ router.get('/registration-info', (req, res) => {
   try {
     const db = getDb();
     const tokenEnabledRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token_enabled'").get();
+    const inviteBypassTokenRow = db.prepare("SELECT value FROM server_settings WHERE key = 'invites_bypass_registration_token'").get();
     const tokenRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token'").get();
     const requiresToken = !!(tokenEnabledRow && tokenEnabledRow.value === 'true' && tokenRow && tokenRow.value);
+    const invitesBypassToken = !!(inviteBypassTokenRow && inviteBypassTokenRow.value === 'true');
     // Opt-in Turnstile CAPTCHA. Only the public site key is exposed (safe by
     // design); the secret key never leaves the server. Gated on a site key
     // being present so the page never tries to render a keyless widget.
@@ -247,7 +249,7 @@ router.get('/registration-info', (req, res) => {
     const siteKeyRow = db.prepare("SELECT value FROM server_settings WHERE key = 'turnstile_site_key'").get();
     const turnstileSiteKey = (siteKeyRow && typeof siteKeyRow.value === 'string') ? siteKeyRow.value.trim() : '';
     const captchaEnabled = !!(capEnabledRow && capEnabledRow.value === 'true' && turnstileSiteKey);
-    res.json({ requiresToken, captchaEnabled, turnstileSiteKey: captchaEnabled ? turnstileSiteKey : '' });
+    res.json({ requiresToken, invitesBypassToken, captchaEnabled, turnstileSiteKey: captchaEnabled ? turnstileSiteKey : '' });
   } catch (err) {
     res.json({ requiresToken: false, captchaEnabled: false, turnstileSiteKey: '' });
   }
@@ -459,34 +461,65 @@ router.post('/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'You must confirm that you are 18 years of age or older' });
     }
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
-    }
     if (username.length < 3 || username.length > 20) {
       return res.status(400).json({ error: 'Username must be 3-20 characters' });
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return res.status(400).json({ error: 'Username: letters, numbers, underscores only' });
     }
     if (password.length < 8 || password.length > 128) {
       return res.status(400).json({ error: 'Password must be 8-128 characters' });
     }
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      return res.status(400).json({ error: 'Username: letters, numbers, underscores only' });
+    if (password.toLowerCase().includes(username.toLowerCase())) {
+      return res.status(400).json({ error: 'Password must not contain your username' });
     }
 
     const db = getDb();
 
     // (#5344) Registration token check — admin-controlled gate that can
-    // sit alongside (or instead of) the whitelist. If enabled and a
-    // token is set, the registrant must supply the matching token.
+    // sit alongside (or instead of) the whitelist. When enabled, a valid
+    // registration token is required unless a valid invite link is being
+    // used and invite links are configured to bypass the token requirement
+    let inviteRow = null;
     const tokenEnabledRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token_enabled'").get();
     if (tokenEnabledRow && tokenEnabledRow.value === 'true') {
-      const tokenRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token'").get();
-      const expected = tokenRow && typeof tokenRow.value === 'string' ? tokenRow.value.trim() : '';
-      const supplied = typeof req.body.registrationToken === 'string' ? req.body.registrationToken.trim() : '';
-      if (!expected) {
-        return res.status(403).json({ error: 'Registration is restricted. Ask the server admin for an invite.' });
-      }
-      if (supplied !== expected) {
-        return res.status(403).json({ error: 'Invalid or missing registration token.' });
+      // if invite code is used, and admin allows invites to override registration code requirement, validate invite code and use it in place of the registration code
+      const inviteOverridesTokenRow = db.prepare("SELECT value FROM server_settings WHERE key = 'invites_bypass_registration_token'").get();
+      const inviteCode = typeof req.body.inviteCode === 'string' ? req.body.inviteCode.trim() : '';
+      if (inviteOverridesTokenRow && inviteOverridesTokenRow.value === 'true' && inviteCode) {
+        inviteRow = db.prepare(
+          "SELECT *, (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP) AS is_expired FROM invite_codes WHERE code = ?"
+        ).get(inviteCode);
+
+        if (!inviteRow) {
+          return res.status(403).json({error: 'Invalid invite link.'});
+        }
+        if (!inviteRow.enabled) {
+          return res.status(403).json({error: 'This invite link has been disabled.'});
+        }
+        if (inviteRow.is_expired) {
+          return res.status(403).json({error: 'This invite link has expired.'});
+        }
+        if (inviteRow.max_uses > 0) {
+          const used = db.prepare(
+            'SELECT COUNT(*) AS n FROM invite_code_uses WHERE invite_code_id = ?'
+          ).get(inviteRow.id).n;
+
+          if (used >= inviteRow.max_uses) {
+            return res.status(403).json({error: 'This invite link has reached its use limit.'});
+          }
+        }
+      } else {
+        // check registration token
+        const tokenRow = db.prepare("SELECT value FROM server_settings WHERE key = 'registration_token'").get();
+        const expected = tokenRow && typeof tokenRow.value === 'string' ? tokenRow.value.trim() : '';
+        const supplied = typeof req.body.registrationToken === 'string' ? req.body.registrationToken.trim() : '';
+        if (!expected) {
+          return res.status(403).json({ error: 'Registration is restricted. Ask the server admin for an invite.' });
+        }
+        if (supplied !== expected) {
+          return res.status(403).json({ error: 'Invalid or missing registration token.' });
+        }
       }
     }
 
@@ -526,9 +559,13 @@ router.post('/register', authLimiter, async (req, res) => {
       }
     }
 
+    // Make sure the username isn't taken. The error nudges the registrant to
+    // pick a different name without confirming which names already exist, and
+    // it runs after the captcha and invite checks so a bot has to clear those
+    // before it can probe at all.
     const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(username);
     if (existing) {
-      return res.status(400).json({ error: 'Registration could not be completed' });
+      return res.status(400).json({ error: 'Registration could not be completed: invalid username' });
     }
 
     const hash = await bcrypt.hash(password, 12);
@@ -550,6 +587,13 @@ router.post('/register', authLimiter, async (req, res) => {
       'INSERT INTO users (username, password_hash, is_admin, avatar) VALUES (?, ?, ?, ?)'
     ).run(username, hash, isAdmin, avatarPath);
     _regTimestamps.push(Date.now()); // feed the opt-in global registration rate limit
+
+    // Consume the invite if it was used for registration.
+    if (inviteRow) {
+      db.prepare(
+        'INSERT INTO invite_code_uses (invite_code_id, user_id) VALUES (?, ?)'
+      ).run(inviteRow.id, result.lastInsertRowid);
+    }
 
     provisionNewUser(db, result.lastInsertRowid, username, req.app.get('io'));
 
@@ -1169,6 +1213,10 @@ router.post('/change-password', authLimiter, async (req, res) => {
     // compare below would just fail as "incorrect", which reads like a bug.
     if (user.oidc_subject && !hasLocalPassword(user)) {
       return res.status(400).json({ error: 'This account signs in through SSO, so it has no Haven password. Change it with your identity provider instead.' });
+    }
+
+    if (newPassword.toLowerCase().includes(user.username.toLowerCase())) {
+      return res.status(400).json({ error: 'Password must not contain your username' });
     }
 
     const valid = await bcrypt.compare(currentPassword, user.password_hash);

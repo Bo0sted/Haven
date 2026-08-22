@@ -232,6 +232,10 @@
     "burn_disarmed": "Burn-after-read disabled",
     "channel_hidden": "Channel \"{{name}}\" hidden"
   },
+  "banners": {
+    "disk_low": "Server disk almost full",
+    "disk_low_detail": "Only {{free}} MB free on the data volume, under the {{reserve}} MB reserve. Uploads are paused so the database can still be written to. Free some space to start them again."
+  },
   "messages": {
     "burn_reveal": "Tap to view",
     "burn_done": "Message burned"
@@ -908,6 +912,10 @@
       "referrer_policy_opt_same": "<strong>Same-Origin (default):</strong> within this server, shares the full address; to other sites, shares nothing.",
       "referrer_policy_opt_none": "<strong>No-Referrer:</strong> shares nothing anywhere — not even within this server.",
       "referrer_policy_note": "Same-Origin and No-Referrer send nothing to other sites, so either one fixes embeds whose CDN rejects a cross-origin referrer, such as Twitter/X video. If an image or embed somewhere else stops loading after this change, that host wants a referrer: switch to Strict-Origin-When-Cross-Origin to restore the pre-3.41.0 behaviour.",
+      "fcm_privacy_group": "FCM Privacy",
+      "fcm_desc": "FCM (Firebase Cloud Messaging) is Google's system for delivering push notifications to Android phones. It's what wakes your phone when you receive a new message while Haven is closed. This means that all notifications (including your Haven username, channel name and message content) sent to your Android phone have to pass through Google's servers to reach your phone.<br><br>While this may be fine for most users, some may prefer to keep Google completely out of the equation. <a href=\"https://unifiedpush.org\" target=\"_blank\" rel=\"noopener\">UnifiedPush</a> is a decentralized notification standard that supports several notification apps, and if a UnifiedPush compatible app is installed on your phone, Haven Mobile will prioritize it over FCM.",
+      "fcm_note": "<strong>Dangerous Action Warning: Before disabling this, please ensure every member in your Haven server including yourself has a UnifiedPush compatible app installed on their phone. Otherwise, some members of your server will not receive any mobile notifications.</strong>",
+      "fcm_enabled_label": "Enable Google FCM Push Notifications",
       "branding_title": "Server Branding",
       "server_name": "Server Name",
       "login_title": "Login Title",
@@ -1045,6 +1053,12 @@
       "joined_date": "Joined {{date}}",
       "channel_count_one": "{{count}} ch",
       "channel_count_other": "{{count}} ch",
+      "storage_public": "{{size}} in channels",
+      "storage_private": "{{size}} in DMs",
+      "storage_profile": "{{size}} in avatars",
+      "storage_tooltip": "Uploads still on the server: {{files}} files ({{breakdown}}). DM attachments are encrypted, so only their size is known.",
+      "storage_summary": "Uploads on disk: {{total}} across {{files}} files.",
+      "storage_summary_unattributed": "{{size}} of that predates per-member tracking and has no owner on record.",
       "already_in_all_channels": "{{name}} is already in all channels",
       "not_in_any_channels": "{{name}} isn't in any channels",
       "picker_add_title": "Add {{name}} to Channel",
@@ -1594,7 +1608,8 @@
       "filter_online": "Online",
       "filter_offline": "Offline",
       "filter_new": "New (7 days)",
-      "filter_banned": "Banned"
+      "filter_banned": "Banned",
+      "filter_storage": "Most storage used"
     },
     "role_management": {
       "title": "Role Management",

@@ -200,7 +200,7 @@ Or manually: `npm install && node server.js`
 | **E2E Encryption** | ECDH P-256 + AES-256-GCM encrypted DMs — private keys never leave the browser |
 | **Discord Import** | Import your entire Discord server history — channels, threads, forums, reactions, pins, avatars — directly from Haven's UI or via file upload |
 | **Game** | Shippy Container — Drew's shipment got hung up. Server-wide leaderboard. |
-| **Translations** | 7 languages out of the box (English, French, German, Spanish, Polish, Russian, Chinese). Community-contributed. |
+| **Translations** | 8 languages out of the box (English, French, German, Spanish, Polish, Russian, Chinese, Brazilian Portuguese). Community-contributed. |
 
 
 <img width="1917" height="911" alt="Screenshot 2026-02-16 013038" src="https://github.com/user-attachments/assets/79b62980-0822-4e9d-b346-c5a93de95862" />
@@ -221,6 +221,7 @@ Haven supports multiple languages. Users can switch languages from **Settings �
 | Polski | `pl` | 🟢 Human-translated |
 | Русский | `ru` | 🟢 Human-translated |
 | 中文 | `zh` | 🟡 AI-generated, needs review |
+| Português (Brasil) | `pt` | 🟢 Human-translated |
 
 ### ⚠️ Translation Quality
 
@@ -382,9 +383,10 @@ Haven creates a `.env` config file automatically on first launch — you don't n
 | `ADMIN_USERNAME` | `admin` | Register with this name to get admin powers |
 | `JWT_SECRET` | *(auto-generated)* | Security key — don't share or edit this |
 | `STEAM_API_KEY` | *(empty)* | Steam Web API Key for rich presence. Get yours at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) (any domain works). Once set, users can link their Steam account in **Settings → Connections** |
-| `SSL_CERT_PATH` | *(auto-detected)* | Path to SSL certificate |
+| `SSL_CERT_PATH` | *(auto-detected)* | Path to SSL certificate. With Let's Encrypt, point at `fullchain.pem` rather than `cert.pem`: `cert.pem` leaves out the intermediate certificate, which browsers quietly work around but curl and many other clients reject |
 | `SSL_KEY_PATH` | *(auto-detected)* | Path to SSL private key |
 | `HAVEN_DATA_DIR` | *(see above)* | Override the data directory location |
+| `HAVEN_ALLOW_PRIVATE_CALLBACKS` | `false` | Let bot callback URLs point at private addresses (`10.x`, `192.168.x`, `localhost`, `.local`). Off by default so a webhook can't be pointed at your internal network. Turn it on only if your bot really does run on the same LAN or in a sibling Docker container. Cloud metadata addresses (`169.254.x.x`) stay blocked regardless |
 | `PUBLIC_URL` | *(auto-detected)* | Your server's public address, including `https://`. Only needed if Haven can't work it out itself — see below |
 
 After editing `.env`, restart the server.

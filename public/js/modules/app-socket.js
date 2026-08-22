@@ -1836,6 +1836,27 @@ _setupSocketListeners() {
     }
   });
 
+  // ── Low disk warning (admins only, #5505) ────────
+  // The server only sends this to admins, and only when the state changes, so
+  // there is nothing to filter here beyond reflecting whatever it last said.
+  // Toast on the way in so it is noticed once; the banner is what persists.
+  this.socket.on('disk-status', (data) => {
+    const banner = document.getElementById('disk-low-banner');
+    if (!banner || !data) return;
+    if (!data.low) {
+      banner.style.display = 'none';
+      return;
+    }
+    const label = t('banners.disk_low');
+    const detail = data.freeMb === null
+      ? label
+      : t('banners.disk_low_detail', { free: data.freeMb, reserve: data.reserveMb });
+    banner.querySelector('.disk-low-text').textContent = label;
+    banner.title = detail;
+    banner.style.display = 'inline-flex';
+    this._showToast(detail, 'error');
+  });
+
   // ── Bot soundboard trigger ───────────────────────
   this.socket.on('play-sound', (data) => {
     if (data.channelCode === this.currentChannel && data.soundUrl) {

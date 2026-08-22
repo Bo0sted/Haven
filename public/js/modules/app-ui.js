@@ -4246,6 +4246,12 @@ _setupUI() {
       value: e.target.checked ? 'true' : 'false'
     });
   });
+  document.getElementById('invites-bypass-registration-token')?.addEventListener('change', (e) => {
+    this.socket.emit('update-server-setting', {
+      key: 'invites_bypass_registration_token',
+      value: e.target.checked ? 'true' : 'false'
+    });
+  });
   document.getElementById('generate-registration-token-btn')?.addEventListener('click', () => {
     this.socket.emit('generate-registration-token');
   });
@@ -4518,8 +4524,13 @@ _setupUI() {
     const picked = cbs.filter(cb => cb.checked).map(cb => parseInt(cb.dataset.cid)).filter(Number.isFinite);
     // All checked → [] = "grant all public" (future-proof as new channels appear).
     const channels = (total > 0 && picked.length === total) ? [] : picked;
-    const maxUses = parseInt(document.getElementById('invite-new-maxuses')?.value) || 0;
-    const expiresInHours = parseInt(document.getElementById('invite-new-expiry')?.value) || 0;
+
+    const maxUsesValue = document.getElementById('invite-new-maxuses')?.value;
+    const maxUses = maxUsesValue === '' ? 1 : parseInt(maxUsesValue);
+
+    const expiryValue = document.getElementById('invite-new-expiry')?.value;
+    const expiresInHours = expiryValue === '' ? 720 : parseInt(expiryValue);
+
     const slug = document.getElementById('invite-new-slug')?.value.trim() || '';
     const payload = { label, channels, maxUses, expiresInHours };
     if (slug) payload.code = slug;
@@ -4527,8 +4538,8 @@ _setupUI() {
     // Reset the form fields (channel checks reset on the next list render).
     const lblEl = document.getElementById('invite-new-label'); if (lblEl) lblEl.value = '';
     const slugEl = document.getElementById('invite-new-slug'); if (slugEl) slugEl.value = '';
-    const muEl = document.getElementById('invite-new-maxuses'); if (muEl) muEl.value = '0';
-    const expEl = document.getElementById('invite-new-expiry'); if (expEl) expEl.value = '0';
+    const muEl = document.getElementById('invite-new-maxuses'); if (muEl) muEl.value = '1';
+    const expEl = document.getElementById('invite-new-expiry'); if (expEl) expEl.value = '720';
   });
 
   // One delegated handler for all per-card actions (the list re-renders often).
@@ -6431,6 +6442,7 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
       const encrypted = await this.e2e.encryptBytes(arrayBuffer, partner.userId, partner.publicKeyJwk);
       const blob = new Blob([encrypted], { type: 'application/octet-stream' });
       const formData = new FormData();
+      formData.append('scope', 'dm');
       formData.append('file', blob, 'e2e-image.enc');
       const data = await this._uploadWithProgress('/api/upload-file', formData);
       const mime = file.type || 'image/png';
@@ -6455,12 +6467,15 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
   try {
     // SVG must use /api/upload-file (the raster-only /api/upload rejects it)
     let data;
+    const uploadScope = isDm ? 'dm' : 'channel';
     if (file.type === 'image/svg+xml') {
       const fd = new FormData();
+      fd.append('scope', uploadScope);
       fd.append('file', file);
       data = await this._uploadWithProgress('/api/upload-file', fd);
     } else {
       const formData = new FormData();
+      formData.append('scope', uploadScope);
       formData.append('image', file);
       data = await this._uploadWithProgress('/api/upload', formData);
     }

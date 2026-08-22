@@ -8,7 +8,8 @@ module.exports = function register(socket, ctx) {
     io, db, state, userHasPermission, getUserEffectiveLevel,
     getUserPermissions, getUserRoles, getUserHighestRole,
     emitOnlineUsers, broadcastChannelLists, generateChannelCode,
-    logAudit, fireWebhookEvent, onReferrerPolicyChange, automod, getIdleOnlineUsers
+    logAudit, fireWebhookEvent, onReferrerPolicyChange, automod, getIdleOnlineUsers,
+    getUploadUsage
   } = ctx;
   const { channelUsers } = state;
 
@@ -86,7 +87,7 @@ module.exports = function register(socket, ctx) {
       'role_icon_sidebar', 'role_icon_chat', 'role_icon_after_name',
       'auto_backup_enabled', 'auto_backup_interval_hours', 'auto_backup_retention', 'auto_backup_sections',
       'session_duration_days', 'max_message_chars',
-      'default_join_channels', 'registration_token_enabled', // (#5344, #5345), registration_token has its own generate/clear handlers
+      'default_join_channels', 'registration_token_enabled', 'invites_bypass_registration_token', // (#5344, #5345), registration_token has its own generate/clear handlers
       'admin_password_reset_enabled', // (#5300) admin password reset feature gate
       'guests_enabled', 'guest_channels', // (#5381) Join-as-Guest toggle + per-channel whitelist (CSV of channel ids)
       'stun_urls', 'turn_url', 'turn_username', 'turn_password', // (#5399) voice connectivity (STUN/TURN)
@@ -107,6 +108,7 @@ module.exports = function register(socket, ctx) {
       'automod_ban_ip', 'automod_log_channel',
       'voice_force_relay',
       'media_proxy_enabled', // (v3.43.0) server-side fetch + cache for remote images
+      'fcm_enabled', // admin gate for Google FCM mobile push; off = FCM sends skipped (web-push unaffected)
       'unicode_emoji_auto_update' // monthly refresh of the built-in emoji set from unicode.org, opt-in
     ];
     if (!allowedKeys.includes(key)) return;
@@ -119,6 +121,7 @@ module.exports = function register(socket, ctx) {
     ];
     if (automodBools.includes(key) && !['true', 'false'].includes(value)) return;
     if (key === 'media_proxy_enabled' && !['true', 'false'].includes(value)) return;
+    if (key === 'fcm_enabled' && !['true', 'false'].includes(value)) return;
     if (key === 'unicode_emoji_auto_update' && !['true', 'false'].includes(value)) return;
     if (key === 'automod_link_mode' && !['off', 'allowlist', 'blocklist'].includes(value)) return;
     if (key === 'automod_link_exempt_level') { const n = parseInt(value); if (isNaN(n) || n < 0 || n > 100) return; }
@@ -236,7 +239,7 @@ module.exports = function register(socket, ctx) {
       if (!validBuiltin.includes(value) && !/^file:[a-zA-Z0-9_\-. ]+\.theme\.css$/.test(value)) return;
     }
     if (key === 'default_locale') {
-      const validLocales = ['', 'en', 'fr', 'de', 'es', 'pl', 'ru', 'zh'];
+      const validLocales = ['', 'en', 'fr', 'de', 'es', 'pl', 'ru', 'zh', 'pt'];
       if (!validLocales.includes(value)) return;
     }
     if (key === 'published_themes') {
@@ -254,6 +257,9 @@ module.exports = function register(socket, ctx) {
       if (value && (value.length < 3 || value.length > 32 || !/^[a-zA-Z0-9_-]+$/.test(value))) return;
     }
     if (key === 'registration_token_enabled') {
+      if (!['true', 'false'].includes(value)) return;
+    }
+    if (key === 'invites_bypass_registration_token') {
       if (!['true', 'false'].includes(value)) return;
     }
     if (key === 'guests_enabled') {
@@ -348,6 +354,10 @@ module.exports = function register(socket, ctx) {
       for (const [code] of channelUsers) { emitOnlineUsers(code); }
     }
     if (key === 'referrer_policy') onReferrerPolicyChange(value);
+
+    // Keep the in-memory FCM toggle in sync so the message hot path never reads
+    // the database. isFcmEnabled() consults this on the next push. (FCM Privacy)
+    if (key === 'fcm_enabled') require('../fcm').setFcmAdminEnabled(value !== 'false');
 
     // Turning the feature on shouldn't make the admin wait until the next boot —
     // refresh right away. ensureEmojiData is a no-op when the on-disk copy is
@@ -1002,12 +1012,35 @@ module.exports = function register(socket, ctx) {
         });
       }
 
+      // Upload storage per member (#5521). Moderator-only: it is a moderation
+      // signal, not something every member needs to see about everyone else.
+      // The DM figure is a size, never a hint at what was sent: DM attachments
+      // are encrypted client-side and stay unreadable to the server.
+      let usage = null;
+      if (canMod) {
+        try { usage = getUploadUsage(); } catch (err) {
+          console.warn('get-all-members: upload usage unavailable:', err.message);
+        }
+      }
+      const storageFor = (userId) => {
+        if (!usage) return undefined;
+        const entry = usage.byUser.get(userId);
+        return {
+          total: entry ? entry.total : 0,
+          channel: entry ? entry.channel : 0,
+          dm: entry ? entry.dm : 0,
+          profile: entry ? entry.profile : 0,
+          files: entry ? entry.files : 0
+        };
+      };
+
       const members = users.map(u => ({
         id: u.id, username: u.username, displayName: u.displayName,
         isAdmin: !!u.is_admin, online: onlineIds.has(u.id),
         banned: bannedIds.has(u.id), roles: userRoles[u.id] || [],
         channels: channelCounts[u.id] || 0,
         channelList: canMod ? (userChannelMap[u.id] || []) : undefined,
+        storage: storageFor(u.id),
         avatar: u.avatar || null, avatarShape: u.avatar_shape || 'circle',
         status: u.status || 'online', statusText: u.status_text || '',
         createdAt: u.created_at
@@ -1016,6 +1049,14 @@ module.exports = function register(socket, ctx) {
       cb({
         members, total: members.length, channelOnly: !!channelOnly,
         allChannels: canMod ? allChannels : undefined,
+        // Files uploaded before this shipped have no owner on record, so they
+        // are reported as their own total instead of being blamed on anyone.
+        storageSummary: usage ? {
+          liveBytes: usage.liveBytes,
+          attributedBytes: usage.attributedBytes,
+          unattributedBytes: usage.unattributedBytes,
+          fileCount: usage.fileCount
+        } : undefined,
         callerPerms: {
           isAdmin, canMod,
           canPromote: isAdmin || userHasPermission(socket.user.id, 'promote_user'),

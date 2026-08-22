@@ -228,6 +228,24 @@ function initDatabase() {
       PRIMARY KEY (invite_code_id, user_id)
     );
 
+    -- Who uploaded which file, recorded at the upload endpoint. Message content
+    -- is the only other record of an attachment, and in a DM that content is E2E
+    -- ciphertext (the file bytes are encrypted client-side too), so scanning
+    -- messages would silently miss every private upload, which is exactly the
+    -- storage nobody could account for before. The upload endpoint is the one
+    -- place the server still knows both the uploader and the file. Sizes are
+    -- re-read from disk when the member list is built, so a file that has been
+    -- deleted or purged stops counting without a bookkeeping hook here.
+    CREATE TABLE IF NOT EXISTS upload_ownership (
+      rel_path TEXT PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      bytes INTEGER NOT NULL DEFAULT 0,
+      scope TEXT NOT NULL DEFAULT 'channel',   -- 'channel' | 'dm' | 'profile'
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_upload_ownership_user
+      ON upload_ownership(user_id);
+
     CREATE INDEX IF NOT EXISTS idx_messages_channel
       ON messages(channel_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_channel_code
@@ -406,6 +424,7 @@ function initDatabase() {
   insertSetting.run('server_code', '');                // server-wide invite code (joins all channels)
   insertSetting.run('default_join_channels', '');       // (#5345) JSON array of channel IDs that server-code/vanity-code joiners get added to (empty = all public)
   insertSetting.run('registration_token_enabled', 'false'); // (#5344) require a token on the registration form
+  insertSetting.run('invites_bypass_registration_token', 'false'); // Allow invite links to bypass token on the registration form
   insertSetting.run('registration_token', '');          // (#5344) the token value (admin-generated, rerollable)
   insertSetting.run('registration_captcha_enabled', 'false'); // opt-in Cloudflare Turnstile CAPTCHA on registration
   insertSetting.run('turnstile_site_key', '');          // Turnstile public site key (safe to expose to the page)
@@ -470,6 +489,12 @@ function initDatabase() {
   // default: it costs bandwidth but nothing breaks without it, and leaving it
   // off means every embedded image leaks the viewer's IP to whoever posted it.
   insertSetting.run('media_proxy_enabled', 'true');
+
+  // Google FCM mobile push. On by default so existing Android users keep getting
+  // notifications on upgrade; admins who prefer a Google-free path (UnifiedPush /
+  // ntfy) can turn it off under Settings → Security → FCM Privacy. Off skips FCM
+  // sends only, so web-push to browsers is unaffected.
+  insertSetting.run('fcm_enabled', 'true');
 
   // Unique server fingerprint — used by the multi-server sidebar to detect "self"
   const crypto = require('crypto');

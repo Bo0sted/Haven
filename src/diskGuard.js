@@ -101,4 +101,25 @@ function guardUploads() {
   };
 }
 
-module.exports = { freeBytes, hasHeadroom, guardUploads, RESERVE_BYTES, RESERVE_MB };
+/**
+ * Current headroom state, for surfacing to admins in the app (#5505).
+ *
+ * The console warning above only helps someone already watching the logs, and
+ * the 507 only reaches whoever happens to try an upload. An admin who is not
+ * doing either has no way to find out the server is wedging until people start
+ * complaining, so the same state is published over the socket as well.
+ *
+ * `low` uses the same margin as the upload guard, so the banner appears at the
+ * moment uploads actually start being refused rather than at some other number.
+ */
+function diskStatus() {
+  const free = freeBytes();
+  if (free === null) return { low: false, freeMb: null, reserveMb: RESERVE_MB };
+  return {
+    low: !hasHeadroom(_maxUploadBytes()),
+    freeMb: Math.round(free / 1024 / 1024),
+    reserveMb: RESERVE_MB
+  };
+}
+
+module.exports = { freeBytes, hasHeadroom, guardUploads, diskStatus, RESERVE_BYTES, RESERVE_MB };

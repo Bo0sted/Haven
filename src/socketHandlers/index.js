@@ -15,6 +15,12 @@ const { socketClientIp } = require('../clientIp');
 const automod = require('../automod');
 const { resolveSpotifyToYouTube, searchYouTube, fetchYouTubePlaylist, extractYouTubeVideoId, resolveMusicMetadata } = require('./musicResolver');
 const createPermissions = require('./permissions');
+const { diskStatus } = require('../diskGuard');
+const {
+  UnsafeCallbackError,
+  postWebhookCallback,
+  validateCallbackUrl
+} = require('../webhookCallback');
 
 const { createActivity } = require('../activity');
 
@@ -35,6 +41,11 @@ const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
 function setupSocketHandlers(io, db, opts = {}) {
   const invalidateIpBanCache = (typeof opts.invalidateIpBanCache === 'function') ? opts.invalidateIpBanCache : () => {};
   const onReferrerPolicyChange = (typeof opts.onReferrerPolicyChange === 'function') ? opts.onReferrerPolicyChange : () => {};
+  // Per-member upload totals, computed by the HTTP layer that owns the
+  // uploads directory. Returns empty usage when the host did not supply it.
+  const getUploadUsage = (typeof opts.getUploadUsage === 'function')
+    ? opts.getUploadUsage
+    : () => ({ byUser: new Map(), liveBytes: 0, attributedBytes: 0, unattributedBytes: 0, fileCount: 0 });
 
   // ── Client IP + ban matching (v3.42.0) ───────────────────
   // Both delegate to the same helpers the HTTP layer uses so the two gates
@@ -565,6 +576,21 @@ function setupSocketHandlers(io, db, opts = {}) {
     return channels;
   }
 
+  // ── Channel member list (@mention autocomplete source) ──
+  // A ban leaves channel_members alone on purpose, so an unban puts the person
+  // back in exactly the channels they were in. That meant banned accounts kept
+  // appearing in @mention autocomplete, so filter them here (the one place
+  // this list is built) rather than in each caller.
+  function getMentionableChannelMembers(channelId) {
+    return db.prepare(`
+      SELECT u.id, COALESCE(u.display_name, u.username) as username, u.username as loginName FROM users u
+      JOIN channel_members cm ON u.id = cm.user_id
+      LEFT JOIN bans b ON b.user_id = u.id
+      WHERE cm.channel_id = ? AND b.user_id IS NULL
+      ORDER BY COALESCE(u.display_name, u.username)
+    `).all(channelId);
+  }
+
   // ── broadcastChannelLists (debounced, shared timer) ─────
   let _broadcastPending = null;
   function broadcastChannelLists() {
@@ -986,6 +1012,9 @@ function setupSocketHandlers(io, db, opts = {}) {
         });
       }
 
+      // isFcmEnabled() also reflects the admin's FCM Privacy toggle, kept in
+      // memory and synced on change, so no per-message DB read. Web-push above
+      // is unaffected either way.
       if (isFcmEnabled()) {
         const inactiveMembers = db.prepare(`
           SELECT DISTINCT cm.user_id FROM channel_members cm
@@ -1018,18 +1047,22 @@ function setupSocketHandlers(io, db, opts = {}) {
   }
 
   // ── Webhook callback helper ─────────────────────────────
-  // SSRF guard: reject private/internal IPs in callback URLs
+  // SSRF guard: reject private/internal IPs in callback URLs.
+  //
+  // Self-hosters whose bot runs on the same LAN or in a sibling Docker
+  // container have a legitimate reason to point a callback at a private
+  // address (#5518), so HAVEN_ALLOW_PRIVATE_CALLBACKS=true lifts the private
+  // range checks. It is an env var rather than an admin toggle on purpose:
+  // setting a callback URL only needs the manage_webhooks permission, so a
+  // toggle in the UI could be flipped by the very account the guard exists to
+  // contain. Changing an env var needs access to the host itself.
+  const ALLOW_PRIVATE_CALLBACKS = process.env.HAVEN_ALLOW_PRIVATE_CALLBACKS === 'true';
+  if (ALLOW_PRIVATE_CALLBACKS) {
+    console.warn('⚠️  HAVEN_ALLOW_PRIVATE_CALLBACKS=true: bot callback URLs may point at private or local addresses.');
+  }
+
   function isSafeCallbackUrl(urlString) {
-    try {
-      const u = new URL(urlString);
-      const h = u.hostname.toLowerCase();
-      if (['localhost','127.0.0.1','[::1]','0.0.0.0','::'].includes(h)) return false;
-      if (h.startsWith('10.') || h.startsWith('192.168.')) return false;
-      if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
-      if (h === '169.254.169.254') return false;
-      if (h.endsWith('.local') || h.endsWith('.internal')) return false;
-      return /^https?:$/i.test(u.protocol);
-    } catch { return false; }
+    return validateCallbackUrl(urlString, ALLOW_PRIVATE_CALLBACKS);
   }
 
   // ── Webhook event delivery (3.13.0 expansion) ───────────
@@ -1062,9 +1095,9 @@ function setupSocketHandlers(io, db, opts = {}) {
   // network error. 4xx responses are NOT retried (treated as bot rejection).
   async function _deliverWebhook(bot, payload, headers, attempt = 0) {
     try {
-      const resp = await fetch(bot.callback_url, {
-        method: 'POST', headers, body: payload,
-        signal: AbortSignal.timeout(10000)
+      const resp = await postWebhookCallback(bot.callback_url, payload, headers, {
+        allowPrivateCallbacks: ALLOW_PRIVATE_CALLBACKS,
+        timeoutMs: 10000
       });
       if (resp.ok) {
         _recordWebhookDelivery(bot.id, resp.status, null);
@@ -1077,6 +1110,11 @@ function setupSocketHandlers(io, db, opts = {}) {
       _recordWebhookDelivery(bot.id, resp.status, `HTTP ${resp.status}`);
     } catch (err) {
       const msg = (err && err.message) || String(err);
+      if (err instanceof UnsafeCallbackError || err?.code === 'ERR_UNSAFE_CALLBACK_URL') {
+        _recordWebhookDelivery(bot.id, 0, msg.slice(0, 200));
+        console.warn(`Webhook callback blocked for bot ${bot.id}: ${msg}`);
+        return;
+      }
       if (attempt < 1) {
         setTimeout(() => _deliverWebhook(bot, payload, headers, attempt + 1).catch(() => {}), 5000);
         return;
@@ -1482,6 +1520,20 @@ function setupSocketHandlers(io, db, opts = {}) {
     }
   }, 5 * 60 * 1000);
 
+  // (#5505) Watch the disk headroom and tell admins when it changes. Only the
+  // transitions are broadcast, so a server sitting healthy sends nothing and a
+  // server sitting full does not repeat itself every minute. statfs is cached
+  // inside the guard, so this costs a syscall a minute at worst.
+  let _diskWasLow = false;
+  setInterval(() => {
+    try {
+      const status = diskStatus();
+      if (status.low === _diskWasLow) return;
+      _diskWasLow = status.low;
+      io.to('admins').emit('disk-status', status);
+    } catch { /* never let a health check take the server down */ }
+  }, 60 * 1000);
+
   // ══════════════════════════════════════════════════════════
   // CONNECTION HANDLER
   // ══════════════════════════════════════════════════════════
@@ -1496,6 +1548,15 @@ function setupSocketHandlers(io, db, opts = {}) {
     console.log(`✅ ${socket.user.username} connected`);
     socket.currentChannel = null;
     socket.hasFocus = true;
+
+    // (#5505) Admins get their own room so server-health warnings can reach
+    // them without walking every socket. An admin joining mid-problem is told
+    // straight away rather than waiting for the next poll.
+    if (socket.user.isAdmin) {
+      socket.join('admins');
+      const status = diskStatus();
+      if (status.low) socket.emit('disk-status', status);
+    }
 
     // Start the presence clock the moment a user goes from offline to online.
     // A second tab/device keeps the original onlineSince so "continuously
@@ -1826,9 +1887,9 @@ function setupSocketHandlers(io, db, opts = {}) {
           if (botCmd.callback_secret) {
             headers['X-Haven-Signature'] = require('crypto').createHmac('sha256', botCmd.callback_secret).update(payload).digest('hex');
           }
-          fetch(botCmd.callback_url, {
-            method: 'POST', headers, body: payload,
-            signal: AbortSignal.timeout(10000)
+          postWebhookCallback(botCmd.callback_url, payload, headers, {
+            allowPrivateCallbacks: ALLOW_PRIVATE_CALLBACKS,
+            timeoutMs: 10000
           }).catch(err => {
             console.error(`Bot command callback failed for /${cmd} → ${botCmd.callback_url}: ${err.message}`);
           });
@@ -1877,6 +1938,10 @@ function setupSocketHandlers(io, db, opts = {}) {
       // Idle-online oversight (flag accounts sitting connected + green + silent)
       getIdleOnlineUsers,
       onReferrerPolicyChange,
+      // Per-member upload storage totals (#5521)
+      getUploadUsage,
+      // Ban-filtered channel roster used by @mention autocomplete
+      getMentionableChannelMembers,
       // IP-ban cache invalidator (server.js HTTP-side cache)
       invalidateIpBanCache,
       // Constants
