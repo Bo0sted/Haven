@@ -901,6 +901,10 @@
       "referrer_policy_opt_same": "<strong>Same-Origin (padrão):</strong> dentro deste servidor, compartilha o endereço completo; com outros sites, não compartilha nada.",
       "referrer_policy_opt_none": "<strong>No-Referrer:</strong> não compartilha nada em lugar algum, nem mesmo dentro deste servidor.",
       "referrer_policy_note": "Same-Origin e No-Referrer não enviam nada a outros sites; qualquer uma corrige incorporações cujo CDN rejeita um referenciador de outra origem, como vídeos do Twitter/X. Se uma imagem ou incorporação deixar de carregar depois dessa alteração, o host exige um referenciador: mude para Strict-Origin-When-Cross-Origin para restaurar o comportamento anterior à versão 3.41.0.",
+      "fcm_privacy_group": "Privacidade do FCM",
+      "fcm_desc": "O FCM (Firebase Cloud Messaging) é o sistema do Google para entregar notificações push a celulares Android. É ele que acorda o seu celular quando você recebe uma mensagem nova com o Haven fechado. Isso significa que todas as notificações (incluindo o seu nome de usuário no Haven, o nome do canal e o conteúdo da mensagem) enviadas ao seu celular Android precisam passar pelos servidores do Google para chegar até você.<br><br>Para a maioria das pessoas isso não é problema, mas algumas preferem tirar o Google completamente da jogada. O <a href=\"https://unifiedpush.org\" target=\"_blank\" rel=\"noopener\">UnifiedPush</a> é um padrão descentralizado de notificações compatível com vários aplicativos, e se você tiver um aplicativo compatível com UnifiedPush instalado no celular, o Haven Mobile vai priorizá-lo em vez do FCM.",
+      "fcm_note": "<strong>Aviso de ação perigosa: antes de desativar isto, verifique se todos os membros do seu servidor Haven, incluindo você, têm um aplicativo compatível com UnifiedPush instalado no celular. Caso contrário, alguns membros do seu servidor não vão receber nenhuma notificação no celular.</strong>",
+      "fcm_enabled_label": "Ativar notificações push do Google FCM",
       "branding_title": "Identidade visual do servidor",
       "server_name": "Nome do servidor",
       "login_title": "Título do login",
@@ -1038,6 +1042,12 @@
       "joined_date": "Entrou em {{date}}",
       "channel_count_one": "{{count}} canal",
       "channel_count_other": "{{count}} canais",
+      "storage_public": "{{size}} em canais",
+      "storage_private": "{{size}} em DMs",
+      "storage_profile": "{{size}} em avatares",
+      "storage_tooltip": "Uploads ainda no servidor: {{files}} arquivos ({{breakdown}}). Os anexos de DM são criptografados, então só o tamanho deles é conhecido.",
+      "storage_summary": "Uploads no disco: {{total}} em {{files}} arquivos.",
+      "storage_summary_unattributed": "{{size}} disso é anterior ao controle por membro e não tem dono registrado.",
       "already_in_all_channels": "{{name}} já está em todos os canais",
       "not_in_any_channels": "{{name}} não está em nenhum canal",
       "picker_add_title": "Adicionar {{name}} ao canal",
@@ -1587,7 +1597,8 @@
       "filter_online": "Online",
       "filter_offline": "Offline",
       "filter_new": "Novos (7 dias)",
-      "filter_banned": "Banidos"
+      "filter_banned": "Banidos",
+      "filter_storage": "Mais armazenamento usado"
     },
     "role_management": {
       "title": "Gerenciamento de cargos",
