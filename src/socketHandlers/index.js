@@ -15,6 +15,7 @@ const { socketClientIp } = require('../clientIp');
 const automod = require('../automod');
 const { resolveSpotifyToYouTube, searchYouTube, fetchYouTubePlaylist, extractYouTubeVideoId, resolveMusicMetadata } = require('./musicResolver');
 const createPermissions = require('./permissions');
+const { diskStatus } = require('../diskGuard');
 const {
   UnsafeCallbackError,
   postWebhookCallback,
@@ -1519,6 +1520,20 @@ function setupSocketHandlers(io, db, opts = {}) {
     }
   }, 5 * 60 * 1000);
 
+  // (#5505) Watch the disk headroom and tell admins when it changes. Only the
+  // transitions are broadcast, so a server sitting healthy sends nothing and a
+  // server sitting full does not repeat itself every minute. statfs is cached
+  // inside the guard, so this costs a syscall a minute at worst.
+  let _diskWasLow = false;
+  setInterval(() => {
+    try {
+      const status = diskStatus();
+      if (status.low === _diskWasLow) return;
+      _diskWasLow = status.low;
+      io.to('admins').emit('disk-status', status);
+    } catch { /* never let a health check take the server down */ }
+  }, 60 * 1000);
+
   // ══════════════════════════════════════════════════════════
   // CONNECTION HANDLER
   // ══════════════════════════════════════════════════════════
@@ -1533,6 +1548,15 @@ function setupSocketHandlers(io, db, opts = {}) {
     console.log(`✅ ${socket.user.username} connected`);
     socket.currentChannel = null;
     socket.hasFocus = true;
+
+    // (#5505) Admins get their own room so server-health warnings can reach
+    // them without walking every socket. An admin joining mid-problem is told
+    // straight away rather than waiting for the next poll.
+    if (socket.user.isAdmin) {
+      socket.join('admins');
+      const status = diskStatus();
+      if (status.low) socket.emit('disk-status', status);
+    }
 
     // Start the presence clock the moment a user goes from offline to online.
     // A second tab/device keeps the original onlineSince so "continuously

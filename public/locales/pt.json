@@ -232,6 +232,10 @@
     "burn_disarmed": "Autodestruição desativada",
     "channel_hidden": "Canal \"{{name}}\" oculto"
   },
+  "banners": {
+    "disk_low": "Disco do servidor quase cheio",
+    "disk_low_detail": "Restam apenas {{free}} MB no volume de dados, abaixo da reserva de {{reserve}} MB. Os uploads estão pausados para que o banco de dados ainda possa ser gravado. Libere espaço para retomá-los."
+  },
   "messages": {
     "burn_reveal": "Toque para visualizar",
     "burn_done": "Mensagem destruída"

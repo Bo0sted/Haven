@@ -232,6 +232,10 @@
     "burn_disarmed": "Burn-after-read disabled",
     "channel_hidden": "Channel \"{{name}}\" hidden"
   },
+  "banners": {
+    "disk_low": "Server disk almost full",
+    "disk_low_detail": "Only {{free}} MB free on the data volume, under the {{reserve}} MB reserve. Uploads are paused so the database can still be written to. Free some space to start them again."
+  },
   "messages": {
     "burn_reveal": "Tap to view",
     "burn_done": "Message burned"

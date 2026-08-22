@@ -4001,6 +4001,32 @@ html.rgb-cycling *::after {
   box-shadow: 0 2px 12px rgba(var(--accent-rgb, 88, 101, 242), 0.4);
   color: #fff;
 }
+/* Low disk warning, admins only (#5505). Amber rather than red: uploads are
+   refused but the server is still working, so this is a "go clear some space"
+   nudge and not an outage. */
+.disk-low-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  background: linear-gradient(135deg, #b45309, #d97706);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 1.25rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: help;
+  animation: updateFadeIn 0.4s ease;
+}
+.disk-low-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: #fff;
+  border-radius: 50%;
+  animation: updatePulse 1.5s ease-in-out infinite;
+}
+
 .update-pulse {
   width: 0.5rem;
   height: 0.5rem;
@@ -11590,6 +11616,8 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
   /* Update banner — compact on phone */
   .update-banner { padding: 0.1875rem 0.5rem; font-size: 0.6875rem; }
+  .disk-low-banner { padding: 0.1875rem 0.5rem; font-size: 0.6875rem; }
+  .disk-low-dot { width: 0.375rem; height: 0.375rem; }
   .update-pulse { width: 0.375rem; height: 0.375rem; }
 
   /* Desktop app banner — hide on mobile (they have Haven-Android) */

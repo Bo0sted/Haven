@@ -316,6 +316,11 @@
             <span class="update-pulse"></span>
             <span class="update-text">Update Available</span>
           </a>
+          <!-- Low disk warning (admins only, #5505) -->
+          <span id="disk-low-banner" class="disk-low-banner" style="display:none" role="status">
+            <span class="disk-low-dot"></span>
+            <span class="disk-low-text" data-i18n="banners.disk_low">Server disk almost full</span>
+          </span>
           <!-- Desktop app banner -->
           <!-- The dismiss button is a SIBLING of the link, not inside it. A
                <button> nested in an <a> is invalid HTML: the parser hoists it
