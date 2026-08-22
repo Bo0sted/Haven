@@ -1041,17 +1041,35 @@ function setupSocketHandlers(io, db, opts = {}) {
   }
 
   // ── Webhook callback helper ─────────────────────────────
-  // SSRF guard: reject private/internal IPs in callback URLs
+  // SSRF guard: reject private/internal IPs in callback URLs.
+  //
+  // Self-hosters whose bot runs on the same LAN or in a sibling Docker
+  // container have a legitimate reason to point a callback at a private
+  // address (#5518), so HAVEN_ALLOW_PRIVATE_CALLBACKS=true lifts the private
+  // range checks. It is an env var rather than an admin toggle on purpose:
+  // setting a callback URL only needs the manage_webhooks permission, so a
+  // toggle in the UI could be flipped by the very account the guard exists to
+  // contain. Changing an env var needs access to the host itself.
+  const ALLOW_PRIVATE_CALLBACKS = process.env.HAVEN_ALLOW_PRIVATE_CALLBACKS === 'true';
+  if (ALLOW_PRIVATE_CALLBACKS) {
+    console.warn('⚠️  HAVEN_ALLOW_PRIVATE_CALLBACKS=true: bot callback URLs may point at private or local addresses.');
+  }
+
   function isSafeCallbackUrl(urlString) {
     try {
       const u = new URL(urlString);
       const h = u.hostname.toLowerCase();
+      if (!/^https?:$/i.test(u.protocol)) return false;
+      // 169.254.0.0/16 stays blocked even when private callbacks are allowed.
+      // That is where cloud instance metadata (and its credentials) lives, and
+      // nothing anyone would actually run a bot on listens there.
+      if (/^169\.254\./.test(h)) return false;
+      if (ALLOW_PRIVATE_CALLBACKS) return true;
       if (['localhost','127.0.0.1','[::1]','0.0.0.0','::'].includes(h)) return false;
       if (h.startsWith('10.') || h.startsWith('192.168.')) return false;
       if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
-      if (h === '169.254.169.254') return false;
       if (h.endsWith('.local') || h.endsWith('.internal')) return false;
-      return /^https?:$/i.test(u.protocol);
+      return true;
     } catch { return false; }
   }
 

@@ -386,6 +386,7 @@ Haven creates a `.env` config file automatically on first launch — you don't n
 | `SSL_CERT_PATH` | *(auto-detected)* | Path to SSL certificate. With Let's Encrypt, point at `fullchain.pem` rather than `cert.pem`: `cert.pem` leaves out the intermediate certificate, which browsers quietly work around but curl and many other clients reject |
 | `SSL_KEY_PATH` | *(auto-detected)* | Path to SSL private key |
 | `HAVEN_DATA_DIR` | *(see above)* | Override the data directory location |
+| `HAVEN_ALLOW_PRIVATE_CALLBACKS` | `false` | Let bot callback URLs point at private addresses (`10.x`, `192.168.x`, `localhost`, `.local`). Off by default so a webhook can't be pointed at your internal network. Turn it on only if your bot really does run on the same LAN or in a sibling Docker container. Cloud metadata addresses (`169.254.x.x`) stay blocked regardless |
 | `PUBLIC_URL` | *(auto-detected)* | Your server's public address, including `https://`. Only needed if Haven can't work it out itself — see below |
 
 After editing `.env`, restart the server.
