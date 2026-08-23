@@ -3452,6 +3452,9 @@ app.post('/api/webhooks/:token', webhookLimiter, express.json({ limit: '64kb' })
 // Strict on purpose: this is an unauthenticated-by-header endpoint reachable by
 // a user-generated token, and the cover bytes are served back to other users.
 const navidromeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: 'Rate limit exceeded' } });
+// The cover route is viewer-facing (every open profile card fetches it), so it
+// gets a looser cap than the single-poster webhook while still bounding abuse.
+const navidromeCoverLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: { error: 'Rate limit exceeded' } });
 const navidromeUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 512 * 1024, files: 1, fields: 8, fieldSize: 4096 },
@@ -3527,7 +3530,7 @@ app.post('/api/webhooks/navidrome/:token', navidromeLimiter, (req, res) => {
 
 // Serves a user's current Navidrome cover from memory. The opaque version must
 // match, so the URL only works for someone who received the current presence.
-app.get('/api/activity/navidrome-cover/:userId', (req, res) => {
+app.get('/api/activity/navidrome-cover/:userId', navidromeCoverLimiter, (req, res) => {
   const engine = activityRef.engine;
   const userId = parseInt(req.params.userId, 10);
   const cover = engine && !isNaN(userId) ? engine.getNavidromeCover(userId) : null;
