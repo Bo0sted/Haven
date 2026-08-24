@@ -134,6 +134,11 @@ _setupSocketListeners() {
       clearTimeout(this._voiceDisconnectTimer);
       this._voiceDisconnectTimer = null;
     }
+    // A reconnect usually means the machine slept or the network dropped, which
+    // is the most likely moment for the media token to have expired underneath
+    // us. Cheap to redo and it keeps remote images from silently breaking.
+    this._refreshMediaToken?.();
+
     // Re-join channel after reconnect (server lost our room membership)
     this.socket.emit('visibility-change', { visible: !document.hidden });
     this.socket.emit('get-channels');
