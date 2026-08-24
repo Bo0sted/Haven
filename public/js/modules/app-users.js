@@ -5,8 +5,21 @@ export default {
 _renderOnlineUsers(users) {
   this._lastOnlineUsers = users;
   const el = document.getElementById('online-users');
+  const searchWrap = document.getElementById('user-search-wrap');
+  if (searchWrap) searchWrap.style.display = users.length ? '' : 'none';
   if (users.length === 0) {
     el.innerHTML = `<p class="muted-text">${t('users.no_one_here')}</p>`;
+    return;
+  }
+
+  // Member search. Filtering here rather than hiding rows in the DOM keeps the
+  // group counts honest, so "Online 3" means three matches and not three people
+  // of whom you can see one. The roster re-renders on every presence change, so
+  // the term lives on the instance to survive that.
+  const term = (this._userFilter || '').trim().toLowerCase();
+  if (term) users = users.filter(u => (u.username || '').toLowerCase().includes(term));
+  if (users.length === 0) {
+    el.innerHTML = `<p class="muted-text">${t('users.no_search_matches')}</p>`;
     return;
   }
 
@@ -22,11 +35,22 @@ _renderOnlineUsers(users) {
     }
   });
 
-  // Sort: online first, then alphabetical
+  // Sort: online first, then by role level, then alphabetically inside each
+  // level. Straight alphabetical buried whoever is actually in charge somewhere
+  // in the middle of the list, which is the opposite of what you want when you
+  // are looking for someone who can help. (#5470 follow-up, asked by @birdcrazy)
+  //
+  // The level already accounts for the channel you are in: the server sends the
+  // highest role that applies here, merging server-wide and channel-scoped ones.
+  // A user whose role badge is hidden reports no role and sorts as level 0, so
+  // hiding the admin badge does not out them by position either.
+  const levelOf = (u) => (u.role && Number.isFinite(u.role.level)) ? u.role.level : 0;
   const sorted = [...users].sort((a, b) => {
     const aOn = a.online !== false;
     const bOn = b.online !== false;
     if (aOn !== bOn) return aOn ? -1 : 1;
+    const lv = levelOf(b) - levelOf(a);
+    if (lv !== 0) return lv;
     return a.username.toLowerCase().localeCompare(b.username.toLowerCase());
   });
 

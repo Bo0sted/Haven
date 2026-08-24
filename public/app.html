@@ -590,6 +590,12 @@
         <div class="right-sidebar-users" id="right-sidebar-users">
           <div class="panel">
             <h5 class="panel-title"><span class="title-emoji">👥 </span><span data-i18n="right_sidebar.online_title">Online</span></h5>
+            <div class="user-search-wrap" id="user-search-wrap" style="display:none">
+              <input type="search" id="user-search" class="user-search-input" autocomplete="off" spellcheck="false"
+                     data-i18n-placeholder="right_sidebar.search_members" placeholder="Search members...">
+              <button type="button" class="user-search-clear" id="user-search-clear" style="display:none"
+                      data-i18n-title="right_sidebar.search_clear" title="Clear">&times;</button>
+            </div>
             <div id="online-users" class="user-list">
               <p class="muted-text" data-i18n="right_sidebar.select_channel">Select a channel</p>
             </div>

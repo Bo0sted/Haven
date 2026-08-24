@@ -570,7 +570,9 @@
     "close_panel": "Close panel",
     "no_one_in_voice": "No one in voice",
     "online_title": "Online",
-    "select_channel": "Select a channel"
+    "select_channel": "Select a channel",
+    "search_members": "Search members...",
+    "search_clear": "Clear"
   },
   "users": {
     "no_one_here": "No one here",
@@ -634,7 +636,8 @@
       "voice_kick_title": "Remove from voice channel",
       "mute_hint": "Mute = you can't hear them",
       "deafen_hint": "Deafen = they can't hear you"
-    }
+    },
+    "no_search_matches": "No members match that"
   },
   "context": {
     "view_profile": "View Profile",

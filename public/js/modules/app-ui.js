@@ -4605,6 +4605,32 @@ _setupUI() {
 
   // Invite Links popout — open/close. Refresh the list and create-form channels
   // on open so the modal always reflects current state.
+  // Member search in the right sidebar. Re-rendering the roster from the last
+  // payload rather than asking the server keeps typing instant and costs the
+  // server nothing.
+  const userSearch = document.getElementById('user-search');
+  const userSearchClear = document.getElementById('user-search-clear');
+  const applyUserFilter = (value) => {
+    this._userFilter = value;
+    if (userSearchClear) userSearchClear.style.display = value ? '' : 'none';
+    if (this._lastOnlineUsers) this._renderOnlineUsers(this._lastOnlineUsers);
+  };
+  userSearch?.addEventListener('input', (e) => applyUserFilter(e.target.value));
+  userSearch?.addEventListener('keydown', (e) => {
+    // Escape clears rather than just blurring, which is what the key does in
+    // every other search box in the app.
+    if (e.key === 'Escape' && userSearch.value) {
+      e.stopPropagation();
+      userSearch.value = '';
+      applyUserFilter('');
+    }
+  });
+  userSearchClear?.addEventListener('click', () => {
+    if (userSearch) userSearch.value = '';
+    applyUserFilter('');
+    userSearch?.focus();
+  });
+
   document.getElementById('open-invite-links-btn')?.addEventListener('click', () => {
     this._openInviteLinksModal();
   });

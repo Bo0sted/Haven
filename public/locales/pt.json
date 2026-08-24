@@ -570,7 +570,9 @@
     "close_panel": "Fechar painel",
     "no_one_in_voice": "Ninguém na chamada de voz",
     "online_title": "Online",
-    "select_channel": "Selecione um canal"
+    "select_channel": "Selecione um canal",
+    "search_members": "Buscar membros...",
+    "search_clear": "Limpar"
   },
   "users": {
     "no_one_here": "Ninguém aqui",
@@ -634,7 +636,8 @@
       "voice_kick_title": "Remover do canal de voz",
       "mute_hint": "Silenciar = você não ouve a pessoa",
       "deafen_hint": "Ensurdecer = ela não ouve você"
-    }
+    },
+    "no_search_matches": "Nenhum membro corresponde a isso"
   },
   "context": {
     "view_profile": "Ver perfil",

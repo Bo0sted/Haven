@@ -4004,6 +4004,46 @@ html.rgb-cycling *::after {
 /* Low disk warning, admins only (#5505). Amber rather than red: uploads are
    refused but the server is still working, so this is a "go clear some space"
    nudge and not an outage. */
+/* Member search in the right sidebar. Sits above the roster and filters it as
+   you type; the clear button only appears once there is something to clear. */
+.user-search-wrap {
+  position: relative;
+  padding: 0 0.5rem 0.5rem;
+}
+.user-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.375rem 1.75rem 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-tertiary, var(--bg-secondary));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+}
+.user-search-input:focus {
+  border-color: var(--accent);
+}
+.user-search-input::placeholder { color: var(--text-muted); }
+/* The native search clear button is inconsistent across browsers, so it is
+   hidden and replaced with one that matches the theme. */
+.user-search-input::-webkit-search-cancel-button { display: none; }
+.user-search-clear {
+  position: absolute;
+  right: 0.875rem;
+  top: 50%;
+  transform: translateY(-60%);
+  padding: 0 0.25rem;
+  line-height: 1;
+  font-size: 1rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.user-search-clear:hover { color: var(--text-primary); }
+
 .disk-low-banner {
   display: inline-flex;
   align-items: center;
