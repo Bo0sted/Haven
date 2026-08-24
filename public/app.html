@@ -1176,6 +1176,7 @@
 
           <div class="settings-nav-group-label">Account &amp; Security</div>
           <div class="settings-nav-item" data-target="section-password">🔒 <span data-i18n="settings.nav.password">Password</span></div>
+          <div class="settings-nav-item" data-target="section-sessions">💻 <span data-i18n="settings.nav.sessions">Sessions</span></div>
           <div class="settings-nav-item" data-target="section-2fa">🔐 <span data-i18n="settings.nav.two_factor">Two-Factor</span></div>
           <div class="settings-nav-item" data-target="section-recovery">🔑 <span data-i18n="settings.nav.recovery">Recovery</span></div>
           <div class="settings-nav-item" data-target="section-delete-account">⚠️ <span data-i18n="settings.nav.account">Account</span></div>
@@ -1680,6 +1681,15 @@
           <button class="btn-sm btn-full" id="change-password-btn" data-i18n="settings.password_section.change_btn">Change Password</button>
           <small class="settings-hint" id="password-status"></small>
         </div>
+      </div>
+
+      <!-- Active Sessions Section -->
+      <div class="settings-section" id="section-sessions">
+        <h5 class="settings-section-title">💻 <span data-i18n="settings.sessions_section.title">Active Sessions</span></h5>
+        <small class="settings-hint" data-i18n="settings.sessions_section.hint">Devices with Haven open right now. A device that is signed in but closed will not be listed, so sign out everywhere if you think someone else has your account.</small>
+        <div id="sessions-list" class="sessions-list"></div>
+        <button class="btn-sm btn-full btn-danger" id="revoke-sessions-btn" data-i18n="settings.sessions_section.revoke_btn">Sign out all other devices</button>
+        <small class="settings-hint" id="sessions-status"></small>
       </div>
 
       <!-- Two-Factor Authentication Section -->

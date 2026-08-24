@@ -600,6 +600,16 @@ _setupSocketListeners() {
       localStorage.removeItem('haven_token');
       localStorage.removeItem('haven_user');
       window.location.href = '/';
+    } else if (data && data.reason === 'sessions_revoked') {
+      // We are the session that asked for this, so we already hold the fresh
+      // token and stay put. Every other device gets sent back to the login page.
+      if (this._justRevokedSessions) {
+        this._justRevokedSessions = false;
+        return;
+      }
+      localStorage.removeItem('haven_token');
+      localStorage.removeItem('haven_user');
+      window.location.href = '/';
     } else if (data && data.reason === 'totp_enabled') {
       // If WE just enabled TOTP, skip the kick — we already have the fresh token
       if (this._justEnabledTotp) {
@@ -610,6 +620,10 @@ _setupSocketListeners() {
       localStorage.removeItem('haven_user');
       window.location.href = '/';
     }
+  });
+
+  this.socket.on('sessions-list', (data) => {
+    this._renderSessionsList?.(data && data.sessions ? data.sessions : []);
   });
 
   this.socket.on('channels-list', (channels) => {

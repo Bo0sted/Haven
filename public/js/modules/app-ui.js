@@ -3390,6 +3390,7 @@ _setupUI() {
     settingsNav.addEventListener('click', (e) => {
       const item = e.target.closest('.settings-nav-item');
       if (item && item.dataset.target === 'section-2fa') loadTotpStatus();
+      if (item && item.dataset.target === 'section-sessions') this._refreshSessions();
       if (item && item.dataset.target === 'section-desktop-shortcuts') this._setupDesktopShortcuts();
       if (item && item.dataset.target === 'section-desktop-app') this._setupDesktopAppPrefs();
     });
@@ -4605,6 +4606,43 @@ _setupUI() {
 
   // Invite Links popout — open/close. Refresh the list and create-form channels
   // on open so the modal always reflects current state.
+  // Active sessions. Refreshed whenever the Account settings pane is opened
+  // rather than polled, since the list is only interesting while you look at it.
+  document.getElementById('revoke-sessions-btn')?.addEventListener('click', async () => {
+    const status = document.getElementById('sessions-status');
+    const pw = prompt(t('settings.sessions_section.confirm_prompt'));
+    if (pw === null) return;                       // cancelled
+    if (!pw) { status.textContent = t('settings.sessions_section.need_password'); return; }
+    status.classList.remove('error', 'success');
+    status.textContent = t('settings.sessions_section.working');
+    // Set before the request: the server disconnects every socket including
+    // ours, and this is what tells our own force-logout handler to sit still.
+    this._justRevokedSessions = true;
+    try {
+      const res = await fetch('/api/auth/revoke-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        this._justRevokedSessions = false;
+        status.textContent = data.error || t('settings.sessions_section.failed');
+        status.classList.add('error');
+        return;
+      }
+      this.token = data.token;
+      localStorage.setItem('haven_token', data.token);
+      this.socket.auth.token = data.token;         // so the auto-reconnect authenticates
+      status.textContent = t('settings.sessions_section.done');
+      status.classList.add('success');
+    } catch {
+      this._justRevokedSessions = false;
+      status.textContent = t('settings.sessions_section.failed');
+      status.classList.add('error');
+    }
+  });
+
   // Member search in the right sidebar. Re-rendering the roster from the last
   // payload rather than asking the server keeps typing instant and costs the
   // server nothing.

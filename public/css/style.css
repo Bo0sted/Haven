@@ -4004,6 +4004,31 @@ html.rgb-cycling *::after {
 /* Low disk warning, admins only (#5505). Amber rather than red: uploads are
    refused but the server is still working, so this is a "go clear some space"
    nudge and not an outage. */
+/* Active session rows. Deliberately plain: this is a list you scan for
+   something you do not recognise, not something you interact with. */
+.sessions-list { margin: 0.5rem 0; }
+.session-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.375rem;
+  font-size: 0.8125rem;
+}
+.session-item.is-current { border-color: var(--accent); }
+.session-device { font-weight: 600; color: var(--text-primary); }
+.session-meta { color: var(--text-muted); font-size: 0.75rem; margin-left: auto; text-align: right; }
+.session-current-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 1rem;
+  background: var(--accent);
+  color: #fff;
+}
+
 /* Member search in the right sidebar. Sits above the roster and filters it as
    you type; the clear button only appears once there is something to clear. */
 .user-search-wrap {

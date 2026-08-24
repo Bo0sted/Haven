@@ -721,6 +721,29 @@ function setupSocketHandlers(io, db, opts = {}) {
     });
   }
 
+  // A user agent is long, spoofable and full of history nobody wants to read.
+  // All this needs to do is let you recognise your own devices well enough to
+  // notice one you do not recognise, so it reduces to browser plus platform.
+  function _describeUserAgent(ua) {
+    if (!ua || typeof ua !== 'string') return 'Unknown device';
+    const browser =
+      /Edg\//.test(ua)                        ? 'Edge'
+      : /OPR\/|Opera/.test(ua)            ? 'Opera'
+      : /Firefox\//.test(ua)                  ? 'Firefox'
+      : /Chrome\//.test(ua)                   ? 'Chrome'
+      : /Safari\//.test(ua)                   ? 'Safari'
+      : /Haven|Electron/i.test(ua)              ? 'Haven Desktop'
+      : 'Browser';
+    const platform =
+      /Android/.test(ua)                    ? 'Android'
+      : /iPhone|iPad|iOS/.test(ua)  ? 'iOS'
+      : /Windows/.test(ua)                  ? 'Windows'
+      : /Mac OS X|Macintosh/.test(ua)   ? 'macOS'
+      : /Linux/.test(ua)                    ? 'Linux'
+      : '';
+    return platform ? `${browser} on ${platform}` : browser;
+  }
+
   // ── emitOnlineUsers ─────────────────────────────────────
   function emitOnlineUsers(code) {
     const room = channelUsers.get(code);
@@ -1545,9 +1568,36 @@ function setupSocketHandlers(io, db, opts = {}) {
       return;
     }
 
+    // Stamped here rather than read from the token: the token's iat is when
+    // you signed in, which can be weeks before this tab opened.
+    if (socket.handshake) socket.handshake.issued = Date.now();
     console.log(`✅ ${socket.user.username} connected`);
     socket.currentChannel = null;
     socket.hasFocus = true;
+
+    // (#5518 sibling) Your own open connections, for the session list in
+    // Settings. Haven issues stateless tokens and keeps no session table, so
+    // this is exactly what it says: sockets attached right now. A token with no
+    // tab open does not appear here, which is why the list is paired with a
+    // revoke that invalidates every token rather than individual rows.
+    socket.on('get-sessions', () => {
+      const mine = [];
+      for (const [, s2] of io.of('/').sockets) {
+        if (!s2.user || s2.user.id !== socket.user.id) continue;
+        const ua = (s2.handshake?.headers?.['user-agent']) || '';
+        mine.push({
+          id: s2.id,
+          current: s2.id === socket.id,
+          device: _describeUserAgent(ua),
+          ip: socketClientIp(s2),
+          since: s2.handshake?.issued || null
+        });
+      }
+      // Current session first, then oldest to newest so a new arrival appears
+      // at the bottom where it is easy to spot.
+      mine.sort((a, b) => (b.current - a.current) || ((a.since || 0) - (b.since || 0)));
+      socket.emit('sessions-list', { sessions: mine });
+    });
 
     // (#5505) Admins get their own room so server-health warnings can reach
     // them without walking every socket. An admin joining mid-problem is told

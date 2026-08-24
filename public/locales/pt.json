@@ -726,7 +726,8 @@
       "import": "Importar",
       "mod_mode": "Modo de layout",
       "security": "Segurança",
-      "moderation": "Moderação"
+      "moderation": "Moderação",
+      "sessions": "Sessões"
     },
     "language_section": {
       "title": "Idioma",
@@ -816,6 +817,22 @@
       "changed": "Senha alterada!",
       "failed": "Falha",
       "network_error": "Erro de rede"
+    },
+    "sessions_section": {
+      "title": "Sessões ativas",
+      "hint": "Dispositivos com o Haven aberto agora. Um dispositivo conectado mas fechado não aparece na lista, então encerre a sessão em todos se achar que alguém está usando sua conta.",
+      "revoke_btn": "Encerrar sessão nos outros dispositivos",
+      "none": "Nenhum outro dispositivo conectado",
+      "this_device": "Este dispositivo",
+      "confirm_prompt": "Digite sua senha para encerrar a sessão em todos os outros dispositivos.",
+      "need_password": "Senha obrigatória",
+      "working": "Encerrando as outras sessões...",
+      "done": "Sessões encerradas nos outros dispositivos.",
+      "failed": "Não foi possível encerrar as outras sessões.",
+      "just_now": "agora mesmo",
+      "mins": "há {{n}} min",
+      "hours": "há {{n}} h",
+      "days": "há {{n}} d"
     },
     "two_factor_section": {
       "title": "Autenticação de dois fatores",

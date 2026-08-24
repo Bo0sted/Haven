@@ -4046,6 +4046,40 @@ async _loadMediaToken() {
 // blank gap, with no error and no retry. Reloading fixed it, which is why this
 // looked random and unreproducible. Refreshed on a timer, on reconnect, and on
 // a failed image below.
+_renderSessionsList(sessions) {
+  const el = document.getElementById('sessions-list');
+  if (!el) return;
+  if (!sessions.length) {
+    el.innerHTML = `<p class="muted-text">${this._escapeHtml(t('settings.sessions_section.none'))}</p>`;
+    return;
+  }
+  const rel = (ms) => {
+    if (!ms) return '';
+    const mins = Math.floor((Date.now() - ms) / 60000);
+    if (mins < 1) return t('settings.sessions_section.just_now');
+    if (mins < 60) return t('settings.sessions_section.mins', { n: mins });
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return t('settings.sessions_section.hours', { n: hrs });
+    return t('settings.sessions_section.days', { n: Math.floor(hrs / 24) });
+  };
+  el.innerHTML = sessions.map(s => {
+    const tag = s.current
+      ? `<span class="session-current-tag">${this._escapeHtml(t('settings.sessions_section.this_device'))}</span>`
+      : '';
+    const ip = s.ip ? this._escapeHtml(s.ip) : '';
+    return `<div class="session-item${s.current ? ' is-current' : ''}">
+      <span class="session-device">${this._escapeHtml(s.device || '')}</span>${tag}
+      <span class="session-meta">${ip}${ip && s.since ? '<br>' : ''}${this._escapeHtml(rel(s.since))}</span>
+    </div>`;
+  }).join('');
+},
+
+// Ask for the list when the pane is actually on screen. There is no session
+// table behind this, so it is a snapshot of live sockets, not history.
+_refreshSessions() {
+  this.socket?.emit('get-sessions');
+},
+
 _refreshMediaToken() {
   // One request even when a screen full of images fails at the same moment.
   if (!this._mediaTokenRefresh) {

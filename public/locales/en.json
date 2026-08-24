@@ -726,7 +726,8 @@
       "import": "Import",
       "mod_mode": "Mod Mode",
       "security": "Security",
-      "moderation": "Moderation"
+      "moderation": "Moderation",
+      "sessions": "Sessions"
     },
     "language_section": {
       "title": "Language",
@@ -816,6 +817,22 @@
       "changed": "Password changed!",
       "failed": "Failed",
       "network_error": "Network error"
+    },
+    "sessions_section": {
+      "title": "Active Sessions",
+      "hint": "Devices with Haven open right now. A device that is signed in but closed will not be listed, so sign out everywhere if you think someone else has your account.",
+      "revoke_btn": "Sign out all other devices",
+      "none": "No other devices connected",
+      "this_device": "This device",
+      "confirm_prompt": "Enter your password to sign out every other device.",
+      "need_password": "Password required",
+      "working": "Signing out other devices...",
+      "done": "Other devices signed out.",
+      "failed": "Could not sign out other devices.",
+      "just_now": "just now",
+      "mins": "{{n}} min ago",
+      "hours": "{{n}} h ago",
+      "days": "{{n}} d ago"
     },
     "two_factor_section": {
       "title": "Two-Factor Authentication",
