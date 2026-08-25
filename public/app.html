@@ -317,15 +317,31 @@
                  filter tokens client-side. Public search only. (phase 3) -->
             <div id="search-filter-popover" class="search-filter-popover" style="display:none">
               <div class="sfp-root" id="sfp-root">
-                <span class="sfp-label" data-i18n="header.filter_by">Filter by</span>
-                <button type="button" class="sfp-chip" data-sfp-filter="from">from:</button>
-                <button type="button" class="sfp-chip" data-sfp-filter="in">in:</button>
-                <button type="button" class="sfp-chip" data-sfp-filter="has">has:</button>
+                <div class="sfp-chips">
+                  <span class="sfp-label" data-i18n="header.filter_by">Filter by</span>
+                  <button type="button" class="sfp-chip" data-sfp-filter="from">from:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="in">in:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="has">has:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="before">before:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="after">after:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="during">during:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="pinned">pinned</button>
+                </div>
+                <div class="sfp-sort" id="sfp-sort">
+                  <span class="sfp-label" data-i18n="header.sort_by">Sort</span>
+                  <button type="button" class="sfp-sort-btn" data-sort="newest" data-i18n="header.sort_newest">Newest</button>
+                  <button type="button" class="sfp-sort-btn" data-sort="oldest" data-i18n="header.sort_oldest">Oldest</button>
+                  <button type="button" class="sfp-sort-btn" data-sort="relevant" data-i18n="header.sort_relevant">Relevant</button>
+                </div>
               </div>
               <div class="sfp-picker" id="sfp-picker" style="display:none">
                 <div class="sfp-picker-head">
                   <button type="button" class="sfp-back" id="sfp-back" title="Back">‹</button>
                   <input type="text" class="sfp-filter-input" id="sfp-filter-input" autocomplete="off" spellcheck="false" data-i18n-placeholder="header.filter_placeholder" placeholder="Filter...">
+                  <div class="sfp-date-wrap" id="sfp-date-wrap" style="display:none">
+                    <input type="date" class="sfp-date-input" id="sfp-date-input">
+                    <button type="button" class="sfp-chip" id="sfp-date-apply" data-i18n="header.filter_apply">Apply</button>
+                  </div>
                 </div>
                 <div class="sfp-list" id="sfp-list"></div>
               </div>

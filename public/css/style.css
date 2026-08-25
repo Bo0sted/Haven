@@ -9352,15 +9352,63 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 
 .sfp-root {
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sfp-chips,
+.sfp-sort {
+  display: flex;
   align-items: center;
   gap: 0.375rem;
   flex-wrap: wrap;
+}
+
+.sfp-sort {
+  border-top: 1px solid var(--border-light);
+  padding-top: 0.5rem;
 }
 
 .sfp-label {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-right: 0.25rem;
+}
+
+.sfp-sort-btn {
+  font-size: 0.75rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-light);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+
+.sfp-sort-btn:hover { border-color: var(--text-muted); }
+
+.sfp-sort-btn.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.sfp-date-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1;
+}
+
+.sfp-date-input {
+  flex: 1;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .sfp-chip {

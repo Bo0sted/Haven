@@ -289,13 +289,21 @@ module.exports = function register(socket, ctx) {
     const sort = ['newest', 'oldest', 'relevant'].includes(data.sort) ? data.sort : 'newest';
 
     // ── Parse filters out of the query text ──
-    const filters = { from: null, in: null, has: null };
+    const filters = { from: null, in: null, has: null, pinned: null, before: null, after: null, during: null };
     query = query.replace(/\bfrom:(\S+)/gi, (_, v) => { filters.from = v; return ''; });
     // A leading # means "this is a channel code" (unambiguous, what the filter
     // picker appends); without it, in: is treated as a channel name.
     query = query.replace(/\bin:(#?)(\S+)/gi, (_, hash, v) => { filters.in = v; filters.inIsCode = !!hash; return ''; });
     query = query.replace(/\bhas:(\S+)/gi, (_, v) => { filters.has = v.toLowerCase(); return ''; });
+    query = query.replace(/\bpinned:(\S+)/gi, (_, v) => { filters.pinned = v.toLowerCase(); return ''; });
+    query = query.replace(/\bbefore:(\S+)/gi, (_, v) => { filters.before = v; return ''; });
+    query = query.replace(/\bafter:(\S+)/gi, (_, v) => { filters.after = v; return ''; });
+    query = query.replace(/\bduring:(\S+)/gi, (_, v) => { filters.during = v; return ''; });
     query = query.trim();
+
+    // Only keep well-formed YYYY-MM-DD dates; drop anything else silently.
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    ['before', 'after', 'during'].forEach(k => { if (filters[k] && !DATE_RE.test(filters[k])) filters[k] = null; });
 
     const empty = { results: [], total: 0, page: 1, query: data.query, filters };
     const conditions = [];
@@ -310,7 +318,9 @@ module.exports = function register(socket, ctx) {
     }
 
     // Never dump the whole corpus: require free text or at least one filter.
-    if (!usesFts && !filters.from && !filters.has && !filters.in) {
+    const anyFilter = filters.from || filters.has || filters.in || filters.pinned ||
+                      filters.before || filters.after || filters.during;
+    if (!usesFts && !anyFilter) {
       return socket.emit('search-results', empty);
     }
 
@@ -356,8 +366,21 @@ module.exports = function register(socket, ctx) {
         case 'video':
           conditions.push("(m.content LIKE '%/uploads/%.mp4%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.webm%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.mov%' ESCAPE '\\' OR m.content LIKE '%youtube.com%' ESCAPE '\\' OR m.content LIKE '%youtu.be%' ESCAPE '\\')");
           break;
+        case 'audio':
+          conditions.push("(m.content LIKE '%/uploads/%.mp3%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.wav%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.ogg%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.m4a%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.flac%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.aac%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.opus%' ESCAPE '\\' OR m.content LIKE '%/uploads/%.weba%' ESCAPE '\\')");
+          break;
       }
     }
+
+    // ── pinned: filter ──
+    if (filters.pinned === 'true') {
+      conditions.push('m.id IN (SELECT message_id FROM pinned_messages)');
+    }
+
+    // ── date filters (created_at). during: is the whole named day. ──
+    if (filters.after)  { conditions.push('m.created_at >= ?'); params.push(filters.after); }
+    if (filters.before) { conditions.push('m.created_at < ?');  params.push(filters.before); }
+    if (filters.during) { conditions.push("m.created_at >= ? AND m.created_at < date(?, '+1 day')"); params.push(filters.during, filters.during); }
 
     // FTS queries join through messages_fts so bm25() is available for ranking.
     // Channels are joined so each result carries the channel it came from (the

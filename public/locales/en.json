@@ -493,6 +493,11 @@
     "filter_placeholder": "Filter...",
     "filter_no_matches": "No matches",
     "filter_toggle": "Filters",
+    "filter_apply": "Apply",
+    "sort_by": "Sort",
+    "sort_newest": "Newest",
+    "sort_oldest": "Oldest",
+    "sort_relevant": "Relevant",
     "messages": {
       "edited": "(edited)",
       "edited_at": "Edited at {{date}}",

@@ -17,7 +17,7 @@
 
 const SEARCH_PAGE_SIZE = 25;
 // has: options the server understands. Seeded here so adding one is a one-liner.
-const SEARCH_HAS_OPTIONS = ['image', 'file', 'link', 'video'];
+const SEARCH_HAS_OPTIONS = ['image', 'file', 'link', 'video', 'audio'];
 
 export default {
 
@@ -57,7 +57,7 @@ _searchContextKey() {
 // ── State accessors (single entry point so invalidation stays clean) ──
 _searchGetState(key) { return this._searchState[key] || null; },
 _searchSetState(key, patch) {
-  this._searchState[key] = { ...(this._searchState[key] || { open: false, query: '', results: [], page: 1, scrollTop: 0, stale: false }), ...patch };
+  this._searchState[key] = { ...(this._searchState[key] || { open: false, query: '', results: [], page: 1, scrollTop: 0, stale: false, sort: 'newest' }), ...patch };
   return this._searchState[key];
 },
 _searchClearContext(key) { delete this._searchState[key]; },
@@ -100,12 +100,12 @@ _searchClose() {
 // (global FTS, one page at a time); DMs walk the local decrypted cache.
 _searchRun(query, page = 1) {
   const key = this._searchContextKey();
-  this._searchSetState(key, { open: true, query, stale: false });
+  const st = this._searchSetState(key, { open: true, query, stale: false });
   const ch = (this.channels || []).find(c => c.code === this.currentChannel);
   if (ch && ch.is_dm) {
     this._searchDmCacheLocally(query);
   } else {
-    this.socket.emit('search-messages', { code: this.currentChannel, query, page });
+    this.socket.emit('search-messages', { code: this.currentChannel, query, page, sort: st.sort || 'newest' });
   }
 },
 
@@ -141,7 +141,7 @@ _searchGoToPage(delta) {
   const next = Math.min(pages, Math.max(1, (st.page || 1) + delta));
   if (next === st.page) return;
   if (st.serverPaged) {
-    this.socket.emit('search-messages', { code: this.currentChannel, query: st.query, page: next });
+    this.socket.emit('search-messages', { code: this.currentChannel, query: st.query, page: next, sort: st.sort || 'newest' });
   } else {
     st.page = next;
     st.scrollTop = 0;
@@ -244,12 +244,24 @@ _searchRestoreSidebar() {
 _searchFilterInit() {
   const pop = document.getElementById('search-filter-popover');
   if (!pop) return;
-  pop.querySelectorAll('.sfp-chip').forEach(chip => {
-    chip.addEventListener('click', () => this._sfpOpenPicker(chip.dataset.sfpFilter));
+  pop.querySelectorAll('.sfp-chip[data-sfp-filter]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const f = chip.dataset.sfpFilter;
+      // pinned is a plain boolean — no sub-picker, append straight away.
+      if (f === 'pinned') this._sfpAppend('pinned:true');
+      else this._sfpOpenPicker(f);
+    });
+  });
+  pop.querySelectorAll('.sfp-sort-btn').forEach(b => {
+    b.addEventListener('click', () => this._searchSetSort(b.dataset.sort));
   });
   document.getElementById('sfp-back')?.addEventListener('click', () => this._sfpShowRoot());
   const fbox = document.getElementById('sfp-filter-input');
   fbox?.addEventListener('input', () => this._sfpRenderList(this._sfpActive, fbox.value.trim()));
+  document.getElementById('sfp-date-apply')?.addEventListener('click', () => this._sfpApplyDate());
+  document.getElementById('sfp-date-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') this._sfpApplyDate();
+  });
   // Filter button toggles the popover open/closed (separate from the 🔍 button).
   document.getElementById('search-filter-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -284,16 +296,57 @@ _sfpShowRoot() {
   document.getElementById('sfp-root').style.display = 'flex';
   document.getElementById('sfp-picker').style.display = 'none';
   this._sfpActive = null;
+  this._sfpRenderSort();
 },
 
 _sfpOpenPicker(type) {
   this._sfpActive = type;
   document.getElementById('sfp-root').style.display = 'none';
   document.getElementById('sfp-picker').style.display = 'flex';
+  const isDate = ['before', 'after', 'during'].includes(type);
   const fbox = document.getElementById('sfp-filter-input');
-  if (fbox) fbox.value = '';
-  this._sfpRenderList(type, '');
-  fbox?.focus();
+  const dwrap = document.getElementById('sfp-date-wrap');
+  const list = document.getElementById('sfp-list');
+  if (isDate) {
+    // Date filters take a YYYY-MM-DD value from a native date input, not a list.
+    if (fbox) fbox.style.display = 'none';
+    if (dwrap) dwrap.style.display = 'flex';
+    if (list) list.innerHTML = '';
+    const di = document.getElementById('sfp-date-input');
+    if (di) { di.value = ''; di.focus(); }
+  } else {
+    if (fbox) { fbox.style.display = ''; fbox.value = ''; }
+    if (dwrap) dwrap.style.display = 'none';
+    this._sfpRenderList(type, '');
+    fbox?.focus();
+  }
+},
+
+// Append a date filter (before:/after:/during:) from the date input.
+_sfpApplyDate() {
+  const di = document.getElementById('sfp-date-input');
+  const v = di && di.value;   // native date input already gives YYYY-MM-DD
+  if (!v || !this._sfpActive) return;
+  this._sfpAppend(`${this._sfpActive}:${v}`);
+},
+
+// Sort is a query parameter (not a token). Set it on the public context and
+// re-run the current query so results reorder immediately.
+_searchSetSort(sort) {
+  if (!['newest', 'oldest', 'relevant'].includes(sort)) return;
+  const key = this._searchContextKey();
+  const st = this._searchGetState(key) || this._searchSetState(key, {});
+  st.sort = sort;
+  this._sfpRenderSort();
+  if (st.query) this._searchRun(st.query, 1);
+},
+
+_sfpRenderSort() {
+  const st = this._searchGetState(this._searchContextKey());
+  const cur = (st && st.sort) || 'newest';
+  document.querySelectorAll('#sfp-sort .sfp-sort-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.sort === cur);
+  });
 },
 
 // Build the entry list for a filter type, prefix-filtered by term. Each entry:
@@ -383,16 +436,20 @@ _searchRenderPanel() {
   let filterInfo = '';
   if (st.filters) {
     const tags = [];
-    if (st.filters.from) tags.push(`<span class="search-filter-tag">from:${this._escapeHtml(st.filters.from)}</span>`);
-    if (st.filters.in)   tags.push(`<span class="search-filter-tag">in:#${this._escapeHtml(st.filters.in)}</span>`);
-    if (st.filters.has)  tags.push(`<span class="search-filter-tag">has:${this._escapeHtml(st.filters.has)}</span>`);
+    if (st.filters.from)   tags.push(`<span class="search-filter-tag">from:${this._escapeHtml(st.filters.from)}</span>`);
+    if (st.filters.in)     tags.push(`<span class="search-filter-tag">in:#${this._escapeHtml(st.filters.in)}</span>`);
+    if (st.filters.has)    tags.push(`<span class="search-filter-tag">has:${this._escapeHtml(st.filters.has)}</span>`);
+    if (st.filters.pinned === 'true') tags.push(`<span class="search-filter-tag">pinned</span>`);
+    if (st.filters.after)  tags.push(`<span class="search-filter-tag">after:${this._escapeHtml(st.filters.after)}</span>`);
+    if (st.filters.before) tags.push(`<span class="search-filter-tag">before:${this._escapeHtml(st.filters.before)}</span>`);
+    if (st.filters.during) tags.push(`<span class="search-filter-tag">during:${this._escapeHtml(st.filters.during)}</span>`);
     if (tags.length) filterInfo = `<div class="search-filter-tags">${tags.join(' ')}</div>`;
   }
   const localTag = st.isDM ? ' <span class="search-filter-tag">DM (local)</span>' : '';
   count.innerHTML = `${total} result${total === 1 ? '' : 's'} for "${qHtml}"${localTag}${filterInfo}`;
 
-  // Highlight the plain text (filters stripped).
-  const highlightQuery = (st.query || '').replace(/\b(?:from|in|has):\S+/gi, '').trim();
+  // Highlight the plain text (all filter tokens stripped).
+  const highlightQuery = (st.query || '').replace(/\b(?:from|in|has|pinned|before|after|during):\S+/gi, '').trim();
 
   list.innerHTML = total === 0
     ? `<p class="muted-text" style="padding:12px">${t('header.search_no_results')}</p>`
