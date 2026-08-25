@@ -9265,22 +9265,21 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   font-weight: 600;
 }
 
-.search-results-panel {
+/* Search results overlay — fills the right sidebar, sitting over voice +
+   member list (Discord-style). Persists across channel switches. */
+.search-panel {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 21.25rem;
-  max-height: 100%;
+  inset: 0;
   background: var(--bg-card);
   border-left: 1px solid var(--border-light);
-  z-index: 100;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   box-shadow: -4px 0 12px rgba(0,0,0,0.2);
 }
 
-.search-results-header {
+.search-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -9292,9 +9291,43 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   gap: 0.5rem;
 }
 
-.search-results-list {
+.search-panel-list {
   overflow-y: auto;
   flex: 1;
+}
+
+/* Stale banner shown after a channels-list change invalidates cached rows. */
+.search-panel-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-hover);
+}
+
+/* Numbered prev/next pager pinned to the bottom of the panel. */
+.search-panel-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.search-page-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-width: 6rem;
+  text-align: center;
+}
+
+.search-panel-pager .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .search-result-item {

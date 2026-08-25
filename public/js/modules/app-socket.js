@@ -84,6 +84,11 @@ _setupSocketListeners() {
     // `data.roles` — that TypeError also aborted every roles-updated listener
     // registered after this one, including the modal's own _loadRoles refresh.
     if (!data) return;
+    // Your own roles/permissions just changed — cached search results may now
+    // include messages you can no longer access. Force-invalidate the panel
+    // (the channel list may be unchanged, so the signature check won't catch
+    // this). Payload-less server-wide nudges bail above and don't trigger it.
+    this._searchMarkStale?.();
     this.user.roles = data.roles || [];
     this.user.effectiveLevel = data.effectiveLevel || 0;
     this.user.permissions = data.permissions || [];
@@ -629,6 +634,10 @@ _setupSocketListeners() {
   this.socket.on('channels-list', (channels) => {
     // (#5391) Cancel the channels-not-arriving watchdog
     this._channelsListGotResponse = true;
+    // A change in the user's channel/role set can make cached search results
+    // show messages they no longer have access to. Invalidate the panel off
+    // this already-broadcast event — no new server plumbing. (search-overhaul)
+    this._searchInvalidate?.(channels);
     // Fresh authoritative state — an optimistic Channel Functions toggle that
     // was still awaiting a verdict has just been accepted, so drop its undo.
     this._cfnPendingToggle = null;
@@ -2216,53 +2225,15 @@ _setupSocketListeners() {
   });
 
   // ── Search results ─────────────────────────────────
+  // Server channel search always targets a non-DM channel (the server early-
+  // returns for DMs), so results belong to the shared public context. The
+  // panel/pager/cache live in app-search.js. (search-overhaul phase 1)
   this.socket.on('search-results', (data) => {
-    const panel = document.getElementById('search-results-panel');
-    const list = document.getElementById('search-results-list');
-    const count = document.getElementById('search-results-count');
-    if (data.isDM) {
-      count.textContent = t('header.search_results_other', { count: 0, query: this._escapeHtml(data.query) });
-      list.innerHTML = `<p class="muted-text" style="padding:12px">Search is not available in DMs because messages are end-to-end encrypted.</p>`;
-      panel.style.display = 'block';
-      return;
-    }
-
-    // Build header with active filters
-    let filterInfo = '';
-    if (data.filters) {
-      const tags = [];
-      if (data.filters.from) tags.push(`<span class="search-filter-tag">from:${this._escapeHtml(data.filters.from)}</span>`);
-      if (data.filters.in) tags.push(`<span class="search-filter-tag">in:#${this._escapeHtml(data.filters.in)}</span>`);
-      if (data.filters.has) tags.push(`<span class="search-filter-tag">has:${this._escapeHtml(data.filters.has)}</span>`);
-      if (tags.length) filterInfo = `<div class="search-filter-tags">${tags.join(' ')}</div>`;
-    }
-
-    count.innerHTML = t(data.results.length === 1 ? 'header.search_results_one' : 'header.search_results_other', { count: data.results.length, query: this._escapeHtml(data.query) }) + filterInfo;
-
-    // Strip filters from query for highlight
-    const highlightQuery = data.query.replace(/\b(?:from|in|has):\S+/gi, '').trim();
-
-    list.innerHTML = data.results.length === 0
-      ? `<p class="muted-text" style="padding:12px">${t('header.search_no_results')}</p>`
-      : data.results.map(r => `
-        <div class="search-result-item" data-msg-id="${r.id}">
-          <span class="search-result-author" style="color:${this._getUserColor(r.username)}">${this._escapeHtml(this._getNickname(r.user_id, r.username))}</span>
-          <span class="search-result-time">${this._formatTime(r.created_at)}</span>
-          <div class="search-result-content">${highlightQuery ? this._highlightSearch(this._escapeHtml(r.content), highlightQuery) : this._escapeHtml(r.content)}</div>
-        </div>
-      `).join('');
-    panel.style.display = 'block';
-
-    // Click to scroll to message
-    list.querySelectorAll('.search-result-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const msgId = parseInt(item.dataset.msgId, 10);
-        // Close the search panel so the user can see the result
-        panel.style.display = 'none';
-        document.getElementById('search-container').style.display = 'none';
-        document.getElementById('search-input').value = '';
-        this._jumpToMessage(msgId);
-      });
+    this._searchReceiveResults('__public__', {
+      results: data.results || [],
+      query: data.query,
+      filters: data.filters || null,
+      isDM: !!data.isDM,
     });
   });
 

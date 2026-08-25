@@ -486,6 +486,9 @@
     "search_results_one": "{{count}} result for \"{{query}}\"",
     "search_results_other": "{{count}} results for \"{{query}}\"",
     "search_no_results": "No results found",
+    "search_page": "Page {{page}} of {{pages}}",
+    "search_stale": "A channel or role you have has changed, please refresh the search to continue.",
+    "search_refresh": "Refresh search",
     "messages": {
       "edited": "(edited)",
       "edited_at": "Edited at {{date}}",

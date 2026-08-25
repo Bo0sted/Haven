@@ -450,13 +450,6 @@
             </div>
             <div id="music-embed-container" class="music-embed-container"></div>
           </div>
-          <div id="search-results-panel" class="search-results-panel" style="display:none">
-            <div class="search-results-header">
-              <span id="search-results-count" data-i18n="header.results">Results</span>
-              <button id="search-results-close" class="icon-btn small">&times;</button>
-            </div>
-            <div id="search-results-list" class="search-results-list"></div>
-          </div>
           <div id="pinned-panel" class="pinned-panel" style="display:none">
             <div class="pinned-panel-header">
               <span id="pinned-count">📌 <span data-i18n="header.pinned_count">Pinned Messages</span></span>
@@ -569,6 +562,24 @@
       <!-- ─── Right Sidebar ───────────────────────────── -->
       <aside class="right-sidebar" id="right-sidebar">
         <div class="right-sidebar-resize-handle" id="right-sidebar-resize-handle"></div>
+        <!-- Search results overlay — sits over voice + member list, persists across
+             channel switches, only closes on the X. (search-overhaul phase 1) -->
+        <div id="search-panel" class="search-panel" style="display:none">
+          <div class="search-panel-header">
+            <span id="search-panel-count" data-i18n="header.results">Results</span>
+            <button id="search-panel-close" class="icon-btn small" data-i18n-title="modals.common.close" title="Close">&times;</button>
+          </div>
+          <div id="search-panel-banner" class="search-panel-banner" style="display:none">
+            <span data-i18n="header.search_stale">A channel or role you have has changed, please refresh the search to continue.</span>
+            <button id="search-rerun-btn" class="btn-secondary small" data-i18n="header.search_refresh">Refresh search</button>
+          </div>
+          <div id="search-panel-list" class="search-panel-list"></div>
+          <div id="search-panel-pager" class="search-panel-pager" style="display:none">
+            <button id="search-page-prev" class="icon-btn small" title="Previous page">‹</button>
+            <span id="search-page-label" class="search-page-label"></span>
+            <button id="search-page-next" class="icon-btn small" title="Next page">›</button>
+          </div>
+        </div>
         <!-- Voice users section -->
         <div class="right-sidebar-voice" id="right-sidebar-voice">
           <div class="panel">
