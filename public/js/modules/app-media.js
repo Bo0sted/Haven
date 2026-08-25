@@ -616,12 +616,64 @@ _avatarWithBorder(avatarHtml, user) {
 },
 
 // ── Animated-profile policy (freeze animated pfps to their first frame) ──
-// The owner's policy rides on each pfp <img> as data-animate. Freezing is pure
-// client side: the first frame is captured to a data URL via <canvas>, so no
-// static file or server work is needed. 'disabled' stays frozen for everyone;
-// 'trigger' is played only while the viewer hovers the message or opens the
-// profile card (see _setPfpAnimation). Same-origin uploads keep the canvas
-// untainted; if a privacy mode blocks the read the image is simply left animated.
+// Two sides decide this, and the more restrictive one wins.
+//
+// The pfp OWNER's policy rides on each <img> as data-animate, so someone with a
+// busy GIF can choose not to inflict it on everyone: 'disabled' stays frozen for
+// every viewer, no exceptions.
+//
+// The VIEWER's own preference lives in localStorage (haven_animate_pfp) and only
+// affects what they see:
+//   always: let 'trigger' pfps loop all the time (how Haven behaved before)
+//   hover:  play only while hovering the message or with the profile card open
+//   never:  freeze everything, even pfps whose owner allows animation
+//
+// Freezing is pure client side: the first frame is captured to a data URL via
+// <canvas>, so no static file or server work is needed. Same-origin uploads keep
+// the canvas untainted; if a privacy mode blocks the read the image is left
+// animated.
+
+// The viewer's own preference. Defaults to 'hover'.
+_viewerAnimPref() {
+  try {
+    const v = localStorage.getItem('haven_animate_pfp');
+    if (v === 'always' || v === 'never') return v;
+  } catch { /* localStorage unavailable */ }
+  return 'hover';
+},
+
+// Persist the viewer's preference and re-apply it to everything on screen, so
+// flipping it takes effect without a reload.
+_setViewerAnimPref(pref) {
+  const value = (pref === 'always' || pref === 'never') ? pref : 'hover';
+  try { localStorage.setItem('haven_animate_pfp', value); } catch { /* ignore */ }
+  document.querySelectorAll('#animate-pfp-picker .density-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.animpfp === value);
+  });
+  this._applyViewerAnimPref();
+},
+
+// Re-evaluate every already-frozen pfp against the current preference. 'always'
+// restores the live source on anything the owner still permits; 'never' and
+// 'hover' put it back to the first frame unless it is inside a live trigger.
+_applyViewerAnimPref() {
+  const pref = this._viewerAnimPref();
+  document.querySelectorAll('img[data-animate="trigger"][data-animated-src]').forEach((img) => {
+    if (pref === 'always') {
+      img.dataset.animPlaying = '1';
+      if (img.getAttribute('src') !== img.dataset.animatedSrc) img.src = img.dataset.animatedSrc;
+      return;
+    }
+    // Keep playing only if the viewer is genuinely hovering it or has the card open.
+    const live = pref === 'hover' &&
+      (img.closest('[data-anim-play]') || img.closest('.message:hover, .message-compact:hover'));
+    if (live) { img.dataset.animPlaying = '1'; return; }
+    img.dataset.animPlaying = '';
+    this._frozenFrame(img.dataset.animatedSrc).then((f) => {
+      if (f && img.dataset.animPlaying !== '1') img.src = f;
+    });
+  });
+},
 
 // data-animate attribute (with leading space) for an avatar <img>.
 _animAttr(mode) {
@@ -668,8 +720,12 @@ _freezePfpImg(img) {
   if (url.startsWith('data:') || !this._animCanAnimate(url)) { img.dataset.animDone = '1'; return; }
   img.dataset.animDone = '1';
   img.dataset.animatedSrc = url;
+  // The owner's 'disabled' is absolute. Otherwise the viewer's preference decides:
+  // 'always' never freezes, 'never' always does, 'hover' waits for a trigger.
+  const pref = this._viewerAnimPref();
+  if (mode === 'trigger' && pref === 'always') { img.dataset.animPlaying = '1'; return; }
   // Inside a live trigger context (an open profile card) leave it animating.
-  if (mode === 'trigger' && img.closest && img.closest('[data-anim-play]')) img.dataset.animPlaying = '1';
+  if (mode === 'trigger' && pref === 'hover' && img.closest && img.closest('[data-anim-play]')) img.dataset.animPlaying = '1';
   this._frozenFrame(url).then((frozen) => {
     // Do not clobber an in-flight hover/profile play, and only swap if still the live src.
     if (frozen && img.dataset.animPlaying !== '1' && img.getAttribute('src') === url) img.src = frozen;
@@ -679,6 +735,9 @@ _freezePfpImg(img) {
 // Play (loop) or re-freeze every 'trigger' pfp image inside a container.
 _setPfpAnimation(container, play) {
   if (!container || !container.querySelectorAll) return;
+  const pref = this._viewerAnimPref();
+  if (pref === 'never') return;   // viewer opted out; hover does nothing
+  if (pref === 'always' && !play) return; // never re-freeze what the viewer wants looping
   container.querySelectorAll('img[data-animate="trigger"][data-animated-src]').forEach((img) => {
     if (play) {
       img.dataset.animPlaying = '1';
@@ -3524,6 +3583,26 @@ _setupToggleStylePicker() {
     localStorage.setItem('haven-toggle-style', style);
     picker.querySelectorAll('.density-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+  });
+},
+
+// ── Animated Profile Pictures Picker (viewer side) ──
+// The other half of the pfp animation policy. The owner's 'disabled' choice
+// still wins for everyone; this only decides what THIS viewer sees for pfps
+// whose owner allows animation. Applies live, no reload needed.
+_setupAnimatePfpPicker() {
+  const picker = document.getElementById('animate-pfp-picker');
+  if (!picker) return;
+
+  const saved = this._viewerAnimPref();
+  picker.querySelectorAll('.density-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.animpfp === saved);
+  });
+
+  picker.addEventListener('click', (e) => {
+    const btn = e.target.closest('.density-btn');
+    if (!btn) return;
+    this._setViewerAnimPref(btn.dataset.animpfp);
   });
 },
 
