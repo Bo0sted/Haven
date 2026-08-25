@@ -18587,4 +18587,4 @@ ul.chat-list { list-style-type: disc; }
   flex-wrap: wrap;
   align-items: center;
 }
-.persona-edit-row input[type=tex
+.persona-edit-row input[type=text] { flex: 1; min-width: 8rem; }
