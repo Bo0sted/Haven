@@ -1479,6 +1479,10 @@ _setupUI() {
   });
   document.getElementById('search-input').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') this._searchClose();
+    else if (e.key === 'Enter') {
+      const q = e.target.value.trim();
+      if (q) { this._searchSaveRecent(q); this._searchRun(q); }
+    }
   });
 
   // Pinned messages panel

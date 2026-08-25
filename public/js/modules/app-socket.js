@@ -2229,6 +2229,9 @@ _setupSocketListeners() {
   // context (DMs are searched locally). total/page drive the pager. The
   // panel/pager/cache live in app-search.js. (search-overhaul phase 2)
   this.socket.on('search-results', (data) => {
+    // Drop stale responses: only the latest issued query's token counts, so a
+    // slow earlier query can't overwrite newer results. (search-overhaul)
+    if (data.token != null && data.token !== this._searchSeq) return;
     this._searchReceiveResults('__public__', {
       results: data.results || [],
       total: data.total || 0,

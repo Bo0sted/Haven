@@ -317,6 +317,7 @@
                  filter tokens client-side. Public search only. (phase 3) -->
             <div id="search-filter-popover" class="search-filter-popover" style="display:none">
               <div class="sfp-root" id="sfp-root">
+                <div class="sfp-recent" id="sfp-recent" style="display:none"></div>
                 <div class="sfp-chips">
                   <span class="sfp-label" data-i18n="header.filter_by">Filter by</span>
                   <button type="button" class="sfp-chip" data-sfp-filter="from">from:</button>
@@ -608,6 +609,9 @@
           <div id="search-panel-banner" class="search-panel-banner" style="display:none">
             <span data-i18n="header.search_stale">A channel or role you have has changed, please refresh the search to continue.</span>
             <button id="search-rerun-btn" class="btn-secondary small" data-i18n="header.search_refresh">Refresh search</button>
+          </div>
+          <div id="search-panel-loading" class="search-panel-loading" style="display:none">
+            <span class="search-spinner"></span><span data-i18n="header.searching">Searching...</span>
           </div>
           <div id="search-panel-list" class="search-panel-list"></div>
           <div id="search-panel-pager" class="search-panel-pager" style="display:none">

@@ -287,6 +287,8 @@ module.exports = function register(socket, ctx) {
     const tokenizer = getActiveTokenizer();
     const page = (Number.isInteger(data.page) && data.page > 0) ? data.page : 1;
     const sort = ['newest', 'oldest', 'relevant'].includes(data.sort) ? data.sort : 'newest';
+    // Opaque token echoed back so the client can drop stale (out-of-order) responses.
+    const token = data.token;
 
     // ── Parse filters out of the query text ──
     const filters = { from: null, in: null, has: null, pinned: null, before: null, after: null, during: null };
@@ -305,7 +307,7 @@ module.exports = function register(socket, ctx) {
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     ['before', 'after', 'during'].forEach(k => { if (filters[k] && !DATE_RE.test(filters[k])) filters[k] = null; });
 
-    const empty = { results: [], total: 0, page: 1, query: data.query, filters };
+    const empty = { results: [], total: 0, page: 1, query: data.query, filters, token };
     const conditions = [];
     const params = [];
 
@@ -415,7 +417,7 @@ module.exports = function register(socket, ctx) {
     results.forEach(r => {
       if (r.created_at && !r.created_at.endsWith('Z')) r.created_at = utcStamp(r.created_at);
     });
-    socket.emit('search-results', { results, total, page, query: data.query, filters });
+    socket.emit('search-results', { results, total, page, query: data.query, filters, token });
   });
 
   // Tell the client the minimum query length for the active tokenizer (trigram

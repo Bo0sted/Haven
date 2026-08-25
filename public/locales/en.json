@@ -498,6 +498,8 @@
     "sort_newest": "Newest",
     "sort_oldest": "Oldest",
     "sort_relevant": "Relevant",
+    "searching": "Searching...",
+    "recent": "Recent",
     "messages": {
       "edited": "(edited)",
       "edited_at": "Edited at {{date}}",

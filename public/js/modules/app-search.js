@@ -105,14 +105,31 @@ _searchRun(query, page = 1) {
   if (ch && ch.is_dm) {
     this._searchDmCacheLocally(query);
   } else {
-    this.socket.emit('search-messages', { code: this.currentChannel, query, page, sort: st.sort || 'newest' });
+    this._searchSetLoading(true);
+    this.socket.emit('search-messages', { code: this.currentChannel, query, page, sort: st.sort || 'newest', token: this._searchNextToken() });
   }
+},
+
+// Monotonic token stamped on every server request. The socket handler drops any
+// search-results whose token isn't the latest, so a slow earlier query can't
+// clobber the panel with stale results.
+_searchNextToken() { this._searchSeq = (this._searchSeq || 0) + 1; return this._searchSeq; },
+
+// Toggle the "Searching…" indicator. Shown when a server request is in flight,
+// hidden once its (matching) response lands. Also makes sure the panel is on
+// screen so the indicator is visible for a first search.
+_searchSetLoading(on) {
+  const panel = document.getElementById('search-panel');
+  if (on && panel) { panel.style.display = 'flex'; this._searchEnsureVisible(); }
+  const el = document.getElementById('search-panel-loading');
+  if (el) el.style.display = on ? 'flex' : 'none';
 },
 
 // Results arrive here from the socket handler (public: server-paged, so
 // `results` is one page and `total` is the full count) and from DM local
 // search (`results` is the full match set, sliced client-side).
 _searchReceiveResults(key, { results, total, page, query, filters, isDM } = {}) {
+  this._searchSetLoading(false);
   const serverPaged = key === '__public__';
   this._searchSetState(key, {
     open: true,
@@ -141,7 +158,8 @@ _searchGoToPage(delta) {
   const next = Math.min(pages, Math.max(1, (st.page || 1) + delta));
   if (next === st.page) return;
   if (st.serverPaged) {
-    this.socket.emit('search-messages', { code: this.currentChannel, query: st.query, page: next, sort: st.sort || 'newest' });
+    this._searchSetLoading(true);
+    this.socket.emit('search-messages', { code: this.currentChannel, query: st.query, page: next, sort: st.sort || 'newest', token: this._searchNextToken() });
   } else {
     st.page = next;
     st.scrollTop = 0;
@@ -297,6 +315,7 @@ _sfpShowRoot() {
   document.getElementById('sfp-picker').style.display = 'none';
   this._sfpActive = null;
   this._sfpRenderSort();
+  this._sfpRenderRecent();
 },
 
 _sfpOpenPicker(type) {
@@ -347,6 +366,36 @@ _sfpRenderSort() {
   document.querySelectorAll('#sfp-sort .sfp-sort-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.sort === cur);
   });
+},
+
+// ── Recent searches (client-only, localStorage) ──
+_searchLoadRecent() {
+  try { return JSON.parse(localStorage.getItem('haven_recent_searches') || '[]'); } catch { return []; }
+},
+// Saved on Enter (an explicit commit) rather than every debounced keystroke, so
+// the list holds real searches, not the partials typed on the way there.
+_searchSaveRecent(query) {
+  query = (query || '').trim();
+  if (!query || this._searchContextKey() !== '__public__') return;
+  const list = [query, ...this._searchLoadRecent().filter(q => q !== query)].slice(0, 6);
+  try { localStorage.setItem('haven_recent_searches', JSON.stringify(list)); } catch { /* quota */ }
+},
+// Recent list lives at the top of the popover, only when the box is empty.
+_sfpRenderRecent() {
+  const box = document.getElementById('sfp-recent');
+  if (!box) return;
+  const input = document.getElementById('search-input');
+  const recent = (input && input.value.trim()) ? [] : this._searchLoadRecent();
+  if (!recent.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'flex';
+  box.innerHTML = `<span class="sfp-label">${t('header.recent')}</span>` +
+    recent.map(q => `<button type="button" class="sfp-recent-item" data-q="${this._escapeHtml(q)}">${this._escapeHtml(q)}</button>`).join('');
+  box.querySelectorAll('.sfp-recent-item').forEach(b => b.addEventListener('click', () => {
+    if (input) { input.value = b.dataset.q; input.focus(); }
+    document.getElementById('search-filter-popover').style.display = 'none';
+    this._searchSaveRecent(b.dataset.q);
+    this._searchRun(b.dataset.q);
+  }));
 },
 
 // Build the entry list for a filter type, prefix-filtered by term. Each entry:
