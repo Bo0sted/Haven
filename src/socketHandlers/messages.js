@@ -291,7 +291,9 @@ module.exports = function register(socket, ctx) {
     // ── Parse filters out of the query text ──
     const filters = { from: null, in: null, has: null };
     query = query.replace(/\bfrom:(\S+)/gi, (_, v) => { filters.from = v; return ''; });
-    query = query.replace(/\bin:#?(\S+)/gi, (_, v) => { filters.in = v; return ''; });
+    // A leading # means "this is a channel code" (unambiguous, what the filter
+    // picker appends); without it, in: is treated as a channel name.
+    query = query.replace(/\bin:(#?)(\S+)/gi, (_, hash, v) => { filters.in = v; filters.inIsCode = !!hash; return ''; });
     query = query.replace(/\bhas:(\S+)/gi, (_, v) => { filters.has = v.toLowerCase(); return ''; });
     query = query.trim();
 
@@ -314,7 +316,11 @@ module.exports = function register(socket, ctx) {
 
     // ── Access scope: non-DM channels the user belongs to ──
     if (filters.in) {
-      const target = db.prepare('SELECT id FROM channels WHERE name = ? COLLATE NOCASE AND is_dm = 0').get(filters.in);
+      // #code resolves by unique code (unambiguous); a bare name resolves by
+      // name, which is not unique so it takes the first match.
+      const target = filters.inIsCode
+        ? db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(filters.in)
+        : db.prepare('SELECT id FROM channels WHERE name = ? COLLATE NOCASE AND is_dm = 0').get(filters.in);
       if (!target) return socket.emit('search-results', empty);
       const isMember = db.prepare('SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ?').get(target.id, socket.user.id);
       if (!isMember) return socket.emit('search-results', empty);
@@ -354,9 +360,12 @@ module.exports = function register(socket, ctx) {
     }
 
     // FTS queries join through messages_fts so bm25() is available for ranking.
-    const fromSql = usesFts
+    // Channels are joined so each result carries the channel it came from (the
+    // results now span channels, and the client jumps into that channel).
+    const fromSql = (usesFts
       ? 'messages_fts JOIN messages m ON m.id = messages_fts.rowid LEFT JOIN users u ON m.user_id = u.id'
-      : 'messages m LEFT JOIN users u ON m.user_id = u.id';
+      : 'messages m LEFT JOIN users u ON m.user_id = u.id')
+      + ' LEFT JOIN channels c ON c.id = m.channel_id';
     const orderSql = sort === 'oldest' ? 'm.created_at ASC'
       : (sort === 'relevant' && usesFts) ? 'bm25(messages_fts)'
       : 'm.created_at DESC';
@@ -368,7 +377,8 @@ module.exports = function register(socket, ctx) {
       total = db.prepare(`SELECT count(*) AS n FROM ${fromSql} WHERE ${whereSql}`).get(...params).n;
       results = db.prepare(`
         SELECT m.id, m.content, m.created_at,
-               COALESCE(u.display_name, u.username, '[Deleted User]') AS username, u.id AS user_id
+               COALESCE(u.display_name, u.username, '[Deleted User]') AS username, u.id AS user_id,
+               c.name AS channel_name, c.code AS channel_code
         FROM ${fromSql}
         WHERE ${whereSql}
         ORDER BY ${orderSql}

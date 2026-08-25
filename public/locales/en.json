@@ -489,6 +489,10 @@
     "search_page": "Page {{page}} of {{pages}}",
     "search_stale": "A channel or role you have has changed, please refresh the search to continue.",
     "search_refresh": "Refresh search",
+    "filter_by": "Filter by",
+    "filter_placeholder": "Filter...",
+    "filter_no_matches": "No matches",
+    "filter_toggle": "Filters",
     "messages": {
       "edited": "(edited)",
       "edited_at": "Edited at {{date}}",

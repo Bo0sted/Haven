@@ -309,7 +309,27 @@
           </div>
           <div class="search-container" id="search-container" style="display:none">
             <input type="text" id="search-input" class="search-input" data-i18n-placeholder="header.search_placeholder" placeholder="Search... from:user in:#channel has:image" maxlength="200">
+            <button id="search-filter-btn" class="icon-btn small" data-i18n-title="header.filter_toggle" title="Filters">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            </button>
             <button id="search-close-btn" class="icon-btn small" title="Close search">&times;</button>
+            <!-- Filter picker popover — appears with the search box, appends
+                 filter tokens client-side. Public search only. (phase 3) -->
+            <div id="search-filter-popover" class="search-filter-popover" style="display:none">
+              <div class="sfp-root" id="sfp-root">
+                <span class="sfp-label" data-i18n="header.filter_by">Filter by</span>
+                <button type="button" class="sfp-chip" data-sfp-filter="from">from:</button>
+                <button type="button" class="sfp-chip" data-sfp-filter="in">in:</button>
+                <button type="button" class="sfp-chip" data-sfp-filter="has">has:</button>
+              </div>
+              <div class="sfp-picker" id="sfp-picker" style="display:none">
+                <div class="sfp-picker-head">
+                  <button type="button" class="sfp-back" id="sfp-back" title="Back">‹</button>
+                  <input type="text" class="sfp-filter-input" id="sfp-filter-input" autocomplete="off" spellcheck="false" data-i18n-placeholder="header.filter_placeholder" placeholder="Filter...">
+                </div>
+                <div class="sfp-list" id="sfp-list"></div>
+              </div>
+            </div>
           </div>
           <!-- Update available banner -->
           <a id="update-banner" class="update-banner" href="#" style="display:none" target="_blank" rel="noopener">

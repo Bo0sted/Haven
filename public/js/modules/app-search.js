@@ -16,6 +16,8 @@
 // swaps the slice for a server LIMIT/OFFSET page fetch. See search-overhaul.md.
 
 const SEARCH_PAGE_SIZE = 25;
+// has: options the server understands. Seeded here so adding one is a one-liner.
+const SEARCH_HAS_OPTIONS = ['image', 'file', 'link', 'video'];
 
 export default {
 
@@ -42,6 +44,8 @@ _searchInit() {
     const st = this._searchState[this._searchContextKey()];
     if (st) st.scrollTop = e.target.scrollTop;
   });
+
+  this._searchFilterInit();
 },
 
 // Which context the open channel belongs to.
@@ -74,6 +78,7 @@ _searchToggle() {
     const input = document.getElementById('search-input');
     if (input) { input.value = st?.query || ''; input.focus(); }
     this._searchRenderPanel();
+    this._sfpSync();
   }
 },
 
@@ -87,6 +92,8 @@ _searchClose() {
   if (sc) sc.style.display = 'none';
   const input = document.getElementById('search-input');
   if (input) input.value = '';
+  const pop = document.getElementById('search-filter-popover');
+  if (pop) pop.style.display = 'none';
 },
 
 // Kick off a query for the current context. Public channels hit the server
@@ -149,6 +156,19 @@ _searchRerun() {
   if (st && st.query) this._searchRun(st.query);
 },
 
+// Jump to a result's message. Global search spans channels, so switch to the
+// message's channel first when it isn't the current one, then jump once its
+// history loads (same pattern as the ?channel=&message= deep link).
+_searchJumpTo(code, msgId) {
+  if (!msgId) return;
+  if (code && code !== this.currentChannel) {
+    this.switchChannel(code);
+    setTimeout(() => this._jumpToMessage(msgId), 600);
+  } else {
+    this._jumpToMessage(msgId);
+  }
+},
+
 // Called from switchChannel — hide/show the panel for the new context.
 _searchOnChannelSwitch() {
   const key = this._searchContextKey();
@@ -165,6 +185,8 @@ _searchOnChannelSwitch() {
     if (sc) sc.style.display = 'none';
     if (input) input.value = '';
   }
+  // Popover follows the box and only shows for public channels (hidden in DMs).
+  this._sfpSync();
 },
 
 // channels-list arrived — the user's channel set changing (add/remove) can make
@@ -211,6 +233,116 @@ _searchRestoreSidebar() {
     this._applySidebarCollapsed?.(localStorage.getItem('haven-sidebar-collapsed') === '1');
     this._searchForcedExpand = false;
   }
+},
+
+// ── Filter picker popover (phase 3) ──────────────────────────────────────
+// Appears with the search box on public channels. Clicking a filter chip opens
+// a client-rendered list (members / channels / has options) with a prefix
+// filter; picking one appends its token to the search input and re-runs. Lists
+// come from client state only (this._lastOnlineUsers, this.channels) so they
+// naturally reflect what the user can see; the server still re-authorizes.
+_searchFilterInit() {
+  const pop = document.getElementById('search-filter-popover');
+  if (!pop) return;
+  pop.querySelectorAll('.sfp-chip').forEach(chip => {
+    chip.addEventListener('click', () => this._sfpOpenPicker(chip.dataset.sfpFilter));
+  });
+  document.getElementById('sfp-back')?.addEventListener('click', () => this._sfpShowRoot());
+  const fbox = document.getElementById('sfp-filter-input');
+  fbox?.addEventListener('input', () => this._sfpRenderList(this._sfpActive, fbox.value.trim()));
+  // Filter button toggles the popover open/closed (separate from the 🔍 button).
+  document.getElementById('search-filter-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const hidden = pop.style.display === 'none' || !pop.style.display;
+    if (hidden) { this._sfpShowRoot(); pop.style.display = 'block'; }
+    else pop.style.display = 'none';
+  });
+  // Click outside the search box hides the popover (without closing search).
+  document.addEventListener('click', (e) => {
+    if (pop.style.display === 'none') return;
+    const sc = document.getElementById('search-container');
+    const toggle = document.getElementById('search-toggle-btn');
+    if (sc && !sc.contains(e.target) && !toggle?.contains(e.target)) pop.style.display = 'none';
+  });
+},
+
+// Show the popover with the search box, but only for public channels — filters
+// don't apply to local DM search.
+_sfpSync() {
+  const pop = document.getElementById('search-filter-popover');
+  if (!pop) return;
+  const ch = (this.channels || []).find(c => c.code === this.currentChannel);
+  const open = document.getElementById('search-container')?.style.display === 'flex';
+  const show = open && !(ch && ch.is_dm);
+  const btn = document.getElementById('search-filter-btn');
+  if (btn) btn.style.display = show ? '' : 'none';
+  if (show) { this._sfpShowRoot(); pop.style.display = 'block'; }
+  else pop.style.display = 'none';
+},
+
+_sfpShowRoot() {
+  document.getElementById('sfp-root').style.display = 'flex';
+  document.getElementById('sfp-picker').style.display = 'none';
+  this._sfpActive = null;
+},
+
+_sfpOpenPicker(type) {
+  this._sfpActive = type;
+  document.getElementById('sfp-root').style.display = 'none';
+  document.getElementById('sfp-picker').style.display = 'flex';
+  const fbox = document.getElementById('sfp-filter-input');
+  if (fbox) fbox.value = '';
+  this._sfpRenderList(type, '');
+  fbox?.focus();
+},
+
+// Build the entry list for a filter type, prefix-filtered by term. Each entry:
+// { label, sub, token }. Dumb startsWith prefix match, no fuzzy search.
+_sfpRenderList(type, term) {
+  const list = document.getElementById('sfp-list');
+  if (!list) return;
+  const p = (term || '').toLowerCase();
+  let entries = [];
+
+  if (type === 'from') {
+    const seen = new Set();
+    entries = (this._lastOnlineUsers || [])
+      .filter(u => u && u.username && !seen.has(u.username) && seen.add(u.username))
+      .map(u => ({ label: this._getNickname(u.id, u.username), sub: '@' + u.username, token: `from:${u.username}`, key: u.username }))
+      .filter(e => !p || e.key.toLowerCase().startsWith(p) || e.label.toLowerCase().startsWith(p));
+  } else if (type === 'in') {
+    entries = (this.channels || [])
+      .filter(c => c && !c.is_dm)
+      .map(c => ({ label: `#${c.name}`, sub: `(${c.display_code || c.code})`, token: `in:#${c.code}`, key: c.name || '' }))
+      .filter(e => !p || e.key.toLowerCase().startsWith(p));
+  } else if (type === 'has') {
+    entries = SEARCH_HAS_OPTIONS
+      .map(h => ({ label: h.charAt(0).toUpperCase() + h.slice(1), sub: `has:${h}`, token: `has:${h}`, key: h }))
+      .filter(e => !p || e.key.startsWith(p));
+  }
+
+  if (!entries.length) {
+    list.innerHTML = `<div class="sfp-empty">${t('header.filter_no_matches')}</div>`;
+    return;
+  }
+  list.innerHTML = entries.slice(0, 100).map(e =>
+    `<div class="sfp-item" data-token="${this._escapeHtml(e.token)}">
+       <span>${this._escapeHtml(e.label)}</span><span class="sfp-item-sub">${this._escapeHtml(e.sub)}</span>
+     </div>`).join('');
+  list.querySelectorAll('.sfp-item').forEach(item => {
+    item.addEventListener('click', () => this._sfpAppend(item.dataset.token));
+  });
+},
+
+// Append a filter token to the search input and re-run the search.
+_sfpAppend(token) {
+  const input = document.getElementById('search-input');
+  if (!input) return;
+  const base = input.value.replace(/\s+$/, '');
+  input.value = (base ? base + ' ' : '') + token + ' ';
+  input.focus();
+  this._sfpShowRoot();
+  this._searchRun(input.value.trim());
 },
 
 _searchRenderPanel() {
@@ -264,17 +396,25 @@ _searchRenderPanel() {
 
   list.innerHTML = total === 0
     ? `<p class="muted-text" style="padding:12px">${t('header.search_no_results')}</p>`
-    : pageRows.map(r => `
-        <div class="search-result-item" data-msg-id="${r.id}">
+    : pageRows.map(r => {
+        // Channel header per result (public/global search). DM local results
+        // have no channel, so it's omitted there.
+        const chan = r.channel_code
+          ? `<div class="search-result-channel">#${this._escapeHtml(r.channel_name || r.channel_code)} <span class="search-result-channel-code">(${this._escapeHtml(r.channel_code)})</span></div>`
+          : '';
+        return `
+        <div class="search-result-item" data-msg-id="${r.id}" data-channel-code="${this._escapeHtml(r.channel_code || '')}">
+          ${chan}
           <span class="search-result-author" style="color:${this._getUserColor(r.username)}">${this._escapeHtml(this._getNickname(r.user_id, r.username))}</span>
           <span class="search-result-time">${this._formatTime(r.created_at)}</span>
           <div class="search-result-content">${highlightQuery ? this._highlightSearch(this._escapeHtml(r.content), highlightQuery) : this._escapeHtml(r.content)}</div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
 
   list.querySelectorAll('.search-result-item').forEach(item => {
     item.addEventListener('click', () => {
       const msgId = parseInt(item.dataset.msgId, 10);
-      this._jumpToMessage(msgId);
+      this._searchJumpTo(item.dataset.channelCode, msgId);
     });
   });
 
