@@ -2225,16 +2225,24 @@ _setupSocketListeners() {
   });
 
   // ── Search results ─────────────────────────────────
-  // Server channel search always targets a non-DM channel (the server early-
-  // returns for DMs), so results belong to the shared public context. The
-  // panel/pager/cache live in app-search.js. (search-overhaul phase 1)
+  // Global FTS search is server-paged; results belong to the shared public
+  // context (DMs are searched locally). total/page drive the pager. The
+  // panel/pager/cache live in app-search.js. (search-overhaul phase 2)
   this.socket.on('search-results', (data) => {
     this._searchReceiveResults('__public__', {
       results: data.results || [],
+      total: data.total || 0,
+      page: data.page || 1,
       query: data.query,
       filters: data.filters || null,
       isDM: !!data.isDM,
     });
+  });
+
+  // Active tokenizer's minimum query length (trigram 3, word tokenizers 2), so
+  // the input gate matches what the server can actually match. (phase 2)
+  this.socket.on('search-config', (d) => {
+    this._searchMinChars = (d && d.minChars) || 2;
   });
 
   // ── High Scores ──────────────────────────────────

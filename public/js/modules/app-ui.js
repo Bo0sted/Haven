@@ -1467,7 +1467,11 @@ _setupUI() {
   document.getElementById('search-input').addEventListener('input', (e) => {
     clearTimeout(searchTimeout);
     const q = e.target.value.trim();
-    if (q.length >= 2 && this.currentChannel) {
+    // DMs match substrings locally (2 chars is fine); public search uses the
+    // server tokenizer's minimum (trigram needs 3). (search-overhaul phase 2)
+    const ch = (this.channels || []).find(c => c.code === this.currentChannel);
+    const min = (ch && ch.is_dm) ? 2 : (this._searchMinChars || 2);
+    if (q.length >= min && this.currentChannel) {
       searchTimeout = setTimeout(() => this._searchRun(q), 400);
     } else if (!q) {
       document.getElementById('search-panel').style.display = 'none';

@@ -89,29 +89,33 @@ _searchClose() {
   if (input) input.value = '';
 },
 
-// Kick off a query for the current context. Keeps the existing query paths:
-// server `search-messages` for channels, local cache walk for DMs.
-_searchRun(query) {
+// Kick off a query for the current context. Public channels hit the server
+// (global FTS, one page at a time); DMs walk the local decrypted cache.
+_searchRun(query, page = 1) {
   const key = this._searchContextKey();
   this._searchSetState(key, { open: true, query, stale: false });
   const ch = (this.channels || []).find(c => c.code === this.currentChannel);
   if (ch && ch.is_dm) {
     this._searchDmCacheLocally(query);
   } else {
-    this.socket.emit('search-messages', { code: this.currentChannel, query });
+    this.socket.emit('search-messages', { code: this.currentChannel, query, page });
   }
 },
 
-// Results arrive here from both the socket handler and DM local search.
-// key identifies the context the results belong to.
-_searchReceiveResults(key, { results, query, filters, isDM } = {}) {
+// Results arrive here from the socket handler (public: server-paged, so
+// `results` is one page and `total` is the full count) and from DM local
+// search (`results` is the full match set, sliced client-side).
+_searchReceiveResults(key, { results, total, page, query, filters, isDM } = {}) {
+  const serverPaged = key === '__public__';
   this._searchSetState(key, {
     open: true,
     query: query != null ? query : (this._searchGetState(key)?.query || ''),
     results: results || [],
     filters: filters || null,
     isDM: !!isDM,
-    page: 1,
+    serverPaged,
+    total: serverPaged ? (total || 0) : (results ? results.length : 0),
+    page: page || 1,
     scrollTop: 0,
     stale: false,
   });
@@ -119,17 +123,23 @@ _searchReceiveResults(key, { results, query, filters, isDM } = {}) {
   if (key === this._searchContextKey()) this._searchRenderPanel();
 },
 
-// Prev/next pager.
+// Prev/next pager. Server-paged contexts re-fetch the page; local (DM) ones
+// just slice the cached matches and re-render.
 _searchGoToPage(delta) {
   const key = this._searchContextKey();
   const st = this._searchGetState(key);
   if (!st) return;
-  const pages = Math.max(1, Math.ceil((st.results?.length || 0) / SEARCH_PAGE_SIZE));
+  const total = st.serverPaged ? (st.total || 0) : (st.results?.length || 0);
+  const pages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
   const next = Math.min(pages, Math.max(1, (st.page || 1) + delta));
   if (next === st.page) return;
-  st.page = next;
-  st.scrollTop = 0;
-  this._searchRenderPanel();
+  if (st.serverPaged) {
+    this.socket.emit('search-messages', { code: this.currentChannel, query: st.query, page: next });
+  } else {
+    st.page = next;
+    st.scrollTop = 0;
+    this._searchRenderPanel();
+  }
 },
 
 // Re-run the stored query after invalidation (the refresh banner button).
@@ -227,12 +237,14 @@ _searchRenderPanel() {
   }
   if (banner) banner.style.display = 'none';
 
+  // Server-paged (public) contexts already hold just the current page and a
+  // separate total; local (DM) contexts hold every match and slice here.
   const results = st.results || [];
-  const total = results.length;
+  const total = st.serverPaged ? (st.total || 0) : results.length;
   const pages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
   st.page = Math.min(st.page || 1, pages);
   const start = (st.page - 1) * SEARCH_PAGE_SIZE;
-  const pageRows = results.slice(start, start + SEARCH_PAGE_SIZE);
+  const pageRows = st.serverPaged ? results : results.slice(start, start + SEARCH_PAGE_SIZE);
 
   // Header count (+ filter tags for channel searches).
   const qHtml = this._escapeHtml(st.query || '');
