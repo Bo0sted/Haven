@@ -732,6 +732,7 @@
     "language_section": {
       "title": "Language",
       "label": "Language",
+      "auto": "Automatic",
       "hint": "Changes apply immediately"
     },
     "layout_density": {
