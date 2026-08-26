@@ -1945,7 +1945,7 @@ _setupSoundManagement() {
           search.addEventListener('input', () => this._renderSoundboardSidebar(search.value.trim()));
         }
       }
-      if (toggleBtn) { toggleBtn.style.display = ''; toggleBtn.textContent = '\u276E'; }
+      if (toggleBtn) { toggleBtn.style.display = ''; this._setSbToggleArrow(toggleBtn, true); }
       window._updateSbToggleRight?.();
     } else {
       // Hide sidebar panel and toggle button
@@ -1973,7 +1973,7 @@ _setupSoundManagement() {
       // Show the toggle arrow button if sidebar mode is on
       if (this._soundboardSidebarMode) {
         toggleBtn.style.display = '';
-        toggleBtn.textContent = '\u276F'; // pointing right = panel is closed
+        this._setSbToggleArrow(toggleBtn, false);
       } else {
         toggleBtn.style.display = 'none';
       }
@@ -1991,7 +1991,13 @@ _setupSoundManagement() {
       const voiceBtn   = document.getElementById('sidebar-toggle-btn');
       const sbBtn      = document.getElementById('sb-sidebar-toggle-btn');
       const sbOpen     = sbPanel && !sbPanel.classList.contains('sb-hidden');
-      const voiceOpen  = rightSb && !rightSb.classList.contains('collapsed');
+      // Below 900px the voice/users panel stops being a column in the row and
+      // becomes a fixed overlay driven by the Members button. It still reports
+      // its full width, so counting it pushed this button a panel's width in
+      // from the edge and left it sitting alone in the message area, open or
+      // closed. Out of flow means it takes no horizontal space. (#5534)
+      const voiceInFlow = rightSb && !['fixed', 'absolute'].includes(getComputedStyle(rightSb).position);
+      const voiceOpen  = voiceInFlow && !rightSb.classList.contains('collapsed');
 
       // `useRendered=false` places the button off the panel's *requested*
       // width (style.width / default) so it slides smoothly while the panel's
@@ -2279,6 +2285,16 @@ _closeSoundboardForVoiceLeave() {
   }
 },
 
+// Both dock handles sit on the right edge with their panel to the right, so
+// the arrow shows which way that panel moves when clicked: an open panel will
+// slide right and shut, a closed one will slide left and open. The members
+// handle already read that way and the soundboard one was doing the opposite,
+// which looked backwards sitting directly under it. (#5534)
+_setSbToggleArrow(btn, open) {
+  if (!btn) return;
+  (btn.querySelector('.sb-toggle-arrow') || btn).textContent = open ? '\u276F' : '\u276E';
+},
+
 _toggleSoundboardSidebar() {
   const panel = document.getElementById('sb-sidebar-panel');
   const btn = document.getElementById('sb-sidebar-toggle-btn');
@@ -2286,7 +2302,7 @@ _toggleSoundboardSidebar() {
   const isNowHidden = !panel.classList.contains('sb-hidden');
   panel.classList.toggle('sb-hidden', isNowHidden);
   localStorage.setItem('haven_sb_sidebar_hidden', isNowHidden ? '1' : '0');
-  if (btn) btn.textContent = isNowHidden ? '\u276F' : '\u276E';
+  this._setSbToggleArrow(btn, !isNowHidden);
   if (!isNowHidden) {
     this._renderSoundboardSidebar();
     const search = document.getElementById('sb-sidebar-search');

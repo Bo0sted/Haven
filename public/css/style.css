@@ -13240,6 +13240,24 @@ video:-webkit-full-screen {
   color: var(--text-primary);
   background: var(--bg-tertiary);
 }
+/* Stack a small note over the arrow. The members handle sits directly above
+   this one in the same spot at the same size, and with nothing but an arrow on
+   each there was no way to tell them apart short of remembering which was
+   which. Only this one is marked, so one has a note and one does not. (#5534) */
+.sb-sidebar-toggle-btn {
+  flex-direction: column;
+  gap: 0.0625rem;
+  height: 2.75rem;
+}
+.sb-sidebar-toggle-btn .sb-toggle-mark {
+  font-size: 0.625rem;
+  line-height: 1;
+  opacity: 0.75;
+}
+.sb-sidebar-toggle-btn .sb-toggle-arrow {
+  font-size: 0.6875rem;
+  line-height: 1;
+}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    WHITELIST PANEL

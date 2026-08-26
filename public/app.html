@@ -552,8 +552,10 @@
       </main>
 
       <!-- ─── Soundboard Sidebar (twin to voice/users — sits directly LEFT of right-sidebar) ─── -->
-      <!-- Soundboard toggle arrow — fixed, sits at left edge of soundboard panel -->
-      <button id="sb-sidebar-toggle-btn" class="sb-sidebar-toggle-btn" style="display:none" title="Toggle soundboard panel">&#x276F;</button>
+      <!-- Soundboard toggle arrow, fixed, sits at left edge of soundboard panel.
+           The note marks it apart from the members handle right above it, which
+           is otherwise the same little arrow in the same place. (#5534) -->
+      <button id="sb-sidebar-toggle-btn" class="sb-sidebar-toggle-btn" style="display:none" title="Toggle soundboard panel"><span class="sb-toggle-mark" aria-hidden="true">♪</span><span class="sb-toggle-arrow">&#x276E;</span></button>
       <aside id="sb-sidebar-panel" class="sb-sidebar-panel sb-hidden">
         <div id="sb-sidebar-resize-handle" class="sb-sidebar-resize-handle"></div>
         <div class="sb-sidebar-header">&#x1F3B5; Soundboard</div>
