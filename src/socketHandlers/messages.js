@@ -294,6 +294,13 @@ module.exports = function register(socket, ctx) {
     let query = typeof data.query === 'string' ? data.query.trim() : '';
     if (!query) return;
 
+    // Per-account rate limit on the expensive FTS path. On trip we tell the
+    // client to stop its spinner and keep the results it already has; the
+    // toast text is rendered client-side for translation. (search-overhaul)
+    if (floodCheck('search')) {
+      return socket.emit('search-throttled', { token: data.token });
+    }
+
     const tokenizer = getActiveTokenizer();
     const page = (Number.isInteger(data.page) && data.page > 0) ? data.page : 1;
     const sort = ['newest', 'oldest', 'relevant'].includes(data.sort) ? data.sort : 'newest';
@@ -427,6 +434,21 @@ module.exports = function register(socket, ctx) {
     results.forEach(r => {
       if (r.created_at && !r.created_at.endsWith('Z')) r.created_at = utcStamp(r.created_at);
     });
+
+    // Thread reply counts for this page's results. A result is a thread parent
+    // when other messages carry thread_id = its id. One grouped COUNT over the
+    // 25 ids (same idiom as the channel loader) drives a display-only badge on
+    // the client. (search-overhaul phase 3)
+    const resultIds = results.map(r => r.id);
+    if (resultIds.length) {
+      const ph = resultIds.map(() => '?').join(',');
+      const counts = db.prepare(
+        `SELECT thread_id, COUNT(*) AS n FROM messages WHERE thread_id IN (${ph}) GROUP BY thread_id`
+      ).all(...resultIds);
+      const countMap = new Map(counts.map(c => [c.thread_id, c.n]));
+      results.forEach(r => { r.thread_count = countMap.get(r.id) || 0; });
+    }
+
     socket.emit('search-results', { results, total, page, query: data.query, filters, token });
   });
 

@@ -616,7 +616,10 @@
           <div id="search-panel-list" class="search-panel-list"></div>
           <div id="search-panel-pager" class="search-panel-pager" style="display:none">
             <button id="search-page-prev" class="icon-btn small" title="Previous page">‹</button>
-            <span id="search-page-label" class="search-page-label"></span>
+            <span class="search-page-label">
+              <input id="search-page-input" class="search-page-input" type="text" inputmode="numeric" value="1" aria-label="Page number">
+              <span id="search-page-total" class="search-page-total"></span>
+            </span>
             <button id="search-page-next" class="icon-btn small" title="Next page">›</button>
           </div>
         </div>

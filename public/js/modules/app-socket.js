@@ -2034,6 +2034,10 @@ _setupSocketListeners() {
         msgEl.remove();
       });
     }
+    // Drop the row from the search panel too, regardless of which channel is
+    // open — results are cross-channel and this only fires on a confirmed
+    // delete, so removal stays truthful. (search-overhaul phase 3)
+    this._searchRemoveResult?.(data.channelCode, data.messageId);
   });
 
   // ── Low disk warning (admins only, #5505) ────────
@@ -2413,6 +2417,14 @@ _setupSocketListeners() {
       filters: data.filters || null,
       isDM: !!data.isDM,
     });
+  });
+
+  // The server refused a search because this account hit the per-account rate
+  // limit. Clear the spinner and toast, but leave the existing results in
+  // place. Token-gated so a stale refusal can't kill a fresher spinner.
+  this.socket.on('search-throttled', (data) => {
+    if (data && data.token != null && data.token !== this._searchSeq) return;
+    this._searchOnThrottled();
   });
 
   // Active tokenizer's minimum query length (trigram 3, word tokenizers 2), so

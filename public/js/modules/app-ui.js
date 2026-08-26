@@ -2002,8 +2002,10 @@ _setupUI() {
     }
   });
 
-  // Image click in thread panel and DM PiP — same lightbox with container-aware navigation
-  for (const containerId of ['thread-messages', 'dm-pip-messages']) {
+  // Image click in thread panel, DM PiP, and the search results panel — same
+  // lightbox with container-aware navigation, spoiler reveal, and image
+  // right-click menu. Search reuses this wholesale. (search-overhaul phase 3)
+  for (const containerId of ['thread-messages', 'dm-pip-messages', 'search-panel-list']) {
     const el = document.getElementById(containerId);
     if (el) {
       el.addEventListener('click', (e) => {

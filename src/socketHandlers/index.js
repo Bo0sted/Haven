@@ -1647,6 +1647,13 @@ function setupSocketHandlers(io, db, opts = {}) {
     const FLOOD_LIMITS = {
       message: { max: 10, windowMs: 10000 },
       event:   { max: 60, windowMs: 10000 },
+      // Search is far heavier than the typing/presence traffic the event
+      // bucket was sized for (FTS MATCH + count(*) + joins across every
+      // channel you're in), so it gets its own tighter per-account cap on
+      // top of the shared event budget. Sized just above a heavy-but-legit
+      // 10s of use (refine + a run of pagination + a sort or two); the input
+      // is debounced 400ms so typing can't spam it. (search-overhaul)
+      search:  { max: 10, windowMs: 10000 },
     };
 
     function floodCheck(bucket) {
