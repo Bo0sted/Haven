@@ -601,7 +601,7 @@ There are four sources, and **you only need as many as you want**:
 | **Haven's music player** | None — works immediately | Whatever is playing in a Haven voice channel |
 | **Last.fm** ⭐ | Server admin adds one API key; each user enters their username | Spotify, Apple Music, YouTube Music, Navidrome, Plex — anything that scrobbles |
 | **Steam** | Server admin adds one API key; each user links their account | Games |
-| **Spotify** | Server admin adds a client ID + secret; each user signs in | Spotify only |
+| **Spotify** | Server admin adds a client ID + secret (requires Spotify Premium); each user signs in | Spotify only |
 
 ### Why Last.fm is the recommended music source
 
@@ -609,9 +609,11 @@ Linking is just a username — no sign-in redirect, nothing stored, no per-user
 cap. And because Spotify, Apple Music, YouTube Music, Navidrome and Plex all
 scrobble to Last.fm, one connection covers whatever you actually listen with.
 
-Spotify's own integration works, but a Spotify app in development mode is
-limited to a small number of listed users, so it does not scale to a whole
-server without extra approval from Spotify.
+Spotify's own integration works, but there are two catches. A Spotify app in
+development mode is limited to a small number of listed users, so it does not
+scale to a whole server without extra approval from Spotify. And as of 2026
+Spotify restricts the Web API to Premium accounts, so the admin creating the
+app needs a paid subscription (#5528). Last.fm has neither restriction.
 
 > Scrobbling has to be switched on in Last.fm's own settings first. Haven's
 > setup panel explains how for each service.

@@ -419,9 +419,11 @@ _renderConnections() {
     // Spotify is collapsed behind a disclosure. It needs a registered developer
     // app and its development-mode user allowlist caps it at roughly 25 people,
     // so steering everyone here by default sends them down the hardest path for
-    // a worse result than Last.fm.
+    // a worse result than Last.fm. Spotify then restricted the Web API to
+    // Premium accounts (#5528), which makes that even more true: the steps used
+    // to say a free account was fine, and following them on one now dead-ends.
     { id: 'spotify', icon: '🎧', name: 'Spotify', advanced: true,
-      blurb: 'Direct connection. Harder to set up and limited to ~25 users — prefer Last.fm above.',
+      blurb: 'Direct connection. Needs a Spotify Premium account, is harder to set up, and is limited to ~25 users. Prefer Last.fm above.',
       help: 'https://developer.spotify.com/dashboard',
       helpLabel: 'Open the Spotify developer dashboard',
       // Two things trip people up here, both worth stating outright:
@@ -433,7 +435,7 @@ _renderConnections() {
       //     registering a name so Spotify knows who is asking.
       steps: [
         'Use the link above — it goes to <b>developer.spotify.com</b>.',
-        'Sign in with your normal Spotify account (free works). Accept the developer terms if it asks.',
+        'Sign in with your Spotify account. <b>This needs Spotify Premium.</b> As of 2026 the Web API is no longer available on free accounts, so the rest of these steps will not work without it (#5528). Accept the developer terms if it asks.',
         'Click <b>Create app</b>. You are not building software — this just registers a name. Call it "Haven".',
         'Paste this into <b>Redirect URI</b>:<code class="setup-uri">' + location.origin + '/connect/spotify/callback</code>',
         'Tick <b>Web API</b>, save, then open <b>Settings</b> on the app you just made.',
