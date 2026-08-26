@@ -599,6 +599,9 @@ _setupPfpBorderObserver() {
     // Freeze animated avatar / border images to their first frame per the owner's policy.
     if (node.matches && node.matches('img[data-animate]:not([data-anim-done])')) this._freezePfpImg(node);
     if (node.querySelectorAll) node.querySelectorAll('img[data-animate]:not([data-anim-done])').forEach((img) => this._freezePfpImg(img));
+    // (#5526) chat images ride the same observer
+    if (node.matches && node.matches('img.chat-image:not([data-chat-anim-done])')) this._freezeChatImg(node);
+    if (node.querySelectorAll) node.querySelectorAll('img.chat-image:not([data-chat-anim-done])').forEach((img) => this._freezeChatImg(img));
   };
   const obs = new MutationObserver((muts) => {
     for (const m of muts) m.addedNodes.forEach(foldIn);
@@ -607,12 +610,116 @@ _setupPfpBorderObserver() {
   this._pfpBorderObserver = obs;
   document.querySelectorAll('.pfp-border:not([data-pfp-done])').forEach((el) => this._foldPfpBorder(el));
   document.querySelectorAll('img[data-animate]:not([data-anim-done])').forEach((img) => this._freezePfpImg(img));
+  this._setupChatAnimHover();
+  document.querySelectorAll('img.chat-image:not([data-chat-anim-done])').forEach((img) => this._freezeChatImg(img));
 },
 
 // Wrap an avatar's HTML with its owner's border overlay (or return it unchanged).
 _avatarWithBorder(avatarHtml, user) {
   const marker = user ? this._pfpBorderMarker(user.border, user.borderTransform, user.animateProfile) : '';
   return marker ? `<span class="pfp-host">${avatarHtml}${marker}</span>` : avatarHtml;
+},
+
+// ── Animated chat images (#5526) ─────────────────────────────────────────
+// Same idea as the animated-pfp policy below, pointed at images in messages.
+// Reuses _frozenFrame, so a GIF posted twice is only ever captured once.
+//
+// Defaults to 'always', i.e. exactly how Haven behaved before. An avatar is
+// ambient and someone else chose it for you; a GIF in chat is content a person
+// deliberately posted, so this stays off until you ask for it.
+//
+// The URL to test is not always the src: a remote image is served through
+// /api/media-proxy, whose URL ends in a token rather than .gif. data-mp-origin
+// carries the real address alongside it, so that is what gets checked. Proxied
+// images are same-origin, which is also what keeps the canvas readable.
+
+_viewerChatAnimPref() {
+  try {
+    const v = localStorage.getItem('haven_animate_chat');
+    if (v === 'hover' || v === 'never') return v;
+  } catch { /* localStorage unavailable */ }
+  return 'always';
+},
+
+_setViewerChatAnimPref(pref) {
+  const value = (pref === 'hover' || pref === 'never') ? pref : 'always';
+  try { localStorage.setItem('haven_animate_chat', value); } catch { /* ignore */ }
+  document.querySelectorAll('#animate-chat-picker .density-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.animchat === value);
+  });
+  this._applyViewerChatAnimPref();
+},
+
+// The address to judge "can this animate" by, unwrapping the media proxy.
+_chatImgRealUrl(img) {
+  return img.getAttribute('data-mp-origin') || img.getAttribute('src') || '';
+},
+
+_applyViewerChatAnimPref() {
+  const pref = this._viewerChatAnimPref();
+  document.querySelectorAll('img.chat-image[data-chat-animated-src]').forEach((img) => {
+    if (pref === 'always') {
+      img.dataset.chatAnimPlaying = '1';
+      if (img.getAttribute('src') !== img.dataset.chatAnimatedSrc) img.src = img.dataset.chatAnimatedSrc;
+      return;
+    }
+    const live = pref === 'hover' && img.matches(':hover');
+    if (live) { img.dataset.chatAnimPlaying = '1'; return; }
+    img.dataset.chatAnimPlaying = '';
+    this._frozenFrame(img.dataset.chatAnimatedSrc).then((f) => {
+      if (f && img.dataset.chatAnimPlaying !== '1') img.src = f;
+    });
+  });
+  // Nothing is frozen yet on a fresh switch away from 'always', so sweep too.
+  if (pref !== 'always') {
+    document.querySelectorAll('img.chat-image:not([data-chat-anim-done])').forEach((img) => this._freezeChatImg(img));
+  }
+},
+
+_freezeChatImg(img) {
+  if (!img || img.dataset.chatAnimDone) return;
+  const pref = this._viewerChatAnimPref();
+  if (pref === 'always') return;                 // leave it alone, and leave it re-checkable
+  const src = img.getAttribute('src') || '';
+  if (!src || src.startsWith('data:')) return;   // not loaded yet, or already a frozen frame
+  if (!this._animCanAnimate(this._chatImgRealUrl(img))) { img.dataset.chatAnimDone = '1'; return; }
+  img.dataset.chatAnimDone = '1';
+  img.dataset.chatAnimatedSrc = src;
+  if (img.matches(':hover')) { img.dataset.chatAnimPlaying = '1'; return; }
+  this._frozenFrame(src).then((frozen) => {
+    if (frozen && img.dataset.chatAnimPlaying !== '1' && img.getAttribute('src') === src) img.src = frozen;
+  });
+},
+
+// Hover to play, leave to re-freeze. Bound once, delegated, so it keeps working
+// across every re-render without rebinding per image.
+_setupChatAnimHover() {
+  if (this._chatAnimHoverBound) return;
+  this._chatAnimHoverBound = true;
+  const over = (e) => {
+    const img = e.target;
+    if (!img || !img.matches || !img.matches('img.chat-image[data-chat-animated-src]')) return;
+    if (this._viewerChatAnimPref() !== 'hover') return;
+    img.dataset.chatAnimPlaying = '1';
+    img.src = img.dataset.chatAnimatedSrc;   // reassigning restarts from frame 1
+  };
+  const out = (e) => {
+    const img = e.target;
+    if (!img || !img.matches || !img.matches('img.chat-image[data-chat-animated-src]')) return;
+    if (this._viewerChatAnimPref() !== 'hover') return;
+    img.dataset.chatAnimPlaying = '';
+    this._frozenFrame(img.dataset.chatAnimatedSrc).then((f) => {
+      if (f && img.dataset.chatAnimPlaying !== '1') img.src = f;
+    });
+  };
+  document.addEventListener('mouseover', over, true);
+  document.addEventListener('mouseout', out, true);
+  // A GIF that has not finished loading has no frame to capture yet, so catch
+  // it on load as well as when it is inserted.
+  document.addEventListener('load', (e) => {
+    const img = e.target;
+    if (img && img.matches && img.matches('img.chat-image:not([data-chat-anim-done])')) this._freezeChatImg(img);
+  }, true);
 },
 
 // ── Animated-profile policy (freeze animated pfps to their first frame) ──
@@ -3603,6 +3710,23 @@ _setupAnimatePfpPicker() {
     const btn = e.target.closest('.density-btn');
     if (!btn) return;
     this._setViewerAnimPref(btn.dataset.animpfp);
+  });
+},
+
+// (#5526) Same shape as the avatar picker above, for GIFs in messages.
+_setupAnimateChatPicker() {
+  const picker = document.getElementById('animate-chat-picker');
+  if (!picker) return;
+
+  const saved = this._viewerChatAnimPref();
+  picker.querySelectorAll('.density-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.animchat === saved);
+  });
+
+  picker.addEventListener('click', (e) => {
+    const btn = e.target.closest('.density-btn');
+    if (!btn) return;
+    this._setViewerChatAnimPref(btn.dataset.animchat);
   });
 },
 

@@ -1351,6 +1351,28 @@
         <small class="settings-hint" data-i18n="settings.animate_pfp.hint">Applies to everyone's avatars and borders as you see them. Anyone who has turned animation off for their own profile stays still regardless.</small>
       </div>
 
+      <!-- Animated images in chat (#5526). Separate from the avatar setting above:
+           a GIF someone posted is content, an avatar is ambient, so this one
+           stays at Always unless the viewer asks otherwise. -->
+      <div class="settings-section" id="section-animate-chat" style="border-top: 1px solid var(--border-light); padding-top: 16px; margin-top: 8px;">
+        <h5 class="settings-section-title">🎞️ <span data-i18n="settings.animate_chat.title">Animated Images in Chat</span></h5>
+        <div class="density-picker" id="animate-chat-picker">
+          <button type="button" class="density-btn active" data-animchat="always" data-i18n-title="settings.animate_chat.always_hint" title="Always: GIFs loop constantly">
+            <span class="density-icon">▶️</span>
+            <span class="density-label" data-i18n="settings.animate_chat.always">Always</span>
+          </button>
+          <button type="button" class="density-btn" data-animchat="hover" data-i18n-title="settings.animate_chat.hover_hint" title="On hover: play only while you point at the image">
+            <span class="density-icon">🖱️</span>
+            <span class="density-label" data-i18n="settings.animate_chat.hover">On hover</span>
+          </button>
+          <button type="button" class="density-btn" data-animchat="never" data-i18n-title="settings.animate_chat.never_hint" title="Never: show the first frame only">
+            <span class="density-icon">⏸️</span>
+            <span class="density-label" data-i18n="settings.animate_chat.never">Never</span>
+          </button>
+        </div>
+        <small class="settings-hint" data-i18n="settings.animate_chat.hint">Applies to GIFs and other animated images posted in messages, for you only. Nobody else's view changes.</small>
+      </div>
+
       <!-- Toggle Style (sliders vs checkboxes) -->
       <div class="settings-section" id="section-toggle-style" style="border-top: 1px solid var(--border-light); padding-top: 16px; margin-top: 8px;">
         <h5 class="settings-section-title">🎚️ <span data-i18n="settings.toggle_style.title">Toggle Style</span></h5>

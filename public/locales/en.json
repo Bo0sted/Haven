@@ -755,6 +755,16 @@
       "never_hint": "Never: show the first frame only",
       "hint": "Applies to everyone's avatars and borders as you see them. Anyone who has turned animation off for their own profile stays still regardless."
     },
+    "animate_chat": {
+      "title": "Animated Images in Chat",
+      "always": "Always",
+      "hover": "On hover",
+      "never": "Never",
+      "always_hint": "Always: GIFs loop constantly",
+      "hover_hint": "On hover: play only while you point at the image",
+      "never_hint": "Never: show the first frame only",
+      "hint": "Applies to GIFs and other animated images posted in messages, for you only. Nobody else's view changes."
+    },
     "toggle_style": {
       "title": "Toggle Style",
       "switch": "Sliders",

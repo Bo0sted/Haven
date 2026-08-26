@@ -314,6 +314,7 @@ class HavenApp {
     this._setupDensityPicker();
     this._setupToggleStylePicker();
     this._setupAnimatePfpPicker();
+    this._setupAnimateChatPicker();
     this._setupZoomSlider();
     this._setupEmojiSizePicker();
     this._setupImageModePicker();
