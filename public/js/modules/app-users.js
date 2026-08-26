@@ -482,6 +482,10 @@ _renderConnections() {
       // Surface a way to paste a fresh one without hand-editing .env.
       if (isAdmin) {
         btn += `<button class="btn-sm connection-rekey" data-provider="${p.id}">Change key</button>`;
+        // (#5529) Setting a provider up was one-way: the form could replace a
+        // key but never clear one, so an admin had no way to switch an
+        // integration back off without editing .env by hand.
+        if (configured) btn += `<button class="btn-sm connection-forget" data-provider="${p.id}">Remove key</button>`;
       }
     } else if (p.linkType === 'username') {
       // No OAuth for this provider — the whole link flow is one text field.
@@ -489,12 +493,20 @@ _renderConnections() {
       btn += `<button class="btn-sm btn-accent connection-username-toggle" data-provider="${p.id}">Connect</button>`;
       if (isAdmin) {
         btn += `<button class="btn-sm connection-rekey" data-provider="${p.id}">Change key</button>`;
+        // (#5529) Setting a provider up was one-way: the form could replace a
+        // key but never clear one, so an admin had no way to switch an
+        // integration back off without editing .env by hand.
+        if (configured) btn += `<button class="btn-sm connection-forget" data-provider="${p.id}">Remove key</button>`;
       }
     } else {
       sub = p.blurb;
       btn += `<button class="btn-sm btn-accent connection-link" data-provider="${p.id}">Link</button>`;
       if (isAdmin) {
         btn += `<button class="btn-sm connection-rekey" data-provider="${p.id}">Change key</button>`;
+        // (#5529) Setting a provider up was one-way: the form could replace a
+        // key but never clear one, so an admin had no way to switch an
+        // integration back off without editing .env by hand.
+        if (configured) btn += `<button class="btn-sm connection-forget" data-provider="${p.id}">Remove key</button>`;
       }
     }
 
@@ -613,6 +625,20 @@ _renderConnections() {
         form.hidden = !form.hidden;
         if (!form.hidden) form.querySelector('input')?.focus();
       }
+    });
+  });
+  // (#5529) Remove the provider's credentials entirely. Confirmed first,
+  // because it turns the integration off for everyone on the server, and it
+  // clears every key the provider uses so Spotify cannot be left with an id
+  // but no secret.
+  host.querySelectorAll('.connection-forget').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const provider = PROVIDERS.find(x => x.id === btn.dataset.provider);
+      if (!provider) return;
+      const keys = provider.fields.map(f => f.key);
+      const label = provider.name;
+      if (!confirm(`Remove the ${label} key from this server? Anyone linked to ${label} will stop showing what they are playing until a new key is set.`)) return;
+      this.socket.emit('clear-integration-key', { keys });
     });
   });
   host.querySelectorAll('.connection-cancel').forEach(btn => {

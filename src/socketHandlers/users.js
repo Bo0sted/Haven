@@ -4,7 +4,7 @@ const path = require('path');
 const fs   = require('fs');
 const { utcStamp, isString, isInt, sanitizeText, isValidUploadPath, normalizeDisplayName, sanitizeBorderTransform, parseBorderTransform } = require('./helpers');
 const { generateConnectToken } = require('../auth');
-const { setEnvValue, isWritableKey } = require('../envStore');
+const { setEnvValue, clearEnvValue, isWritableKey } = require('../envStore');
 
 module.exports = function register(socket, ctx) {
   const { io, db, state, getChannelRoleChain, userHasPermission, getUserEffectiveLevel,
@@ -626,6 +626,53 @@ module.exports = function register(socket, ctx) {
    * envStore.setEnvValue, which allow-lists the writable keys — a text field
    * that could write arbitrary .env entries would be a server takeover.
    */
+  /**
+   * Admin-only: forget an integration's credentials (#5529).
+   *
+   * The setup form could only ever replace a key, never remove one, because
+   * envStore.validate rejects an empty value. That left an admin who had set
+   * Steam or Spotify up with no way to turn it back off short of editing .env
+   * by hand, which is exactly the audience the setup form exists to spare.
+   *
+   * Takes a provider's keys together so Spotify's id and secret go at once and
+   * it cannot be left half-configured.
+   */
+  socket.on('clear-integration-key', (data) => {
+    if (!activity) return;
+    if (!socket.user.isAdmin) return socket.emit('error-msg', 'Admin only');
+    if (!data || typeof data !== 'object') return;
+
+    const keys = Array.isArray(data.keys) ? data.keys.filter(k => typeof k === 'string') : [];
+    if (!keys.length) return;
+    if (!keys.every(isWritableKey)) return socket.emit('error-msg', 'Unknown setting');
+
+    const cleared = [];
+    for (const key of keys) {
+      const result = clearEnvValue(key);
+      if (!result.ok) return socket.emit('error-msg', result.reason || 'Could not remove');
+      cleared.push(key);
+    }
+
+    _audit({
+      actor: socket.user,
+      action: 'integration_key_cleared',
+      target_type: 'server',
+      target_name: cleared.join(', '),
+      // Same rule as saving: record which keys changed, never their values.
+      details: { keys: cleared },
+    });
+
+    socket.emit('toast', { message: `${cleared.join(' and ')} removed`, type: 'success' });
+    socket.emit('connections', {
+      connections: activity.listConnections(socket.user.id),
+      available: {
+        steam: activity.isSteamConfigured(),
+        spotify: activity.isSpotifyConfigured(),
+        lastfm: activity.isLastfmConfigured(),
+      },
+    });
+  });
+
   socket.on('set-integration-key', (data) => {
     if (!activity) return;
     if (!socket.user.isAdmin) return socket.emit('error-msg', 'Admin only');
