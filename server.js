@@ -4784,6 +4784,27 @@ initFerry({
       console.error('Ferry could not store an inbound Discord message:', err.message);
       return null;
     }
+  },
+
+  // Applied when someone edits a Discord message Ferry already relayed. Reuses
+  // the same `message-edited` event a Haven edit emits, so every open client
+  // updates the message in place instead of showing a stale copy.
+  editHavenMessage: ({ havenMessageId, channelCode, content }) => {
+    try {
+      const info = db.prepare(
+        "UPDATE messages SET content = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND is_webhook = 1"
+      ).run(content, havenMessageId);
+      if (!info.changes) return;
+
+      io.to(`channel:${channelCode}`).emit('message-edited', {
+        channelCode,
+        messageId: havenMessageId,
+        content,
+        editedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Ferry could not apply a Discord edit:', err.message);
+    }
   }
 });
 

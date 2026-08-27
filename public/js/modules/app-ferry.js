@@ -215,8 +215,13 @@ export default {
     });
     dropdown.querySelectorAll('[data-ferry-dm-id]').forEach(el => {
       el.addEventListener('click', () => {
-        this._ferryDmUserId = el.dataset.ferryDmId;
-        this._insertFerryTarget('@' + el.dataset.ferryDmName);
+        const label = '@' + el.dataset.ferryDmName;
+        // The id is bound to the exact text inserted, not just remembered. A
+        // bare remembered id survives the user editing the name afterwards and
+        // sends a private message to whoever was picked before, which is the
+        // worst possible way for this to be wrong.
+        this._ferryDm = { id: el.dataset.ferryDmId, label };
+        this._insertFerryTarget(label);
       });
     });
   },
@@ -288,7 +293,15 @@ export default {
     const trigger = this._ferryTrigger();
     const body = content.replace(/^::[^\s:]+[: ]\s*/, '');
     if (!body.startsWith(trigger + '@')) return undefined;
-    return this._ferryDmUserId || undefined;
+
+    const chosen = this._ferryDm;
+    if (!chosen) return undefined;
+
+    // Only hand over the id when the recipient text is still exactly the one
+    // that was picked. Anything else drops it, and the server then leaves the
+    // prefix visible in the message rather than sending to the wrong person.
+    const rest = body.slice(trigger.length);
+    return (rest === chosen.label || rest.startsWith(chosen.label + ' ')) ? chosen.id : undefined;
   },
 
   // ══════════════════════════════════════════════════════════

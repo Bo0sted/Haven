@@ -83,6 +83,27 @@ test('DMs need both the server setting and a resolved Discord user id', () => {
   assert.equal(r.body, 'hey');
 });
 
+test('a malformed Discord user id is refused before it can reach the API', () => {
+  // The id comes from the client. Anything that is not a snowflake must not
+  // reach a Discord request path or body.
+  const dm = { ...base, allowDms: true, content: '=>@Alice hey' };
+  for (const bad of ['../../channels/1', '123', 'abc', '1'.repeat(30), '12345678901234567890abc', '']) {
+    assert.equal(resolveFerryTarget({ ...dm, dmUserId: bad }), null, `accepted ${bad}`);
+  }
+  assert.equal(resolveFerryTarget({ ...dm, dmUserId: { toString: () => '123456789012345678' } }), null,
+    'a non-string id must not be coerced into an API call');
+  assert.equal(resolveFerryTarget({ ...dm, dmUserId: '123456789012345678' }).discordUserId, '123456789012345678');
+});
+
+test('Discord custom emotes become readable shortcodes', () => {
+  // Relayed raw these read as "<:blue_heart:1178833036244652178>" mid-sentence.
+  assert.equal(buildHavenContent({ content: 'hi <:wave:1178833036244652178> there' }), 'hi :wave: there');
+  assert.equal(buildHavenContent({ content: '<a:spin:1178833036244652178>' }), ':spin:');
+  // A lone angle-bracket expression that is not an emote is left alone.
+  assert.equal(buildHavenContent({ content: 'a < b and c > d' }), 'a < b and c > d');
+  assert.equal(buildHavenContent({ content: '<@1178833036244652178>' }), '<@1178833036244652178>');
+});
+
 test('a custom trigger is honored and the default is not', () => {
   const custom = { ...base, trigger: '>>' };
   assert.equal(resolveFerryTarget({ ...custom, content: '=>My Server#dev hi' }), null);

@@ -1255,9 +1255,9 @@ function setupSocketHandlers(io, db, opts = {}) {
     if (!cfg.enabled || !cfg.token) return;
 
     const links = ferryLinksFor(channelId);
-    if (!links.length && !target?.dm) return;
+    if (!links.length) return;
 
-    if (!user.isAdmin && !userHasPermission(user.id, 'use_ferry')) {
+    if (!user.isAdmin && !userHasPermission(user.id, 'use_ferry', channelId)) {
       // Only complain when they actually aimed at Discord. Someone simply
       // talking in a mirrored channel should not get a permission toast on
       // every message.
@@ -1275,8 +1275,19 @@ function setupSocketHandlers(io, db, opts = {}) {
     };
 
     if (target && target.dm) {
-      ferry.sendDiscordDm(target.discordUserId, { fromName: identity.username, content: body })
-        .then(() => notify('Sent to Discord'))
+      // The recipient id comes from the client, so being offered in the
+      // autocomplete is not proof of anything. Confirm the person is actually
+      // in a guild this channel is paired with before sending.
+      const guildIds = [...new Set(links.map(l => l.guild_id))];
+      ferry.authorizeDmTarget(guildIds, target.discordUserId)
+        .then(allowed => {
+          if (!allowed) {
+            notify('That Discord user is not in a server this channel is linked to');
+            return null;
+          }
+          return ferry.sendDiscordDm(target.discordUserId, { fromName: identity.username, content: body })
+            .then(() => notify('Sent to Discord'));
+        })
         .catch(err => notify(err.message));
       return;
     }
@@ -1801,6 +1812,11 @@ function setupSocketHandlers(io, db, opts = {}) {
       // 10s of use (refine + a run of pagination + a sort or two); the input
       // is debounced 400ms so typing can't spam it. (search-overhaul)
       search:  { max: 10, windowMs: 10000 },
+      // A Ferry member lookup is not a local query: each one fans out to up to
+      // five Discord REST calls. Discord bans tokens that generate a burst of
+      // 429s, so this is the cap that protects the bot, not the database. The
+      // composer debounces at 250ms, so typing cannot reach it.
+      ferrySearch: { max: 8, windowMs: 10000 },
     };
 
     function floodCheck(bucket) {

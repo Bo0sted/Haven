@@ -30,10 +30,12 @@ const TOGGLES = new Set([
 ]);
 
 module.exports = function register(socket, ctx) {
-  const { db, ferry, userHasPermission, logAudit } = ctx;
+  const { db, ferry, userHasPermission, logAudit, floodCheck } = ctx;
 
   const isAdmin = () => !!socket.user?.isAdmin;
-  const canUseFerry = () => isAdmin() || userHasPermission(socket.user.id, 'use_ferry');
+  // Scoped to the channel being acted on, so a channel-scoped role grant of
+  // use_ferry works and a server-wide one is not required.
+  const canUseFerry = (channelId) => isAdmin() || userHasPermission(socket.user.id, 'use_ferry', channelId);
 
   // ── Shared payload builders ─────────────────────────────
 
@@ -246,12 +248,12 @@ module.exports = function register(socket, ctx) {
     if (!/^[a-f0-9]{8}$/i.test(code)) return;
 
     const cfg = ferry.getConfig();
-    if (!cfg.enabled || !canUseFerry()) {
-      return socket.emit('ferry:targets', { code, enabled: false, targets: [], allowDms: false });
-    }
-
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return;
+
+    if (!cfg.enabled || !canUseFerry(channel.id)) {
+      return socket.emit('ferry:targets', { code, enabled: false, targets: [], allowDms: false });
+    }
 
     // Membership matters here as much as the permission: the target list names
     // the Discord servers an admin paired, which is not public information.
@@ -282,13 +284,20 @@ module.exports = function register(socket, ctx) {
     if (!/^[a-f0-9]{8}$/i.test(code) || query.trim().length < 2) return;
 
     const cfg = ferry.getConfig();
-    if (!cfg.enabled || !cfg.allowDms || !canUseFerry()) return;
+    if (!cfg.enabled || !cfg.allowDms) return;
 
     const channel = db.prepare('SELECT id FROM channels WHERE code = ? AND is_dm = 0').get(code);
     if (!channel) return;
+    if (!canUseFerry(channel.id)) return;
     const member = db.prepare('SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ?')
       .get(channel.id, socket.user.id);
     if (!member) return;
+
+    // Checked after the cheap gates so a rejected caller does not consume
+    // budget, and before any Discord call so a flood cannot reach the API.
+    if (floodCheck('ferrySearch')) {
+      return socket.emit('error-msg', 'Slow down, too many Discord lookups');
+    }
 
     // Searchable guilds are only those already paired with this channel, so the
     // DM lookup cannot be used to enumerate members of unrelated servers the

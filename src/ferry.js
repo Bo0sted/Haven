@@ -30,6 +30,7 @@
  */
 
 const WebSocket = require('ws');
+const automod = require('./automod');
 
 const API = 'https://discord.com/api/v10';
 const USER_AGENT = 'DiscordBot (https://github.com/ancsemi/Haven, 1.0)';
@@ -56,6 +57,9 @@ const DISALLOWED_INTENT = 4014;
 const MAX_DISCORD_CONTENT = 2000;
 const MAX_WEBHOOK_USERNAME = 80;
 
+// Discord ids are numeric strings. Anything else must never reach an API path.
+const SNOWFLAKE = /^[0-9]{15,25}$/;
+
 // ── Module state ────────────────────────────────────────────
 let deps = null;          // { db, io, sanitizeText, insertHavenMessage }
 let ws = null;
@@ -78,6 +82,13 @@ const guilds = new Map();
 
 // Discord webhook ids we own, so the gateway echo of our own relays is ignored.
 const ownWebhookIds = new Set();
+
+// Discord message id -> what we relayed and where, so a later edit updates the
+// Haven copy instead of posting a duplicate. Bounded, and lost on restart: an
+// edit to a message from before a restart is simply not applied, which is the
+// safe direction to fail in.
+const relayedMessages = new Map();
+const RELAY_MAP_MAX = 500;
 
 // Per-destination send queues. Discord rate limits webhooks at roughly five
 // messages per two seconds each, and a busy Haven channel will exceed that.
@@ -441,6 +452,10 @@ function handleDispatch(type, d) {
     case 'MESSAGE_CREATE':
       relayToHaven(d);
       break;
+
+    case 'MESSAGE_UPDATE':
+      relayEditToHaven(d);
+      break;
   }
 }
 
@@ -506,18 +521,59 @@ function relayToHaven(msg) {
     const author = msg.member?.nick || msg.author?.global_name || msg.author?.username || 'Discord user';
     const avatar = discordAvatarUrl(msg.author);
 
+    const targets = [];
     for (const link of links) {
-      deps.insertHavenMessage({
+      const havenId = deps.insertHavenMessage({
         channelId: link.channel_id,
         channelCode: link.channel_code,
         username: author,
         avatarUrl: avatar,
         content,
       });
+      if (havenId) targets.push({ havenMessageId: havenId, channelCode: link.channel_code });
       touchLink(link.id, null);
     }
+    if (targets.length) rememberRelay(msg.id, content, targets);
   } catch (err) {
     console.error('Ferry inbound relay error:', err.message);
+  }
+}
+
+function rememberRelay(discordMessageId, content, targets) {
+  // Map preserves insertion order, so the first key is the oldest entry.
+  if (relayedMessages.size >= RELAY_MAP_MAX) {
+    relayedMessages.delete(relayedMessages.keys().next().value);
+  }
+  relayedMessages.set(discordMessageId, { content, targets });
+}
+
+/**
+ * Applies a Discord edit to the Haven copy rather than posting it again.
+ *
+ * Two deliberate refusals. A message we never relayed is never resurrected by
+ * an edit, which is what stops a third-party bot's delayed embed from arriving
+ * in Haven after its original was filtered out. And an update with no `content`
+ * field is ignored: Discord sends a partial object when it attaches a link
+ * preview to an existing message, and treating that as the new body would
+ * replace the author's text with an embed summary.
+ */
+function relayEditToHaven(msg) {
+  try {
+    if (!msg || !msg.id) return;
+    if (typeof msg.content !== 'string') return;
+
+    const known = relayedMessages.get(msg.id);
+    if (!known) return;
+
+    const content = buildHavenContent(msg);
+    if (!content || content === known.content) return;
+
+    known.content = content;
+    for (const target of known.targets) {
+      deps.editHavenMessage({ ...target, content });
+    }
+  } catch (err) {
+    console.error('Ferry edit relay error:', err.message);
   }
 }
 
@@ -530,7 +586,7 @@ function relayToHaven(msg) {
  */
 function buildHavenContent(msg) {
   const parts = [];
-  const text = (msg.content || '').trim();
+  const text = translateDiscordEmotes(msg.content || '').trim();
   if (text) parts.push(text);
 
   for (const att of msg.attachments || []) {
@@ -548,7 +604,30 @@ function buildHavenContent(msg) {
   }
 
   const joined = parts.join('\n').slice(0, 4000);
-  return deps?.sanitizeText ? deps.sanitizeText(joined) : joined;
+  const clean = deps?.sanitizeText ? deps.sanitizeText(joined) : joined;
+
+  // A bridge is an excellent spam vector, and a relayed message would otherwise
+  // skip the link controls every Haven member is held to. Checked with no user
+  // context: there is no Haven account to strike, so this filters content only.
+  try {
+    if (automod.checkText(clean, { surface: 'message' }).ok === false) return '';
+  } catch { /* an automod fault must never take the bridge down */ }
+
+  return clean;
+}
+
+/**
+ * Discord writes custom emotes into message text as <:name:id> (or <a:name:id>
+ * when animated). Relayed raw, a Haven reader sees "<:blue_heart:117883303624>"
+ * in the middle of a sentence.
+ *
+ * They become :name: rather than the emote's CDN image, because Haven renders a
+ * bare image URL at full chat-image size. As :name: it reads correctly as text
+ * and, when the Haven server happens to have an emoji of the same name, renders
+ * as that emoji.
+ */
+function translateDiscordEmotes(text) {
+  return String(text || '').replace(/<(a?):([A-Za-z0-9_]{2,32}):\d{15,25}>/g, ':$2:');
 }
 
 function discordAvatarUrl(author) {
@@ -735,6 +814,58 @@ async function sendDiscordDm(discordUserId, { fromName, content }) {
   });
 }
 
+/**
+ * Answers whether a Discord user can be DMed from a given Haven channel, by
+ * checking that they are a member of at least one guild that channel is paired
+ * with.
+ *
+ * This exists because scoping the autocomplete is not a control. The composer
+ * only offers members of paired guilds, but the id travels with the send, and
+ * a client that skips the lookup could otherwise name any user in any guild
+ * the bot happens to belong to. Discord will not deliver to a stranger either
+ * way, but "the other platform would probably refuse" is not authorization.
+ *
+ * Answers are cached briefly so a burst of messages to one person is one
+ * lookup rather than one per message.
+ */
+const dmAuthCache = new Map();   // `${guildId}:${userId}` -> { ok, at }
+const DM_AUTH_TTL_MS = 60000;
+
+async function authorizeDmTarget(guildIds, userId) {
+  if (!SNOWFLAKE.test(String(userId || ''))) return false;
+  if (!Array.isArray(guildIds) || !guildIds.length) return false;
+
+  const now = Date.now();
+  // Bound the cache so a long-lived server does not accumulate one entry per
+  // id anyone has ever typed.
+  if (dmAuthCache.size > 500) {
+    for (const [k, v] of dmAuthCache) if (now - v.at > DM_AUTH_TTL_MS) dmAuthCache.delete(k);
+  }
+
+  for (const guildId of guildIds.slice(0, 5)) {
+    if (!SNOWFLAKE.test(String(guildId || ''))) continue;
+    const key = `${guildId}:${userId}`;
+    const hit = dmAuthCache.get(key);
+    if (hit && now - hit.at < DM_AUTH_TTL_MS) {
+      if (hit.ok) return true;
+      continue;
+    }
+    try {
+      const member = await discordRequest('GET', `/guilds/${guildId}/members/${userId}`);
+      const ok = !!(member && member.user && !member.user.bot);
+      dmAuthCache.set(key, { ok, at: now });
+      if (ok) return true;
+    } catch (err) {
+      // 404 is a definite "not in this guild" and is worth caching. A 403 means
+      // the Server Members intent is off, which is not a negative answer about
+      // this user, so it is never cached as one.
+      if (err.status === 404) dmAuthCache.set(key, { ok: false, at: now });
+      else if (err.status !== 403) console.error('Ferry DM authorization check failed:', err.message);
+    }
+  }
+  return false;
+}
+
 function touchLink(linkId, error) {
   try {
     deps.db.prepare(
@@ -769,7 +900,10 @@ function resolveFerryTarget({ trigger, links, content, dmUserId, allowDms }) {
   // rather than from the text, because Discord display names are not unique
   // and cannot be resolved from a name alone.
   if (rest.startsWith('@')) {
-    if (!allowDms || !dmUserId) return null;
+    // The id arrives from the client, so it is shape-checked before it can
+    // reach a Discord API path or body. Authorization that this user is
+    // actually reachable from this channel happens separately, in the caller.
+    if (!allowDms || typeof dmUserId !== 'string' || !SNOWFLAKE.test(dmUserId)) return null;
     const space = rest.indexOf(' ');
     return { dm: true, discordUserId: dmUserId, body: space === -1 ? '' : rest.slice(space + 1).trim() };
   }
@@ -953,6 +1087,7 @@ module.exports = {
   searchMembers,
   sendToDiscord,
   sendDiscordDm,
+  authorizeDmTarget,
   verifyToken,
   inviteUrl,
   getSetting,
