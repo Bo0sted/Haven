@@ -10,7 +10,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <title>Haven</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cG9seWdvbiBwb2ludHM9IjUwLDMgOTMsMjggOTMsNzIgNTAsOTcgNyw3MiA3LDI4IiBmaWxsPSJub25lIiBzdHJva2U9IiM2YjRmZGIiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjx0ZXh0IHg9IjUwIiB5PSI2MyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iYm9sZCIgZm9udC1zaXplPSIzOCIgZmlsbD0iIzZiNGZkYiIgb3BhY2l0eT0iMC45NSI+SDwvdGV4dD48L3N2Zz4=">
-  <link rel="stylesheet" href="/css/style.css?v=3.51.3">
+  <link rel="stylesheet" href="/css/style.css?v=3.51.5">
   <script src="/js/theme-init.js?v=3.16.15"></script>
 </head>
 <body>
@@ -1325,24 +1325,33 @@
           <div class="settings-nav-item" data-target="section-debug">🐞 <span data-i18n="settings.nav.debug">Debug</span></div>
           </div>
           <div class="settings-nav-admin-group" style="display:none">
+          <div class="settings-nav-group-label settings-nav-admin" style="display:none" data-i18n="settings.nav.group_server">Server</div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-update" style="display:none">⬆️ <span data-i18n="settings.nav.server_updates">Server Updates</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-branding" style="display:none">🏠 <span data-i18n="settings.nav.branding">Branding</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-connectivity" style="display:none">📡 <span data-i18n="settings.nav.connectivity">Voice &amp; Connectivity</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-tunnel" style="display:none">🧭 <span data-i18n="settings.nav.tunnel">Tunnel</span></div>
+
+          <div class="settings-nav-group-label settings-nav-admin" style="display:none" data-i18n="settings.nav.group_people">People &amp; Access</div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-members" style="display:none">👥 <span data-i18n="settings.nav.members">Members</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-roles" style="display:none">👑 <span data-i18n="settings.nav.roles">Roles</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-moderation" style="display:none">🛡️ <span data-i18n="settings.nav.moderation">Moderation</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-security" style="display:none">🔒 <span data-i18n="settings.nav.security">Security</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-whitelist" style="display:none">🛡️ <span data-i18n="settings.nav.whitelist">Whitelist</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-invite" style="display:none">🌐 <span data-i18n="settings.nav.invite">Invite Code</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-cleanup" style="display:none">🗑️ <span data-i18n="settings.nav.cleanup">Cleanup</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-backup" style="display:none">💾 <span data-i18n="settings.nav.backup">Backup</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-uploads" style="display:none">📁 <span data-i18n="settings.nav.limits">Limits</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-connectivity" style="display:none">📡 <span data-i18n="settings.nav.connectivity">Voice &amp; Connectivity</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-sounds-admin" style="display:none">🔊 <span data-i18n="settings.nav.admin_sounds">Sounds</span></div>
+
+          <div class="settings-nav-group-label settings-nav-admin" style="display:none" data-i18n="settings.nav.group_content">Content</div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-emojis" style="display:none">😎 <span data-i18n="settings.nav.emojis">Emojis</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-roles" style="display:none">👑 <span data-i18n="settings.nav.roles">Roles</span></div>
-          <div class="settings-nav-item settings-nav-admin" data-target="section-tunnel" style="display:none">🧭 <span data-i18n="settings.nav.tunnel">Tunnel</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-sounds-admin" style="display:none">🔊 <span data-i18n="settings.nav.admin_sounds">Sounds</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-uploads" style="display:none">📁 <span data-i18n="settings.nav.limits">Limits</span></div>
+
+          <div class="settings-nav-group-label settings-nav-admin" style="display:none" data-i18n="settings.nav.group_integrations">Integrations</div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-bots" style="display:none">🤖 <span data-i18n="settings.nav.bots">Bots</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-ferry" style="display:none">🛶 <span data-i18n="settings.nav.ferry">Ferry</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-import" style="display:none">📦 <span data-i18n="settings.nav.import">Import</span></div>
+
+          <div class="settings-nav-group-label settings-nav-admin" style="display:none" data-i18n="settings.nav.group_maintenance">Maintenance</div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-backup" style="display:none">💾 <span data-i18n="settings.nav.backup">Backup</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-cleanup" style="display:none">🗑️ <span data-i18n="settings.nav.cleanup">Cleanup</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-modmode" style="display:none">🔧 <span data-i18n="settings.nav.mod_mode">Mod Mode</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-audit-log" style="display:none">📜 <span data-i18n="settings.nav.audit_log">Audit Log</span></div>
           </div>
@@ -4127,7 +4136,7 @@
   <!-- Shared with the server (src/automod.js requires the same file) so both
        sides reach identical verdicts on a link. Must load before app.js. -->
   <script src="/js/automod-rules.js?v=3.44.0"></script>
-  <script type="module" src="/js/app.js?v=3.51.2"></script>
+  <script type="module" src="/js/app.js?v=3.51.4"></script>
   <script src="/js/plugin-loader.js?v=3.16.15"></script>
   <script src="/js/modules/stream-debug.js?v=3.16.15"></script>
   <script src="/js/password-eye.js?v=3.17.1"></script>

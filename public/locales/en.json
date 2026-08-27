@@ -748,7 +748,12 @@
       "security": "Security",
       "moderation": "Moderation",
       "sessions": "Sessions",
-      "ferry": "Ferry"
+      "ferry": "Ferry",
+      "group_server": "Server",
+      "group_people": "People & Access",
+      "group_content": "Content",
+      "group_integrations": "Integrations",
+      "group_maintenance": "Maintenance"
     },
     "language_section": {
       "title": "Language",

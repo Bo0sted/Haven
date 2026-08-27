@@ -438,11 +438,11 @@ export default {
             ${FERRY_MODES.map(([v, t]) => `<option value="${v}"${l.out_mode === v ? ' selected' : ''}>${t}</option>`).join('')}
           </select>
         </td>
-        <td class="ferry-actions-cell">
+        <td class="ferry-actions-cell"><div class="ferry-actions-inner">
           <label class="toggle-row"><span>On</span><input type="checkbox" data-ferry-field="isActive"${l.is_active ? ' checked' : ''}></label>
           <button class="btn-sm btn-danger" data-ferry-delete="${l.id}">Remove</button>
           ${l.last_error ? `<div class="ferry-link-error">${esc(l.last_error)}</div>` : ''}
-        </td>
+        </div></td>
       </tr>`).join('');
 
     // A flat list mixes top-level channels with sub-channels and gives no way

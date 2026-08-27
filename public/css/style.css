@@ -19063,7 +19063,10 @@ ul.chat-list { list-style-type: disc; }
   border-radius: 8px;
   background: var(--bg-secondary);
 }
-.ferry-step:first-of-type { margin-top: 0; }
+/* :first-child, not :first-of-type. The Options block is a <details>, so it is
+   the first element of its own type and :first-of-type matched it too, zeroing
+   the gap that should separate it from the step above. */
+.ferry-step:first-child { margin-top: 0; }
 .ferry-step-done { border-color: var(--success, #2ecc71); }
 .ferry-step-locked { opacity: .5; pointer-events: none; }
 
@@ -19120,8 +19123,24 @@ ul.chat-list { list-style-type: disc; }
 .ferry-add-btn  { grid-column: 1 / -1; }
 @media (max-width: 520px) { .ferry-add-grid { grid-template-columns: 1fr; } }
 
-.ferry-options > summary { cursor: pointer; }
-.ferry-options[open] > summary { margin-bottom: 4px; }
+.ferry-options { margin-top: 16px; }
+.ferry-options > summary {
+  cursor: pointer;
+  list-style: none;          /* the default marker is dropped by display:flex anyway */
+  margin: 0;
+  user-select: none;
+}
+.ferry-options > summary::-webkit-details-marker { display: none; }
+.ferry-options > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--text-secondary);
+  transition: transform .15s ease;
+}
+.ferry-options[open] > summary::before { transform: rotate(90deg); }
+.ferry-options > summary:hover { color: var(--accent); }
+.ferry-options[open] > summary { margin-bottom: 6px; }
 
 .ferry-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .75rem; }
 .ferry-table th {
@@ -19134,8 +19153,11 @@ ul.chat-list { list-style-type: disc; }
 .ferry-table td { padding: 6px; border-bottom: 1px solid var(--border-light, var(--border)); vertical-align: top; }
 .ferry-row-off { opacity: .45; }
 .ferry-mini { font-size: .72rem; padding: 3px 4px; max-width: 11rem; }
-.ferry-actions-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.ferry-actions-cell .toggle-row { gap: 6px; }
+/* The td stays a real table cell so its border-bottom lines up with the other
+   cells in the row; flexing the td itself pulled it out of table layout and
+   left the row's underline a pixel off. */
+.ferry-actions-inner { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.ferry-actions-inner .toggle-row { gap: 6px; }
 .ferry-link-error { color: var(--danger, #e74c3c); font-size: .68rem; max-width: 14rem; }
 
 /* Destination badge on a message that was addressed to Discord. The routing
