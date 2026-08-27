@@ -17379,7 +17379,13 @@ ul.chat-list { list-style-type: disc; }
 
 /* Banner visible — base: header & topic above banner */
 .main.has-banner .channel-header,
-.main.has-banner .channel-topic-bar {
+.main.has-banner .channel-topic-bar,
+/* The banner is absolutely positioned at z-index 0, so it paints over any
+   sibling that is not itself positioned. The header and topic bar were lifted
+   above it; the welcome screen never was, so "Welcome to Haven" rendered
+   underneath the banner image on the no-channel-selected view. .message-area
+   already carries its own position:relative and is unaffected. */
+.main.has-banner .welcome-screen {
   position: relative;
   z-index: 1;
 }
