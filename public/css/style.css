@@ -19149,3 +19149,12 @@ ul.chat-list { list-style-type: disc; }
   vertical-align: middle;
   white-space: nowrap;
 }
+
+.ferry-role-dot {
+  display: inline-block;
+  width: .55rem;
+  height: .55rem;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}

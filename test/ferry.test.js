@@ -95,12 +95,32 @@ test('a malformed Discord user id is refused before it can reach the API', () =>
   assert.equal(resolveFerryTarget({ ...dm, dmUserId: '123456789012345678' }).discordUserId, '123456789012345678');
 });
 
+test('Discord mentions become readable names', () => {
+  // Discord writes mentions as <@id>. Relayed raw a Haven reader sees a bare
+  // number, so the names come from the message's own resolved mentions list.
+  const msg = {
+    content: 'hey <@111111111111111111> and <@!222222222222222222>',
+    mentions: [
+      { id: '111111111111111111', username: 'alice', global_name: 'Alice' },
+      { id: '222222222222222222', username: 'bob' },
+    ],
+  };
+  assert.equal(buildHavenContent(msg), 'hey @Alice and @bob');
+
+  // An id with nobody attached is left alone rather than guessed at.
+  assert.equal(
+    buildHavenContent({ content: 'ping <@999999999999999999>', mentions: [] }),
+    'ping <@999999999999999999>'
+  );
+});
+
 test('Discord custom emotes become readable shortcodes', () => {
   // Relayed raw these read as "<:blue_heart:1178833036244652178>" mid-sentence.
   assert.equal(buildHavenContent({ content: 'hi <:wave:1178833036244652178> there' }), 'hi :wave: there');
   assert.equal(buildHavenContent({ content: '<a:spin:1178833036244652178>' }), ':spin:');
   // A lone angle-bracket expression that is not an emote is left alone.
   assert.equal(buildHavenContent({ content: 'a < b and c > d' }), 'a < b and c > d');
+  // No mentions array means nothing to resolve it against, so it stays put.
   assert.equal(buildHavenContent({ content: '<@1178833036244652178>' }), '<@1178833036244652178>');
 });
 

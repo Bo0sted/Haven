@@ -233,7 +233,8 @@ function currentIntents() {
   // Asking for a privileged intent the admin never enabled kills the whole
   // connection with a 4014, so it is opt-in twice over: the DM setting has to
   // be on, and a previous 4014 latches it back off.
-  if (boolSetting('ferry_allow_dms', false) && !dropMemberIntent) intents |= INTENT_GUILD_MEMBERS;
+  const needsMembers = boolSetting('ferry_allow_dms', false) || boolSetting('ferry_allow_mentions', false);
+  if (needsMembers && !dropMemberIntent) intents |= INTENT_GUILD_MEMBERS;
   return intents;
 }
 
@@ -271,9 +272,9 @@ function connect() {
       // Either Message Content or Server Members is switched off in the portal.
       // Server Members is the one we can live without, so drop it and retry
       // once before telling the admin to go flip a checkbox.
-      if (!dropMemberIntent && boolSetting('ferry_allow_dms', false)) {
+      if (!dropMemberIntent && (boolSetting('ferry_allow_dms', false) || boolSetting('ferry_allow_mentions', false))) {
         dropMemberIntent = true;
-        lastError = 'Discord refused the Server Members intent, so Discord user lookup for DMs is off. Enable "Server Members Intent" in the Developer Portal to turn it back on.';
+        lastError = 'Discord refused the Server Members intent, so looking Discord people up for DMs and @mentions is off. Enable "Server Members Intent" in the Developer Portal to turn it back on.';
         sessionId = null; resumeUrl = null;
         scheduleReconnect(true);
         return;
@@ -586,7 +587,7 @@ function relayEditToHaven(msg) {
  */
 function buildHavenContent(msg) {
   const parts = [];
-  const text = translateDiscordEmotes(msg.content || '').trim();
+  const text = translateDiscordEmotes(translateDiscordMentions(msg.content || '', msg)).trim();
   if (text) parts.push(text);
 
   for (const att of msg.attachments || []) {
@@ -626,6 +627,22 @@ function buildHavenContent(msg) {
  * and, when the Haven server happens to have an emoji of the same name, renders
  * as that emoji.
  */
+/**
+ * Discord writes mentions into message text as <@1178833036244652178>. The
+ * names come from the message's own `mentions` array, so this is exact rather
+ * than a lookup, and an unresolved id is left as-is rather than guessed at.
+ */
+function translateDiscordMentions(text, msg) {
+  let out = String(text || '');
+  for (const u of (msg && msg.mentions) || []) {
+    if (!u || !u.id) continue;
+    const name = u.global_name || u.username;
+    if (!name) continue;
+    out = out.split(`<@${u.id}>`).join(`@${name}`).split(`<@!${u.id}>`).join(`@${name}`);
+  }
+  return out;
+}
+
 function translateDiscordEmotes(text) {
   return String(text || '').replace(/<(a?):([A-Za-z0-9_]{2,32}):\d{15,25}>/g, ':$2:');
 }
@@ -690,6 +707,65 @@ function mentionPolicy() {
 }
 
 /**
+ * Turns "@Name" in an outgoing message into a real Discord ping.
+ *
+ * Discord only pings when the text contains <@id>, so a relayed "@alice" is
+ * inert plain text no matter what allowed_mentions says. Names are resolved
+ * against the destination guild, and only an exact case-insensitive hit on a
+ * username, global name, or nickname is replaced. Anything ambiguous or
+ * unmatched is left as written, because quietly pinging the wrong person is
+ * worse than not pinging at all.
+ *
+ * Skipped entirely when pings are off, so the lookup cost is only paid by
+ * servers that asked for the feature.
+ */
+const mentionCache = new Map();   // `${guildId}:${lowercased name}` -> id or null
+const MENTION_TTL_MS = 300000;
+
+async function resolveOutgoingMentions(guildId, content) {
+  if (!boolSetting('ferry_allow_mentions', false)) return content;
+  if (!SNOWFLAKE.test(String(guildId || ''))) return content;
+
+  // Deliberately conservative: a run of name-ish characters, no spaces. A
+  // greedier pattern would swallow following words and match nobody.
+  const names = [...new Set((String(content).match(/@[A-Za-z0-9._-]{2,32}/g) || []))];
+  if (!names.length) return content;
+
+  let out = content;
+  for (const token of names.slice(0, 5)) {
+    const bare = token.slice(1);
+    const key = `${guildId}:${bare.toLowerCase()}`;
+    const now = Date.now();
+
+    let hit = mentionCache.get(key);
+    if (!hit || now - hit.at > MENTION_TTL_MS) {
+      let id = null;
+      try {
+        const rows = await discordRequest('GET', `/guilds/${guildId}/members/search?query=${encodeURIComponent(bare)}&limit=10`);
+        const wanted = bare.toLowerCase();
+        const exact = (rows || []).filter(m => m.user && !m.user.bot && [
+          m.nick, m.user.global_name, m.user.username
+        ].some(n => n && String(n).toLowerCase() === wanted));
+        // More than one person answering to the same name is ambiguous, and
+        // picking one would ping a stranger.
+        if (exact.length === 1) id = exact[0].user.id;
+      } catch (err) {
+        // 403 means the Server Members intent is off. Leave the text alone.
+        if (err.status !== 403 && err.status !== 404) {
+          console.error('Ferry mention lookup failed:', err.message);
+        }
+      }
+      hit = { id, at: now };
+      if (mentionCache.size > 500) mentionCache.clear();
+      mentionCache.set(key, hit);
+    }
+
+    if (hit.id) out = out.split(token).join(`<@${hit.id}>`);
+  }
+  return out;
+}
+
+/**
  * Serializes sends per destination. Discord rate limits each webhook at about
  * five messages per two seconds and answers a burst with 429s, so a busy
  * mirrored channel needs a queue rather than parallel fire-and-forget.
@@ -751,8 +827,11 @@ async function sendToDiscord(link, { username, avatar, content }) {
   return enqueue(`ch:${link.discord_channel_id}`, async () => {
     try {
       const hook = await ensureLinkWebhook(link);
+      // Resolved per destination: the same @name can be a different person in
+      // a different Discord server.
+      const withMentions = await resolveOutgoingMentions(link.guild_id, body);
       await executeWebhook(hook.id, hook.token, {
-        content: body,
+        content: withMentions,
         username: sanitizeWebhookUsername(username),
         avatar_url: absoluteAvatarUrl(avatar) || undefined,
         allowed_mentions: mentionPolicy(),

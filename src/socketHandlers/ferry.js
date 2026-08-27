@@ -63,12 +63,29 @@ module.exports = function register(socket, ctx) {
     return `••••••••${token.slice(-6)}`;
   }
 
+  /**
+   * Ferry is useless until some role actually holds use_ferry, and the default
+   * roles do not: an admin sets it all up, tests it successfully as an admin,
+   * and it silently does nothing for everyone else. Surfacing the roles right
+   * in the panel is what closes that gap.
+   */
+  function roleRows() {
+    return db.prepare(`
+      SELECT r.id, r.name, r.level, r.color,
+             EXISTS(SELECT 1 FROM role_permissions rp
+                    WHERE rp.role_id = r.id AND rp.permission = 'use_ferry' AND rp.allowed = 1) AS can_ferry
+      FROM roles r
+      ORDER BY r.level DESC, r.name COLLATE NOCASE
+    `).all();
+  }
+
   function configPayload() {
     return {
       state: ferry.getFerryState(),
       tokenHint: tokenHint(),
       links: linkRows(),
       guilds: ferry.getDirectory(),
+      roles: roleRows(),
     };
   }
 
@@ -139,6 +156,33 @@ module.exports = function register(socket, ctx) {
     logAudit({ actor: socket.user, action: 'ferry_option_set', target_type: 'server', target_id: null,
       details: { key, value } });
     setTimeout(sendConfig, 600);
+  });
+
+  socket.on('ferry:set-role-permission', (data) => {
+    if (!isAdmin()) return socket.emit('error-msg', 'Only admins can configure Ferry');
+    const roleId = parseInt(data?.roleId);
+    if (!Number.isInteger(roleId)) return;
+
+    const role = db.prepare('SELECT id, name FROM roles WHERE id = ?').get(roleId);
+    if (!role) return socket.emit('error-msg', 'Role not found');
+
+    try {
+      if (data.allowed) {
+        db.prepare(
+          "INSERT OR IGNORE INTO role_permissions (role_id, permission, allowed) VALUES (?, 'use_ferry', 1)"
+        ).run(roleId);
+      } else {
+        db.prepare(
+          "DELETE FROM role_permissions WHERE role_id = ? AND permission = 'use_ferry'"
+        ).run(roleId);
+      }
+      logAudit({ actor: socket.user, action: 'ferry_role_permission', target_type: 'role', target_id: roleId,
+        details: { role: role.name, allowed: !!data.allowed } });
+      sendConfig();
+    } catch (err) {
+      console.error('ferry:set-role-permission error:', err.message);
+      socket.emit('error-msg', 'Could not change that role');
+    }
   });
 
   socket.on('ferry:reconnect', () => {

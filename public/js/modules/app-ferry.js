@@ -25,6 +25,58 @@ const FERRY_MODES = [
   ['all',     'Mirror everything, every message in the channel'],
 ];
 
+// Option-list builders. Written with plain concatenation rather than nested
+// template literals so the <option> and <optgroup> markup stays readable.
+function opt(value, label) {
+  return '<option value="' + value + '">' + label + '</option>';
+}
+
+function group(label, inner) {
+  return '<optgroup label="' + label + '">' + inner + '</optgroup>';
+}
+
+/**
+ * Haven channels, with sub-channels nested under the channel they belong to.
+ *
+ * A flat list gives no way to tell a channel from a sub-channel, and Haven
+ * allows the same display name under two different parents, so a flat list can
+ * show two identical entries with no way to pick the right one.
+ */
+function buildChannelOptions(parents, subsByParent, orphans, esc) {
+  const sorted = [...parents].sort((a, b) => a.name.localeCompare(b.name));
+  let html = '';
+
+  for (const p of sorted) {
+    const kids = (subsByParent.get(p.id) || []).sort((a, b) => a.name.localeCompare(b.name));
+    const self = opt(esc(p.code), '#' + esc(p.name));
+    if (!kids.length) { html += self; continue; }
+    const kidHtml = kids.map(k => opt(esc(k.code), '  ↳ ' + esc(k.name))).join('');
+    html += group('#' + esc(p.name), self + kidHtml);
+  }
+
+  // A sub-channel whose parent is not visible to this admin would otherwise
+  // vanish from the list entirely.
+  if (orphans.length) {
+    html += group('Other', orphans.map(c => opt(esc(c.code), '#' + esc(c.name))).join(''));
+  }
+  return html;
+}
+
+/** Discord channels, grouped by their Discord category. */
+function buildDiscordChannelOptions(guild, esc) {
+  const byCategory = new Map();
+  for (const c of (guild && guild.channels) || []) {
+    const key = c.category || 'No category';
+    if (!byCategory.has(key)) byCategory.set(key, []);
+    byCategory.get(key).push(c);
+  }
+  let html = opt('', 'Pick one...');
+  for (const [cat, chans] of byCategory) {
+    html += group(esc(cat), chans.map(c => opt(esc(c.id), '#' + esc(c.name))).join(''));
+  }
+  return html;
+}
+
 export default {
 
   // ══════════════════════════════════════════════════════════
@@ -393,7 +445,19 @@ export default {
         </td>
       </tr>`).join('');
 
-    const havenChannels = (this.channels || []).filter(c => !c.is_dm);
+    // A flat list mixes top-level channels with sub-channels and gives no way
+    // to tell them apart, and Haven allows the same display name under two
+    // different parents. Grouping by parent restores the structure.
+    const allChannels = (this.channels || []).filter(c => !c.is_dm);
+    const parents = allChannels.filter(c => !c.parent_channel_id);
+    const subsByParent = new Map();
+    for (const c of allChannels) {
+      if (!c.parent_channel_id) continue;
+      if (!subsByParent.has(c.parent_channel_id)) subsByParent.set(c.parent_channel_id, []);
+      subsByParent.get(c.parent_channel_id).push(c);
+    }
+    const orphans = allChannels.filter(c => c.parent_channel_id && !parents.some(x => x.id === c.parent_channel_id));
+    const channelOptions = buildChannelOptions(parents, subsByParent, orphans, esc);
     const guildOptions = (cfg.guilds || []).map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
 
     const inviteBlock = this._ferryInvite
@@ -408,7 +472,7 @@ export default {
            <label><span>Haven channel</span>
              <select id="ferry-add-channel" class="form-select">
                <option value="">Pick one...</option>
-               ${havenChannels.map(c => `<option value="${esc(c.code)}">#${esc(c.name)}</option>`).join('')}
+                ${channelOptions}
              </select>
            </label>
            <label><span>Discord server</span>
@@ -440,6 +504,18 @@ export default {
            <tbody>${linkRows}</tbody>
          </table>`
       : `<p class="muted-text" style="margin-top:10px">No pairings yet.</p>`;
+
+    // No role holds use_ferry by default, so without this an admin sets Ferry
+    // up, tests it successfully as an admin, and it silently does nothing for
+    // everyone else with no indication why.
+    const roles = cfg.roles || [];
+    const roleRows = roles.length
+      ? roles.map(r => '<label class="toggle-row" style="margin-top:8px">'
+          + '<span><span class="ferry-role-dot" style="background:' + esc(r.color || '#888') + '"></span>'
+          + esc(r.name) + '</span>'
+          + '<input type="checkbox" data-ferry-role="' + r.id + '"' + (r.can_ferry ? ' checked' : '') + '>'
+          + '</label>').join('')
+      : '<p class="muted-text">No roles exist yet.</p>';
 
     const publicUrlWarning = st.publicUrlSet
       ? ''
@@ -481,6 +557,15 @@ export default {
         ${pairTable}
       </div>
 
+      <div class="ferry-step${lock(st.connected)}">
+        <h5 class="ferry-step-title"><span class="ferry-step-num">5</span> Choose who can send</h5>
+        <small class="settings-hint">
+          Ferry does nothing for a member until one of their roles is switched on here. Admins can always
+          send. This is the same <strong>Send to Discord</strong> permission that appears under Roles.
+        </small>
+        ${roleRows}
+      </div>
+
       <details class="ferry-step ferry-options">
         <summary class="ferry-step-title">Options</summary>
         ${toggle('ferry_allow_personas', 'Allow persona names', 'Off means a relayed message always carries the sender&#39;s real Haven name.', st.allowPersonas, false)}
@@ -510,6 +595,13 @@ export default {
     body.querySelector('#ferry-token-clear')?.addEventListener('click', () => {
       if (!confirm('Remove the Discord bot token? Ferry stops immediately. Your pairings are kept.')) return;
       this.socket.emit('ferry:clear-token');
+    });
+
+    body.querySelectorAll('[data-ferry-role]').forEach(el => {
+      el.addEventListener('change', () => {
+        this.socket.emit('ferry:set-role-permission', {
+          roleId: parseInt(el.dataset.ferryRole), allowed: el.checked });
+      });
     });
 
     body.querySelectorAll('[data-ferry-toggle]').forEach(el => {
@@ -546,9 +638,7 @@ export default {
     guildSel?.addEventListener('change', () => {
       const guild = (cfg.guilds || []).find(g => g.id === guildSel.value);
       const esc = (s) => this._escapeHtml(String(s ?? ''));
-      dChanSel.innerHTML = `<option value="">Discord channel...</option>` +
-        (guild?.channels || []).map(c =>
-          `<option value="${esc(c.id)}">#${esc(c.name)}${c.category ? ` (${esc(c.category)})` : ''}</option>`).join('');
+      dChanSel.innerHTML = buildDiscordChannelOptions(guild, (v) => this._escapeHtml(String(v ?? "")));
     });
 
     body.querySelector('#ferry-add-btn')?.addEventListener('click', () => {
