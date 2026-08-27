@@ -10,7 +10,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <title>Haven</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cG9seWdvbiBwb2ludHM9IjUwLDMgOTMsMjggOTMsNzIgNTAsOTcgNyw3MiA3LDI4IiBmaWxsPSJub25lIiBzdHJva2U9IiM2YjRmZGIiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjx0ZXh0IHg9IjUwIiB5PSI2MyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iYm9sZCIgZm9udC1zaXplPSIzOCIgZmlsbD0iIzZiNGZkYiIgb3BhY2l0eT0iMC45NSI+SDwvdGV4dD48L3N2Zz4=">
-  <link rel="stylesheet" href="/css/style.css?v=3.51.0">
+  <link rel="stylesheet" href="/css/style.css?v=3.51.1">
   <script src="/js/theme-init.js?v=3.16.15"></script>
 </head>
 <body>
@@ -1052,18 +1052,6 @@
     </div>
   </div>
 
-  <!-- Ferry (Discord bridge) Modal -->
-  <div class="modal-overlay" id="ferry-modal" style="display:none">
-    <div class="modal modal-wide">
-      <h3>🛶 <span data-i18n="modals.ferry.title">Ferry (Discord bridge)</span></h3>
-      <div id="ferry-modal-body" class="ferry-body"></div>
-      <div class="modal-actions">
-        <button class="btn-sm" id="ferry-refresh-btn" data-i18n="modals.ferry.refresh">Reconnect</button>
-        <button class="btn-sm btn-accent" id="ferry-close-btn" data-i18n="modals.common.close">Close</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Add Server Modal -->
   <div class="modal-overlay" id="add-server-modal" style="display:none">
     <div class="modal">
@@ -1353,6 +1341,7 @@
           <div class="settings-nav-item settings-nav-admin" data-target="section-roles" style="display:none">👑 <span data-i18n="settings.nav.roles">Roles</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-tunnel" style="display:none">🧭 <span data-i18n="settings.nav.tunnel">Tunnel</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-bots" style="display:none">🤖 <span data-i18n="settings.nav.bots">Bots</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-ferry" style="display:none">🛶 <span data-i18n="settings.nav.ferry">Ferry</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-import" style="display:none">📦 <span data-i18n="settings.nav.import">Import</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-modmode" style="display:none">🔧 <span data-i18n="settings.nav.mod_mode">Mod Mode</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-audit-log" style="display:none">📜 <span data-i18n="settings.nav.audit_log">Audit Log</span></div>
@@ -3314,6 +3303,18 @@
     </div>
   </div>
 
+  <!-- Ferry (Discord bridge) Modal -->
+  <div class="modal-overlay" id="ferry-modal" style="display:none">
+    <div class="modal modal-wide">
+      <h3>🛶 <span data-i18n="modals.ferry.title">Ferry (Discord bridge)</span></h3>
+      <div id="ferry-modal-body" class="ferry-body"></div>
+      <div class="modal-actions">
+        <button class="btn-sm" id="ferry-refresh-btn" data-i18n="modals.ferry.refresh">Reconnect</button>
+        <button class="btn-sm btn-accent" id="ferry-close-btn" data-i18n="modals.common.close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Audit Log Modal -->
   <div class="modal-overlay" id="audit-log-modal" style="display:none">
     <div class="modal modal-wide" style="width:760px">
@@ -4126,7 +4127,7 @@
   <!-- Shared with the server (src/automod.js requires the same file) so both
        sides reach identical verdicts on a link. Must load before app.js. -->
   <script src="/js/automod-rules.js?v=3.44.0"></script>
-  <script type="module" src="/js/app.js?v=3.51.0"></script>
+  <script type="module" src="/js/app.js?v=3.51.1"></script>
   <script src="/js/plugin-loader.js?v=3.16.15"></script>
   <script src="/js/modules/stream-debug.js?v=3.16.15"></script>
   <script src="/js/password-eye.js?v=3.17.1"></script>

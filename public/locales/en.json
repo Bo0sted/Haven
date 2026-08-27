@@ -747,7 +747,8 @@
       "mod_mode": "Mod Mode",
       "security": "Security",
       "moderation": "Moderation",
-      "sessions": "Sessions"
+      "sessions": "Sessions",
+      "ferry": "Ferry"
     },
     "language_section": {
       "title": "Language",

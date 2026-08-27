@@ -334,6 +334,12 @@ export default {
       : (s.lastError || 'Connecting to Discord...');
   },
 
+  /**
+   * Laid out as the order an admin actually does things: connect the bot,
+   * invite it, switch it on, pair channels. A step that cannot be done yet is
+   * shown as locked rather than hidden, so the whole path is visible up front
+   * instead of appearing one piece at a time.
+   */
   _renderFerryModal() {
     const body = document.getElementById('ferry-modal-body');
     if (!body) return;
@@ -341,26 +347,31 @@ export default {
     const cfg = this._ferryConfig;
     if (!cfg) { body.innerHTML = `<p class="muted-text">Loading...</p>`; return; }
 
-    const esc = (s) => this._escapeHtml(String(s ?? ''));
-    const s = cfg.state;
+    const esc = (v) => this._escapeHtml(String(v ?? ''));
+    const st = cfg.state;
 
-    // ── Status banner ──
-    let status, statusClass;
-    if (!s.hasToken)      { status = 'No bot token yet. Start at step 1 below.'; statusClass = 'muted-text'; }
-    else if (!s.enabled)  { status = 'Ferry is switched off.'; statusClass = 'muted-text'; }
-    else if (s.connected) { status = `Connected to Discord as ${esc(s.bot?.username || 'the bot')}, in ${s.guildCount} server${s.guildCount === 1 ? '' : 's'}.`; statusClass = 'ferry-status-ok'; }
-    else                  { status = esc(s.lastError || 'Connecting to Discord...'); statusClass = 'ferry-status-bad'; }
+    const done = (ok) => ok ? ' ferry-step-done' : '';
+    const lock = (ok) => ok ? '' : ' ferry-step-locked';
 
+    // Toggles have to be `.toggle-row > input[type=checkbox]` to pick up the
+    // slider styling the rest of Haven uses. Any other wrapper renders as a
+    // bare checkbox and looks out of place next to every other setting.
     const toggle = (key, label, hint, on, disabled) => `
-      <div class="ferry-toggle-row">
-        <label class="ferry-toggle-label">
-          <input type="checkbox" data-ferry-toggle="${key}" ${on ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
-          <span>${label}</span>
-        </label>
-        <small class="settings-hint">${hint}</small>
-      </div>`;
+      <label class="toggle-row" style="margin-top:10px">
+        <span>${label}</span>
+        <input type="checkbox" data-ferry-toggle="${key}"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}>
+      </label>
+      <small class="settings-hint">${hint}</small>`;
 
-    // ── Pairing rows ──
+    let step1Status;
+    if (!st.hasToken) {
+      step1Status = `<p class="muted-text">No token saved yet.</p>`;
+    } else if (st.connected) {
+      step1Status = `<p class="ferry-status-ok">Connected as <strong>${esc(st.bot && st.bot.username)}</strong>, in ${st.guildCount} Discord server${st.guildCount === 1 ? '' : 's'}.</p>`;
+    } else {
+      step1Status = `<p class="ferry-status-bad">${esc(st.lastError || 'Connecting to Discord...')}</p>`;
+    }
+
     const linkRows = (cfg.links || []).map(l => `
       <tr data-ferry-link="${l.id}"${l.is_active ? '' : ' class="ferry-row-off"'}>
         <td><strong>#${esc(l.channel_name)}</strong></td>
@@ -376,82 +387,108 @@ export default {
           </select>
         </td>
         <td class="ferry-actions-cell">
-          <label class="ferry-toggle-label"><input type="checkbox" data-ferry-field="isActive" ${l.is_active ? 'checked' : ''}> on</label>
+          <label class="toggle-row"><span>On</span><input type="checkbox" data-ferry-field="isActive"${l.is_active ? ' checked' : ''}></label>
           <button class="btn-sm btn-danger" data-ferry-delete="${l.id}">Remove</button>
           ${l.last_error ? `<div class="ferry-link-error">${esc(l.last_error)}</div>` : ''}
         </td>
       </tr>`).join('');
 
-    // ── Add-pairing form ──
     const havenChannels = (this.channels || []).filter(c => !c.is_dm);
     const guildOptions = (cfg.guilds || []).map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
 
-    body.innerHTML = `
-      <p class="${statusClass}" id="ferry-status-line">${status}</p>
+    const inviteBlock = this._ferryInvite
+      ? `<small class="settings-hint">Open this link, pick your server, and leave the permissions as they are.</small>
+         <div class="ferry-invite"><a href="${esc(this._ferryInvite)}" target="_blank" rel="noopener noreferrer">${esc(this._ferryInvite)}</a></div>`
+      : st.connected
+        ? `<small class="settings-hint">The bot is already in ${st.guildCount} server${st.guildCount === 1 ? '' : 's'}. To add it to another, press Reconnect below to regenerate the invite link.</small>`
+        : `<small class="settings-hint">The invite link appears here once a token is saved.</small>`;
 
-      <div class="ferry-step">
-        <h5 class="settings-section-subtitle">1. Connect a Discord bot</h5>
+    const pairForm = st.connected
+      ? `<div class="ferry-add-grid">
+           <label><span>Haven channel</span>
+             <select id="ferry-add-channel" class="form-select">
+               <option value="">Pick one...</option>
+               ${havenChannels.map(c => `<option value="${esc(c.code)}">#${esc(c.name)}</option>`).join('')}
+             </select>
+           </label>
+           <label><span>Discord server</span>
+             <select id="ferry-add-guild" class="form-select">
+               <option value="">Pick one...</option>
+               ${guildOptions}
+             </select>
+           </label>
+           <label><span>Discord channel</span>
+             <select id="ferry-add-dchannel" class="form-select"><option value="">Pick a server first...</option></select>
+           </label>
+           <label><span>Direction</span>
+             <select id="ferry-add-direction" class="form-select">
+               ${FERRY_DIRECTIONS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}
+             </select>
+           </label>
+           <label class="ferry-add-wide"><span>Outgoing messages</span>
+             <select id="ferry-add-mode" class="form-select">
+               ${FERRY_MODES.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}
+             </select>
+           </label>
+           <button class="btn-sm btn-accent ferry-add-btn" id="ferry-add-btn">Add pairing</button>
+         </div>`
+      : `<p class="muted-text">Connect the bot first.</p>`;
+
+    const pairTable = (cfg.links || []).length
+      ? `<table class="ferry-table">
+           <thead><tr><th>Haven</th><th>Discord</th><th>Direction</th><th>Outgoing</th><th></th></tr></thead>
+           <tbody>${linkRows}</tbody>
+         </table>`
+      : `<p class="muted-text" style="margin-top:10px">No pairings yet.</p>`;
+
+    const publicUrlWarning = st.publicUrlSet
+      ? ''
+      : `<small class="settings-hint ferry-warn">PUBLIC_URL is not set in your .env, so Haven avatars and uploaded images will not show on the Discord side. Names still come through.</small>`;
+
+    body.innerHTML = `
+      <div class="ferry-step${done(st.hasToken)}">
+        <h5 class="ferry-step-title"><span class="ferry-step-num">1</span> Connect your Discord bot</h5>
         <small class="settings-hint">
-          Create an application at <strong>discord.com/developers/applications</strong>, open the
-          <strong>Bot</strong> tab, and turn on <strong>Message Content Intent</strong>. Copy the token from that
-          same tab and paste it here. Every Haven server needs its own bot: Discord does not let one
-          application serve everyone.
+          At <strong>discord.com/developers/applications</strong>: New Application, then the
+          <strong>Bot</strong> tab. Turn on <strong>Message Content Intent</strong>, press Reset Token, and paste it here.
         </small>
         <div class="ferry-token-row">
           <input type="password" id="ferry-token-input" class="settings-input"
-                 placeholder="${s.hasToken ? esc(cfg.tokenHint) : 'Paste your bot token'}" autocomplete="off">
-          <button class="btn-sm btn-accent" id="ferry-token-save">${s.hasToken ? 'Replace' : 'Save'}</button>
-          ${s.hasToken ? `<button class="btn-sm btn-danger" id="ferry-token-clear">Remove</button>` : ''}
+                 placeholder="${st.hasToken ? esc(cfg.tokenHint) : 'Paste your bot token'}" autocomplete="off">
+          <button class="btn-sm btn-accent" id="ferry-token-save">${st.hasToken ? 'Replace' : 'Save'}</button>
+          ${st.hasToken ? `<button class="btn-sm btn-danger" id="ferry-token-clear">Remove</button>` : ''}
         </div>
-        ${this._ferryInvite ? `
-          <div class="ferry-invite">
-            Invite the bot to your Discord server with this link, then come back and add a pairing:<br>
-            <a href="${esc(this._ferryInvite)}" target="_blank" rel="noopener noreferrer">${esc(this._ferryInvite)}</a>
-          </div>` : ''}
+        ${step1Status}
       </div>
 
-      <div class="ferry-step">
-        <h5 class="settings-section-subtitle">2. Options</h5>
-        ${toggle('ferry_enabled', 'Ferry is on', 'Master switch. Nothing crosses in either direction while this is off.', s.enabled, !s.hasToken)}
-        ${toggle('ferry_allow_personas', 'Allow persona names', 'Off means a relayed message always carries the sender\'s real Haven name. On lets personas through, so a Discord server can be addressed by an alias.', s.allowPersonas, false)}
-        ${toggle('ferry_allow_dms', 'Allow Discord DMs', 'Lets members send a one-way DM to a Discord user. Replies stay in Discord and never reach Haven. Needs the Server Members Intent enabled in the Developer Portal.', s.allowDms, false)}
-        ${toggle('ferry_allow_mentions', 'Allow pings', 'Off means relayed messages never ping anyone on Discord. Leave it off unless you trust every member with the Ferry permission.', s.allowMentions, false)}
-        ${toggle('ferry_relay_bots', 'Relay other bots', 'Off means messages from Discord bots are ignored. Turning it on can flood a Haven channel.', s.relayBots, false)}
-        ${!s.publicUrlSet ? `<small class="settings-hint ferry-warn">PUBLIC_URL is not set in your .env, so Haven avatars and uploaded images will not appear on the Discord side. Names still come through.</small>` : ''}
+      <div class="ferry-step${lock(st.hasToken)}">
+        <h5 class="ferry-step-title"><span class="ferry-step-num">2</span> Invite the bot to your Discord server</h5>
+        ${inviteBlock}
       </div>
 
-      <div class="ferry-step">
-        <h5 class="settings-section-subtitle">3. Channel pairings</h5>
+      <div class="ferry-step${lock(st.hasToken)}">
+        <h5 class="ferry-step-title"><span class="ferry-step-num">3</span> Turn Ferry on</h5>
+        ${toggle('ferry_enabled', 'Ferry is on', 'Master switch. Nothing crosses in either direction while this is off.', st.enabled, !st.hasToken)}
+      </div>
+
+      <div class="ferry-step${lock(st.connected)}">
+        <h5 class="ferry-step-title"><span class="ferry-step-num">4</span> Pair your channels</h5>
         <small class="settings-hint">
-          A pairing is also the permission: members can only reach Discord channels paired with the Haven
-          channel they are in, and only if their role has the <strong>Send to Discord</strong> permission.
+          Members can only reach Discord channels paired with the Haven channel they are standing in, and
+          only if their role has the <strong>Send to Discord</strong> permission.
         </small>
-        ${(cfg.links || []).length ? `
-          <table class="ferry-table">
-            <thead><tr><th>Haven</th><th>Discord</th><th>Direction</th><th>Outgoing</th><th></th></tr></thead>
-            <tbody>${linkRows}</tbody>
-          </table>` : `<p class="muted-text">No pairings yet.</p>`}
-
-        ${s.connected ? `
-          <div class="ferry-add-row">
-            <select id="ferry-add-channel" class="form-select">
-              <option value="">Haven channel...</option>
-              ${havenChannels.map(c => `<option value="${esc(c.code)}">#${esc(c.name)}</option>`).join('')}
-            </select>
-            <select id="ferry-add-guild" class="form-select">
-              <option value="">Discord server...</option>
-              ${guildOptions}
-            </select>
-            <select id="ferry-add-dchannel" class="form-select"><option value="">Discord channel...</option></select>
-            <select id="ferry-add-direction" class="form-select">
-              ${FERRY_DIRECTIONS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}
-            </select>
-            <select id="ferry-add-mode" class="form-select">
-              ${FERRY_MODES.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}
-            </select>
-            <button class="btn-sm btn-accent" id="ferry-add-btn">Add pairing</button>
-          </div>` : `<p class="muted-text">Connect the bot before adding pairings.</p>`}
+        ${pairForm}
+        ${pairTable}
       </div>
+
+      <details class="ferry-step ferry-options">
+        <summary class="ferry-step-title">Options</summary>
+        ${toggle('ferry_allow_personas', 'Allow persona names', 'Off means a relayed message always carries the sender&#39;s real Haven name.', st.allowPersonas, false)}
+        ${toggle('ferry_allow_dms', 'Allow Discord DMs', 'Lets members send a one-way DM to a Discord user. Replies stay in Discord. Needs the Server Members Intent.', st.allowDms, false)}
+        ${toggle('ferry_allow_mentions', 'Allow pings', 'Off means relayed messages never ping anyone on Discord.', st.allowMentions, false)}
+        ${toggle('ferry_relay_bots', 'Relay other bots', 'Off means messages from Discord bots are ignored. On can flood a Haven channel.', st.relayBots, false)}
+        ${publicUrlWarning}
+      </details>
     `;
 
     this._bindFerryModal();

@@ -19046,14 +19046,46 @@ ul.chat-list { list-style-type: disc; }
 
 /* ── Ferry: Haven <-> Discord bridge ──────────────────────── */
 .ferry-body { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+
+/* Each step is a numbered card so the setup reads as a sequence rather than a
+   wall of controls. A locked step stays visible, greyed and non-interactive,
+   so an admin can see the whole path before starting it. */
 .ferry-step {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
 }
-.ferry-step:first-of-type { border-top: none; padding-top: 0; }
-.ferry-status-ok  { color: var(--success, #2ecc71); font-size: .82rem; }
-.ferry-status-bad { color: var(--danger, #e74c3c); font-size: .82rem; }
+.ferry-step:first-of-type { margin-top: 0; }
+.ferry-step-done { border-color: var(--success, #2ecc71); }
+.ferry-step-locked { opacity: .5; pointer-events: none; }
+
+.ferry-step-title {
+  margin: 0 0 6px;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ferry-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: .72rem;
+  flex: 0 0 auto;
+}
+.ferry-step-done .ferry-step-num { background: var(--success, #2ecc71); }
+
+.ferry-status-ok  { color: var(--success, #2ecc71); font-size: .78rem; margin: 8px 0 0; }
+.ferry-status-bad { color: var(--danger, #e74c3c);  font-size: .78rem; margin: 8px 0 0; }
 .ferry-warn       { display: block; margin-top: 8px; color: var(--warning, #f39c12); }
 
 .ferry-token-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
@@ -19062,22 +19094,30 @@ ul.chat-list { list-style-type: disc; }
   margin-top: 8px;
   padding: 8px;
   border-radius: 6px;
-  background: var(--bg-secondary);
-  font-size: .78rem;
+  background: var(--bg-primary);
+  font-size: .75rem;
   word-break: break-all;
 }
 
-.ferry-toggle-row { margin-top: 10px; }
-.ferry-toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: .84rem;
-  cursor: pointer;
+/* Two columns of labelled dropdowns, so every control says what it is instead
+   of being a row of anonymous selects. */
+.ferry-add-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
 }
-.ferry-toggle-label input[disabled] + span { opacity: .5; }
+.ferry-add-grid label { display: flex; flex-direction: column; gap: 3px; }
+.ferry-add-grid label > span { font-size: .7rem; color: var(--text-secondary); }
+.ferry-add-grid .form-select { width: 100%; font-size: .78rem; }
+.ferry-add-wide { grid-column: 1 / -1; }
+.ferry-add-btn  { grid-column: 1 / -1; }
+@media (max-width: 520px) { .ferry-add-grid { grid-template-columns: 1fr; } }
 
-.ferry-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .78rem; }
+.ferry-options > summary { cursor: pointer; }
+.ferry-options[open] > summary { margin-bottom: 4px; }
+
+.ferry-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .75rem; }
 .ferry-table th {
   text-align: left;
   padding: 4px 6px;
@@ -19087,23 +19127,14 @@ ul.chat-list { list-style-type: disc; }
 }
 .ferry-table td { padding: 6px; border-bottom: 1px solid var(--border-light, var(--border)); vertical-align: top; }
 .ferry-row-off { opacity: .45; }
-.ferry-mini { font-size: .74rem; padding: 3px 4px; max-width: 11rem; }
+.ferry-mini { font-size: .72rem; padding: 3px 4px; max-width: 11rem; }
 .ferry-actions-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.ferry-link-error { color: var(--danger, #e74c3c); font-size: .7rem; max-width: 14rem; }
+.ferry-actions-cell .toggle-row { gap: 6px; }
+.ferry-link-error { color: var(--danger, #e74c3c); font-size: .68rem; max-width: 14rem; }
 
-.ferry-add-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border);
-}
-.ferry-add-row .form-select { flex: 1 1 9rem; min-width: 8rem; font-size: .78rem; }
-
-/* Destination badge on a message that was addressed to Discord. Sits inline
-   with the message so history still reads as a conversation, rather than
-   leaving the routing prefix in the body. */
+/* Destination badge on a message that was addressed to Discord. The routing
+   prefix is stripped before storage, so without this an on-command channel
+   looks like people talking to nobody. */
 .ferry-badge {
   display: inline-flex;
   align-items: center;
