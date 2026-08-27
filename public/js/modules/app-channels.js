@@ -11,6 +11,9 @@ async switchChannel(code) {
   // Voice persists across channel switches — no auto-disconnect
 
   this.currentChannel = code;
+  // Search panel persists per-context: hide/show it for the channel we just
+  // entered (public channels share one, each DM keeps its own). (search-overhaul)
+  this._searchOnChannelSwitch?.();
   // Reset pin indicator until message-history reports the count for this channel
   this._updatePinIndicator?.(this._pinnedCountByChannel?.[code] || 0);
   this._coupledToBottom = true;

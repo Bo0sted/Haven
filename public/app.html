@@ -309,7 +309,44 @@
           </div>
           <div class="search-container" id="search-container" style="display:none">
             <input type="text" id="search-input" class="search-input" data-i18n-placeholder="header.search_placeholder" placeholder="Search... from:user in:#channel has:image" maxlength="200">
+            <button id="search-filter-btn" class="icon-btn small" data-i18n-title="header.filter_toggle" title="Filters">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            </button>
             <button id="search-close-btn" class="icon-btn small" title="Close search">&times;</button>
+            <!-- Filter picker popover — appears with the search box, appends
+                 filter tokens client-side. Public search only. (phase 3) -->
+            <div id="search-filter-popover" class="search-filter-popover" style="display:none">
+              <div class="sfp-root" id="sfp-root">
+                <div class="sfp-recent" id="sfp-recent" style="display:none"></div>
+                <div class="sfp-chips">
+                  <span class="sfp-label" data-i18n="header.filter_by">Filter by</span>
+                  <button type="button" class="sfp-chip" data-sfp-filter="from">from:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="in">in:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="has">has:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="before">before:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="after">after:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="during">during:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="pinned">pinned</button>
+                </div>
+                <div class="sfp-sort" id="sfp-sort">
+                  <span class="sfp-label" data-i18n="header.sort_by">Sort</span>
+                  <button type="button" class="sfp-sort-btn" data-sort="newest" data-i18n="header.sort_newest">Newest</button>
+                  <button type="button" class="sfp-sort-btn" data-sort="oldest" data-i18n="header.sort_oldest">Oldest</button>
+                  <button type="button" class="sfp-sort-btn" data-sort="relevant" data-i18n="header.sort_relevant">Relevant</button>
+                </div>
+              </div>
+              <div class="sfp-picker" id="sfp-picker" style="display:none">
+                <div class="sfp-picker-head">
+                  <button type="button" class="sfp-back" id="sfp-back" title="Back">‹</button>
+                  <input type="text" class="sfp-filter-input" id="sfp-filter-input" autocomplete="off" spellcheck="false" data-i18n-placeholder="header.filter_placeholder" placeholder="Filter...">
+                  <div class="sfp-date-wrap" id="sfp-date-wrap" style="display:none">
+                    <input type="date" class="sfp-date-input" id="sfp-date-input">
+                    <button type="button" class="sfp-chip" id="sfp-date-apply" data-i18n="header.filter_apply">Apply</button>
+                  </div>
+                </div>
+                <div class="sfp-list" id="sfp-list"></div>
+              </div>
+            </div>
           </div>
           <!-- Update available banner -->
           <a id="update-banner" class="update-banner" href="#" style="display:none" target="_blank" rel="noopener">
@@ -450,13 +487,6 @@
             </div>
             <div id="music-embed-container" class="music-embed-container"></div>
           </div>
-          <div id="search-results-panel" class="search-results-panel" style="display:none">
-            <div class="search-results-header">
-              <span id="search-results-count" data-i18n="header.results">Results</span>
-              <button id="search-results-close" class="icon-btn small">&times;</button>
-            </div>
-            <div id="search-results-list" class="search-results-list"></div>
-          </div>
           <div id="pinned-panel" class="pinned-panel" style="display:none">
             <div class="pinned-panel-header">
               <span id="pinned-count">📌 <span data-i18n="header.pinned_count">Pinned Messages</span></span>
@@ -571,6 +601,30 @@
       <!-- ─── Right Sidebar ───────────────────────────── -->
       <aside class="right-sidebar" id="right-sidebar">
         <div class="right-sidebar-resize-handle" id="right-sidebar-resize-handle"></div>
+        <!-- Search results overlay — sits over voice + member list, persists across
+             channel switches, only closes on the X. (search-overhaul phase 1) -->
+        <div id="search-panel" class="search-panel" style="display:none">
+          <div class="search-panel-header">
+            <span id="search-panel-count" data-i18n="header.results">Results</span>
+            <button id="search-panel-close" class="icon-btn small" data-i18n-title="modals.common.close" title="Close">&times;</button>
+          </div>
+          <div id="search-panel-banner" class="search-panel-banner" style="display:none">
+            <span data-i18n="header.search_stale">A channel or role you have has changed, please refresh the search to continue.</span>
+            <button id="search-rerun-btn" class="btn-secondary small" data-i18n="header.search_refresh">Refresh search</button>
+          </div>
+          <div id="search-panel-loading" class="search-panel-loading" style="display:none">
+            <span class="search-spinner"></span><span data-i18n="header.searching">Searching...</span>
+          </div>
+          <div id="search-panel-list" class="search-panel-list"></div>
+          <div id="search-panel-pager" class="search-panel-pager" style="display:none">
+            <button id="search-page-prev" class="icon-btn small" title="Previous page">‹</button>
+            <span class="search-page-label">
+              <input id="search-page-input" class="search-page-input" type="text" inputmode="numeric" value="1" aria-label="Page number">
+              <span id="search-page-total" class="search-page-total"></span>
+            </span>
+            <button id="search-page-next" class="icon-btn small" title="Next page">›</button>
+          </div>
+        </div>
         <!-- Voice users section -->
         <div class="right-sidebar-voice" id="right-sidebar-voice">
           <div class="panel">

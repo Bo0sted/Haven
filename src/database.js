@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const { DB_PATH } = require('./paths');
+const { ensureSearchIndex } = require('./searchIndex');
 
 let db;
 
@@ -1516,6 +1517,14 @@ function initDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_user_connections_provider ON user_connections(provider);
   `);
+
+  // Full-text search index (messages_fts) — created/reconciled here so it runs
+  // synchronously before the server listens. (search-overhaul phase 2)
+  try {
+    ensureSearchIndex(db);
+  } catch (e) {
+    console.warn('[search] Index setup failed:', e.message);
+  }
 
   return db;
 }

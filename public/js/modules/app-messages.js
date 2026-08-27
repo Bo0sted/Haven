@@ -1509,6 +1509,11 @@ _fetchLinkPreviews(containerEl) {
     const url = link.href;
     if (seen.has(url)) return;
     seen.add(url);
+    // Search results defer embeds behind a per-link Load button so a page of
+    // 25 results never fires 25 preview fetches. The button clears this flag on
+    // the one link it owns, then re-runs this pass. Channel/DM views never set
+    // the attribute, so their behaviour is unchanged. (search-overhaul phase 3)
+    if (link.dataset.embedDeferred) return;
     // Skip image URLs (already rendered inline) and internal URLs
     if (/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url)) return;
     if (/^https:\/\/media\d*\.giphy\.com\//i.test(url)) return;
