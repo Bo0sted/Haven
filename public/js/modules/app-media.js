@@ -3437,6 +3437,17 @@ _setupStickerManagement() {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 _setupWebhookManagement() {
+  // ── Ferry (Discord bridge) ──
+  document.getElementById('open-ferry-btn')?.addEventListener('click', () => this._openFerryModal());
+  document.getElementById('ferry-close-btn')?.addEventListener('click', () => this._closeFerryModal());
+  document.getElementById('ferry-refresh-btn')?.addEventListener('click', () => {
+    this.socket.emit('ferry:reconnect');
+    this._showToast('Reconnecting to Discord...', 'info');
+  });
+  document.getElementById('ferry-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) this._closeFerryModal();
+  });
+
   // Open bot management modal
   const openBtn = document.getElementById('open-bot-editor-btn');
   if (openBtn) {

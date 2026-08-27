@@ -70,6 +70,19 @@ _handleAutocompleteKeydown(e) {
     }
     if (e.key === 'Escape') { this._hidePersonaDropdown(); return true; }
   }
+  const ferryDd = document.getElementById('ferry-dropdown');
+  if (ferryDd && ferryDd.style.display !== 'none') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      this._navigateFerryDropdown(e.key === 'ArrowDown' ? 1 : -1);
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      const active = ferryDd.querySelector('.mention-item.active');
+      if (active) { e.preventDefault(); active.click(); return true; }
+    }
+    if (e.key === 'Escape') { this._hideFerryDropdown(); return true; }
+  }
   return false;
 },
 
@@ -164,6 +177,21 @@ _setupUI() {
       if (e.key === 'Escape') { this._hidePersonaDropdown(); return; }
     }
 
+    // Ferry target dropdown takes the same keys as the persona one above.
+    const ferryDd = document.getElementById('ferry-dropdown');
+    if (ferryDd && ferryDd.style.display !== 'none') {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        this._navigateFerryDropdown(e.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const active = ferryDd.querySelector('.mention-item.active');
+        if (active) { e.preventDefault(); active.click(); return; }
+      }
+      if (e.key === 'Escape') { this._hideFerryDropdown(); return; }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       this._sendMessage();
@@ -205,6 +233,8 @@ _setupUI() {
     this._checkSlashTrigger();
     // Check for >>persona trigger (#86, #5349)
     this._checkPersonaTrigger();
+    // Check for =>Discord ferry target trigger
+    this._checkFerryTrigger();
   });
 
   document.getElementById('send-btn').addEventListener('click', () => this._sendMessage());
@@ -1892,7 +1922,7 @@ _setupUI() {
       '.modal-overlay, #quick-switcher-overlay, #theme-popup, #search-container, ' +
       '#search-panel, #image-lightbox, .image-lightbox, #emoji-picker, ' +
       '#gif-picker, .channel-ctx-menu, #emoji-dropdown, #slash-dropdown, ' +
-      '#mention-dropdown, #channel-dropdown, #persona-dropdown, #gif-slash-picker, ' +
+      '#mention-dropdown, #channel-dropdown, #persona-dropdown, #ferry-dropdown, #gif-slash-picker, ' +
       '#dm-pip-panel, #thread-panel, #pins-pip-panel'
     )].some(el => el.getClientRects().length > 0);
     if (somethingOpen) return;

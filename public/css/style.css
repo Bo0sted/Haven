@@ -19043,3 +19043,78 @@ ul.chat-list { list-style-type: disc; }
   align-items: center;
 }
 .persona-edit-row input[type=text] { flex: 1; min-width: 8rem; }
+
+/* ── Ferry: Haven <-> Discord bridge ──────────────────────── */
+.ferry-body { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.ferry-step {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ferry-step:first-of-type { border-top: none; padding-top: 0; }
+.ferry-status-ok  { color: var(--success, #2ecc71); font-size: .82rem; }
+.ferry-status-bad { color: var(--danger, #e74c3c); font-size: .82rem; }
+.ferry-warn       { display: block; margin-top: 8px; color: var(--warning, #f39c12); }
+
+.ferry-token-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.ferry-token-row input { flex: 1; min-width: 12rem; }
+.ferry-invite {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  font-size: .78rem;
+  word-break: break-all;
+}
+
+.ferry-toggle-row { margin-top: 10px; }
+.ferry-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .84rem;
+  cursor: pointer;
+}
+.ferry-toggle-label input[disabled] + span { opacity: .5; }
+
+.ferry-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .78rem; }
+.ferry-table th {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.ferry-table td { padding: 6px; border-bottom: 1px solid var(--border-light, var(--border)); vertical-align: top; }
+.ferry-row-off { opacity: .45; }
+.ferry-mini { font-size: .74rem; padding: 3px 4px; max-width: 11rem; }
+.ferry-actions-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.ferry-link-error { color: var(--danger, #e74c3c); font-size: .7rem; max-width: 14rem; }
+
+.ferry-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.ferry-add-row .form-select { flex: 1 1 9rem; min-width: 8rem; font-size: .78rem; }
+
+/* Destination badge on a message that was addressed to Discord. Sits inline
+   with the message so history still reads as a conversation, rather than
+   leaving the routing prefix in the body. */
+.ferry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: .66rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}

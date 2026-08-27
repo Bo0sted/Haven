@@ -569,6 +569,7 @@
             <div id="emoji-dropdown" class="emoji-dropdown" style="display:none"></div>
             <div id="slash-dropdown" class="slash-dropdown" style="display:none"></div>
             <div id="persona-dropdown" class="mention-dropdown" style="display:none"></div>
+            <div id="ferry-dropdown" class="mention-dropdown" style="display:none"></div>
             <textarea id="message-input" data-i18n-placeholder="header.message_placeholder_commands" placeholder="Type a message... (/ for commands)"
                       rows="1" maxlength="2000"></textarea>
             <button id="send-btn" class="btn-send" data-i18n-title="media.send_title" title="Send">
@@ -1047,6 +1048,18 @@
         <button class="btn-sm" id="code-settings-cancel-btn" data-i18n="modals.common.cancel">Cancel</button>
         <button class="btn-sm btn-accent" id="code-rotate-now-btn">🔄 <span data-i18n="modals.code_settings.rotate_now_btn">Rotate Now</span></button>
         <button class="btn-sm btn-accent" id="code-settings-save-btn" data-i18n="modals.common.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ferry (Discord bridge) Modal -->
+  <div class="modal-overlay" id="ferry-modal" style="display:none">
+    <div class="modal modal-wide">
+      <h3>🛶 <span data-i18n="modals.ferry.title">Ferry (Discord bridge)</span></h3>
+      <div id="ferry-modal-body" class="ferry-body"></div>
+      <div class="modal-actions">
+        <button class="btn-sm" id="ferry-refresh-btn" data-i18n="modals.ferry.refresh">Reconnect</button>
+        <button class="btn-sm btn-accent" id="ferry-close-btn" data-i18n="modals.common.close">Close</button>
       </div>
     </div>
   </div>
@@ -2852,6 +2865,15 @@
           <div id="webhooks-list" style="margin-top:8px;">
             <p class="muted-text" data-i18n="settings.admin.no_bots">No bots configured</p>
           </div>
+        </div>
+        <!-- Ferry: Haven <-> Discord bridge (Admin only) -->
+        <div class="admin-settings" id="section-ferry" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+          <h5 class="settings-section-subtitle">🛶 <span data-i18n="settings.admin.ferry_title">Ferry (Discord bridge)</span></h5>
+          <small class="settings-hint" data-i18n="settings.admin.ferry_hint">Relay messages between Haven channels and Discord channels. Needs your own Discord bot, which takes about two minutes to create.</small>
+          <div style="margin-top:8px;">
+            <button class="btn-sm btn-full btn-accent" id="open-ferry-btn">🛶 <span data-i18n="settings.admin.manage_ferry_btn">Set up Ferry</span></button>
+          </div>
+          <p class="muted-text" id="ferry-summary" style="margin-top:8px;font-size:.78rem;">Not configured</p>
         </div>
         <!-- Custom Terms of Service (Admin only) -->
         <div class="admin-settings" id="section-custom-tos" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">

@@ -445,7 +445,8 @@
     "delete_channel": "Delete Channels",
     "read_only_override": "Read-Only Override",
     "view_audit_log": "View Audit Log",
-    "manage_display_names": "Manage Display Names"
+    "manage_display_names": "Manage Display Names",
+    "use_ferry": "Send to Discord (Ferry)"
   },
   "slowmode": {
     "wait": "Slow mode — wait {{seconds}}s before sending another message",
@@ -1234,7 +1235,10 @@
         "visibility": "Visibility",
         "visibility_hint": "When off, the Admin role is hidden on profiles and its color is not applied to your name anywhere, for everyone. Your admin powers are unaffected.",
         "delete": "Delete"
-      }
+      },
+      "ferry_title": "Ferry (Discord bridge)",
+      "ferry_hint": "Relay messages between Haven channels and Discord channels. Needs your own Discord bot, which takes about two minutes to create.",
+      "manage_ferry_btn": "Set up Ferry"
     }
   },
   "modals": {
@@ -1815,6 +1819,10 @@
     "hidden_channels": {
       "title": "Hidden Channels",
       "desc": "Hidden channels are removed from your sidebar but you still have full access to them. Unhide one to bring it back."
+    },
+    "ferry": {
+      "title": "Ferry (Discord bridge)",
+      "refresh": "Reconnect"
     }
   },
   "context_menu": {
