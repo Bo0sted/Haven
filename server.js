@@ -118,12 +118,14 @@ webpush.setVapidDetails(vapidEmail, process.env.VAPID_PUBLIC_KEY, process.env.VA
 
 const { initDatabase } = require('./src/database');
 const { router: authRoutes, authLimiter, verifyToken } = require('./src/auth');
-const { setupSocketHandlers, sanitizeText } = require('./src/socketHandlers');
+const { setupSocketHandlers, sanitizeText, sanitizeBorderTransform } = require('./src/socketHandlers');
+const { getAccessibleVoiceChannels } = require('./src/botVoice');
 const { startTunnel, stopTunnel, getTunnelStatus, registerProcessCleanup } = require('./src/tunnel');
 const { startDdns, getDdnsStatus, triggerDdnsNow } = require('./src/ddns');
 const { initFcm, setFcmAdminEnabled } = require('./src/fcm');
 
 const app = express();
+let socketRuntime = null;
 
 const UPLOAD_PATH_RE = /\/uploads\/((?!(?:deleted-attachments|stickers)\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+)/g;
 
@@ -909,6 +911,119 @@ app.post('/api/remove-avatar', express.json(), (req, res) => {
   }
 });
 
+// ── Border upload endpoint (pfp overlay, mirrors avatar upload) ──
+app.post('/api/upload-border', uploadLimiter, uploadDiskGuard, (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { getDb } = require('./src/database');
+  const ban = getDb().prepare('SELECT id FROM bans WHERE user_id = ?').get(user.id);
+  if (ban) return res.status(403).json({ error: 'Banned users cannot upload' });
+
+  // Enforce upload_files permission (admin always allowed)
+  if (!verifyAdminFromDb(user)) {
+    const hasPerm = getDb().prepare(`
+      SELECT 1 FROM role_permissions rp
+      JOIN user_roles ur ON rp.role_id = ur.role_id
+      WHERE ur.user_id = ? AND rp.permission = 'upload_files' AND rp.allowed = 1 LIMIT 1
+    `).get(user.id);
+    if (!hasPerm) return res.status(403).json({ error: 'You don\'t have permission to upload files' });
+  }
+
+  upload.single('border')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    if (req.file.size > 2 * 1024 * 1024) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Border must be under 2 MB' });
+    }
+
+    // Validate file magic bytes
+    try {
+      const fd = fs.openSync(req.file.path, 'r');
+      const hdr = Buffer.alloc(12);
+      fs.readSync(fd, hdr, 0, 12, 0);
+      fs.closeSync(fd);
+      let validMagic = false;
+      if (req.file.mimetype === 'image/jpeg') validMagic = hdr[0] === 0xFF && hdr[1] === 0xD8 && hdr[2] === 0xFF;
+      else if (req.file.mimetype === 'image/png') validMagic = hdr[0] === 0x89 && hdr[1] === 0x50 && hdr[2] === 0x4E && hdr[3] === 0x47;
+      else if (req.file.mimetype === 'image/gif') validMagic = hdr.slice(0, 6).toString().startsWith('GIF8');
+      else if (req.file.mimetype === 'image/webp') validMagic = hdr.slice(0, 4).toString() === 'RIFF' && hdr.slice(8, 12).toString() === 'WEBP';
+      if (!validMagic) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'File content does not match image type' });
+      }
+    } catch {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      return res.status(400).json({ error: 'Failed to validate file' });
+    }
+
+    // Force safe extension
+    const mimeToExt = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
+    const safeExt = mimeToExt[req.file.mimetype];
+    if (!safeExt) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Invalid file type' });
+    }
+    const currentExt = path.extname(req.file.filename).toLowerCase();
+    let finalName = req.file.filename;
+    if (currentExt !== safeExt) {
+      finalName = req.file.filename.replace(/\.[^.]+$/, '') + safeExt;
+      const oldPath = req.file.path;
+      const newPath = path.join(uploadDir, finalName);
+      fs.renameSync(oldPath, newPath);
+    }
+    const borderUrl = `/uploads/${finalName}`;
+
+    // Update the user's border in the database
+    try {
+      const db = getDb();
+      // A new image invalidates the old fit; clear it so no stale transform lingers.
+      db.prepare('UPDATE users SET border = ?, border_transform = NULL WHERE id = ?').run(borderUrl, user.id);
+      console.log(`[Border] ${user.username} uploaded border: ${borderUrl}`);
+    } catch (dbErr) {
+      console.error('Border DB update error:', dbErr);
+      return res.status(500).json({ error: 'Failed to save border' });
+    }
+
+    res.json({ url: borderUrl });
+  });
+});
+
+// ── Border remove endpoint ──
+app.post('/api/remove-border', express.json(), (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const { getDb } = require('./src/database');
+    getDb().prepare('UPDATE users SET border = NULL, border_transform = NULL WHERE id = ?').run(user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Border remove error:', err);
+    res.status(500).json({ error: 'Failed to remove border' });
+  }
+});
+
+// ── Border fit (op log) endpoint ──
+// Stores the pfp-overlay transform as sanitized JSON, mirroring set-avatar-shape.
+app.post('/api/set-border-transform', express.json(), (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const clean = sanitizeBorderTransform(req.body.transform);
+  const toStore = (clean && clean.length) ? JSON.stringify(clean) : null;
+  try {
+    const { getDb } = require('./src/database');
+    getDb().prepare('UPDATE users SET border_transform = ? WHERE id = ?').run(toStore, user.id);
+    res.json({ transform: toStore ? clean : null });
+  } catch (err) {
+    console.error('Border transform error:', err);
+    res.status(500).json({ error: 'Failed to save border fit' });
+  }
+});
+
 // ── Avatar shape endpoint ──
 app.post('/api/set-avatar-shape', express.json(), (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -923,6 +1038,24 @@ app.post('/api/set-avatar-shape', express.json(), (req, res) => {
   } catch (err) {
     console.error('Avatar shape error:', err);
     res.status(500).json({ error: 'Failed to save shape' });
+  }
+});
+
+// ── Animated-profile policy endpoint ──
+// How this user's animated avatar/border play for everyone, mirroring set-avatar-shape.
+app.post('/api/set-animate-profile', express.json(), (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const user = token ? verifyToken(token) : null;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const valid = ['trigger', 'disabled'];
+  const mode = valid.includes(req.body.mode) ? req.body.mode : 'trigger';
+  try {
+    const { getDb } = require('./src/database');
+    getDb().prepare('UPDATE users SET animate_profile = ? WHERE id = ?').run(mode, user.id);
+    res.json({ mode });
+  } catch (err) {
+    console.error('Animate profile error:', err);
+    res.status(500).json({ error: 'Failed to save animation policy' });
   }
 });
 
@@ -3540,6 +3673,33 @@ app.get('/api/activity/navidrome-cover/:userId', navidromeCoverLimiter, (req, re
   return res.end(cover.buf);
 });
 
+// Voice presence is scoped to the bot's assigned channel, channels its
+// creator belongs to, or every non-DM channel when its creator is an admin.
+app.get('/api/webhooks/:token/voice/channels', webhookLimiter, (req, res) => {
+  const webhook = getWebhookByToken(req.params.token);
+  if (!webhook) return res.status(404).json({ error: 'Webhook not found or inactive' });
+  if (!webhook.can_use_voice) {
+    return res.status(403).json({ error: 'This bot does not have voice permission' });
+  }
+
+  const { getDb } = require('./src/database');
+  const voiceUsers = socketRuntime?.state?.voiceUsers;
+  const channels = getAccessibleVoiceChannels(getDb(), webhook)
+    .filter(channel => channel.voice_enabled !== 0)
+    .map(channel => {
+      const room = voiceUsers?.get(channel.code);
+      const users = room ? Array.from(room.values()) : [];
+      return {
+        code: channel.code,
+        name: channel.name,
+        members: users.filter(user => !user.isBot).length,
+        bots: users.filter(user => user.isBot).length
+      };
+    })
+    .sort((a, b) => b.members - a.members || a.name.localeCompare(b.name));
+  res.json({ channels });
+});
+
 // ── Bot: Delete a message in the webhook's channel ──────
 app.delete('/api/webhooks/:token/messages/:messageId', webhookLimiter, (req, res) => {
   const { getDb } = require('./src/database');
@@ -3797,7 +3957,7 @@ function getWebhookByToken(token) {
   if (!token || typeof token !== 'string' || token.length !== 64) return null;
   const { getDb } = require('./src/database');
   return getDb().prepare(
-    'SELECT id, name, channel_id, callback_url, can_moderate, created_by FROM webhooks WHERE token = ? AND is_active = 1'
+    'SELECT id, name, channel_id, callback_url, can_moderate, can_use_voice, created_by FROM webhooks WHERE token = ? AND is_active = 1'
   ).get(token);
 }
 
@@ -4390,6 +4550,7 @@ app.post('/api/import/discord/execute', express.json({ limit: '1mb' }), (req, re
     const { getDb } = require('./src/database');
     const db = getDb();
     const { generateChannelCode } = require('./src/auth');
+    const { generateUniqueChannelCode } = require('./src/channelRotation');
 
     const stats = { channelsCreated: 0, channelsReused: 0, messagesImported: 0, messagesSkipped: 0 };
 
@@ -4403,7 +4564,7 @@ app.post('/api/import/discord/execute', express.json({ limit: '1mb' }), (req, re
         if (!channelData || !channelData.messages) continue;
 
         const channelName = [...(sel.name || channelData.name)].slice(0, 50).join('');
-        const code = generateChannelCode();
+        const code = generateUniqueChannelCode(db, generateChannelCode);
 
         // Reuse an existing Haven channel if it was created from the same Discord channel.
         // This makes re-importing (or importing a second overlapping export) idempotent —
@@ -4666,7 +4827,7 @@ try {
 } catch {}
 initFcm(DATA_DIR);
 app.set('io', io);   // expose to auth routes (session invalidation on password change)
-activityRef.engine = setupSocketHandlers(io, db, {
+socketRuntime = setupSocketHandlers(io, db, {
   invalidateIpBanCache,
   // Share the cached ban matcher so the socket gate and the HTTP gate agree
   // on both normalization and CIDR handling, and the socket path stops
@@ -4677,7 +4838,8 @@ activityRef.engine = setupSocketHandlers(io, db, {
   getUploadUsage,
   // Keep the Referrer-Policy cache in sync when an admin changes it.
   onReferrerPolicyChange: (v) => { if (VALID_REFERRER_POLICIES.includes(v)) currentReferrerPolicy = v; }
-}).activity;
+});
+activityRef.engine = socketRuntime.activity;
 registerProcessCleanup();
 
 // ── Auto-cleanup interval (runs every 15 minutes) ───────

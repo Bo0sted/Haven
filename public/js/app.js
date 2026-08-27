@@ -15,6 +15,7 @@ import VoiceMethods    from './modules/app-voice.js?v=3.34.0';
 import UtilityMethods  from './modules/app-utilities.js?v=3.34.0';
 import AdminMethods    from './modules/app-admin.js?v=3.30.1';
 import PlatformMethods from './modules/app-platform.js?v=3.16.12';
+import SearchMethods   from './modules/app-search.js?v=3.49.0';
 
 class HavenApp {
   constructor() {
@@ -259,6 +260,8 @@ class HavenApp {
     this._mediaProxyEnabled = true;   // assume on: fail closed, not open
     this._mediaToken = null;
     this._loadMediaToken?.();
+    this._startMediaTokenRefresh?.();   // the token expires after ~2 days
+    this._setupMediaTokenRetry?.();     // and a stale one used to fail silently
     // Link policy for decrypted DM content (#5483). Requested once the socket
     // exists, below, since it travels over the authenticated connection.
 
@@ -311,6 +314,8 @@ class HavenApp {
     this.modMode?.init();
     this._setupDensityPicker();
     this._setupToggleStylePicker();
+    this._setupAnimatePfpPicker();
+    this._setupAnimateChatPicker();
     this._setupZoomSlider();
     this._setupEmojiSizePicker();
     this._setupImageModePicker();
@@ -410,6 +415,7 @@ Object.assign(HavenApp.prototype,
   UtilityMethods,
   AdminMethods,
   PlatformMethods,
+  SearchMethods,
 );
 
 // ── Boot ───────────────────────────────────────────────

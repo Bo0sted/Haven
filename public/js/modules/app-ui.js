@@ -1453,41 +1453,35 @@ _setupUI() {
     };
   }
 
-  // Search
+  // Search — the panel/cache/pager live in app-search.js. Here we just wire
+  // the header input to it. The panel persists across channel switches and
+  // only closes on its own X (or this input's close button).
+  this._searchInit();
   let searchTimeout = null;
   document.getElementById('search-toggle-btn').addEventListener('click', () => {
-    const sc = document.getElementById('search-container');
-    sc.style.display = sc.style.display === 'none' ? 'flex' : 'none';
-    if (sc.style.display === 'flex') document.getElementById('search-input').focus();
+    this._searchToggle();
   });
   document.getElementById('search-close-btn').addEventListener('click', () => {
-    document.getElementById('search-container').style.display = 'none';
-    document.getElementById('search-results-panel').style.display = 'none';
-    document.getElementById('search-input').value = '';
-  });
-  document.getElementById('search-results-close').addEventListener('click', () => {
-    document.getElementById('search-results-panel').style.display = 'none';
+    this._searchClose();
   });
   document.getElementById('search-input').addEventListener('input', (e) => {
     clearTimeout(searchTimeout);
     const q = e.target.value.trim();
-    if (q.length >= 2 && this.currentChannel) {
-      searchTimeout = setTimeout(() => {
-        const ch = (this.channels || []).find(c => c.code === this.currentChannel);
-        if (ch && ch.is_dm) {
-          this._searchDmCacheLocally(q);
-        } else {
-          this.socket.emit('search-messages', { code: this.currentChannel, query: q });
-        }
-      }, 400);
-    } else {
-      document.getElementById('search-results-panel').style.display = 'none';
+    // DMs match substrings locally (2 chars is fine); public search uses the
+    // server tokenizer's minimum (trigram needs 3). (search-overhaul phase 2)
+    const ch = (this.channels || []).find(c => c.code === this.currentChannel);
+    const min = (ch && ch.is_dm) ? 2 : (this._searchMinChars || 2);
+    if (q.length >= min && this.currentChannel) {
+      searchTimeout = setTimeout(() => this._searchRun(q), 400);
+    } else if (!q) {
+      document.getElementById('search-panel').style.display = 'none';
     }
   });
   document.getElementById('search-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      document.getElementById('search-container').style.display = 'none';
-      document.getElementById('search-results-panel').style.display = 'none';
+    if (e.key === 'Escape') this._searchClose();
+    else if (e.key === 'Enter') {
+      const q = e.target.value.trim();
+      if (q) { this._searchSaveRecent(q); this._searchRun(q); }
     }
   });
 
@@ -1743,6 +1737,9 @@ _setupUI() {
     sidebarToggle.textContent = collapsed ? '\u276E' : '\u276F'; // ❮ or ❯
     window._updateSbToggleRight?.();
   }
+  // Exposed so the search panel can temporarily un-collapse the sidebar it
+  // overlays, then restore the user's preference on close. (search-overhaul)
+  this._applySidebarCollapsed = applySidebarCollapsed;
 
   // Default is expanded; only collapse if explicitly saved as '1'
   applySidebarCollapsed(localStorage.getItem('haven-sidebar-collapsed') === '1');
@@ -1855,7 +1852,7 @@ _setupUI() {
     // Escape = close modals, search, theme popup, quick switcher
     if (e.key === 'Escape') {
       document.getElementById('search-container').style.display = 'none';
-      document.getElementById('search-results-panel').style.display = 'none';
+      document.getElementById('search-panel').style.display = 'none';
       document.getElementById('theme-popup').style.display = 'none';
       document.getElementById('quick-switcher-overlay')?.remove();
       document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
@@ -1893,7 +1890,7 @@ _setupUI() {
     // context menu is .channel-ctx-menu — there is no .context-menu element.
     const somethingOpen = [...document.querySelectorAll(
       '.modal-overlay, #quick-switcher-overlay, #theme-popup, #search-container, ' +
-      '#search-results-panel, #image-lightbox, .image-lightbox, #emoji-picker, ' +
+      '#search-panel, #image-lightbox, .image-lightbox, #emoji-picker, ' +
       '#gif-picker, .channel-ctx-menu, #emoji-dropdown, #slash-dropdown, ' +
       '#mention-dropdown, #channel-dropdown, #persona-dropdown, #gif-slash-picker, ' +
       '#dm-pip-panel, #thread-panel, #pins-pip-panel'
@@ -1914,6 +1911,7 @@ _setupUI() {
   // Logout
   document.getElementById('logout-btn').addEventListener('click', () => {
     if (this.voice && this.voice.inVoice) this.voice.leave();
+    this._clearChannelCodeMap?.();
     localStorage.removeItem('haven_token');
     localStorage.removeItem('haven_user');
     localStorage.removeItem('haven_sync_key');
@@ -2004,8 +2002,10 @@ _setupUI() {
     }
   });
 
-  // Image click in thread panel and DM PiP — same lightbox with container-aware navigation
-  for (const containerId of ['thread-messages', 'dm-pip-messages']) {
+  // Image click in thread panel, DM PiP, and the search results panel — same
+  // lightbox with container-aware navigation, spoiler reveal, and image
+  // right-click menu. Search reuses this wholesale. (search-overhaul phase 3)
+  for (const containerId of ['thread-messages', 'dm-pip-messages', 'search-panel-list']) {
     const el = document.getElementById(containerId);
     if (el) {
       el.addEventListener('click', (e) => {
@@ -2892,6 +2892,7 @@ _setupUI() {
     // Load personas list (#86, #5349)
     this._loadPersonas?.();
     this._updateAvatarPreview();
+    this._resetBorderEditState();
     // Sync shape picker buttons
     const picker = document.getElementById('avatar-shape-picker');
     if (picker) {
@@ -3113,7 +3114,10 @@ _setupUI() {
     this._switchSettingsTab('user');
     // Sync language select with current locale
     const langSelect = document.getElementById('language-select');
-    if (langSelect && window.i18n) langSelect.value = i18n.locale;
+    if (langSelect && window.i18n) {
+      langSelect.value = i18n.preference;
+      i18n.syncLocalePicker(langSelect);
+    }
     // Show desktop-only sections when running inside Haven Desktop
     if (window.havenDesktop?.isDesktopApp) {
       document.getElementById('desktop-shortcuts-nav')?.style.removeProperty('display');
@@ -3390,6 +3394,7 @@ _setupUI() {
     settingsNav.addEventListener('click', (e) => {
       const item = e.target.closest('.settings-nav-item');
       if (item && item.dataset.target === 'section-2fa') loadTotpStatus();
+      if (item && item.dataset.target === 'section-sessions') this._refreshSessions();
       if (item && item.dataset.target === 'section-desktop-shortcuts') this._setupDesktopShortcuts();
       if (item && item.dataset.target === 'section-desktop-app') this._setupDesktopAppPrefs();
     });
@@ -3710,6 +3715,7 @@ _setupUI() {
           return;
         }
         // Account deleted — clear local storage and redirect to login
+        this._clearChannelCodeMap?.();
         localStorage.removeItem('haven_token');
         localStorage.removeItem('haven_e2e_privkey');
         localStorage.removeItem('haven_sync_key');
@@ -4447,13 +4453,22 @@ _setupUI() {
       host.innerHTML = '<p class="muted-text" style="margin:4px 0;font-size:0.85rem">No invite links yet. Create one below.</p>';
       return;
     }
+    // determine invite usage input limits
+    const parsedMaxInvtUses = parseInt(this.serverSettings?.max_invite_uses, 10);
+    const maxInvtUses = Number.isNaN(parsedMaxInvtUses) ? 0 : parsedMaxInvtUses;
+    const restrictUses = !this.user?.isAdmin && !this._hasPerm('manage_server') && maxInvtUses > 0;
+    const maxUsesInput = restrictUses ? maxInvtUses : 100000;
+    const minUsesInput = restrictUses ? 1 : 0;
+
     const origin = window.location.origin;
     host.innerHTML = this._inviteCodes.map(ic => {
       const status = !ic.enabled
         ? '<span style="color:var(--text-muted)">● Disabled</span>'
-        : ic.is_expired
-          ? '<span style="color:var(--danger,#e84a4a)">● Expired</span>'
-          : '<span style="color:var(--green,#43b581)">● Active</span>';
+        : ic.max_uses > 0 && ic.use_count >= ic.max_uses
+          ? '<span style="color:var(--text-secondary,#9498b3)">● Used</span>'
+          : ic.is_expired
+            ? '<span style="color:var(--danger,#e84a4a)">● Expired</span>'
+            : '<span style="color:var(--green,#43b581)">● Active</span>';
       const link = `${origin}/?invite=${encodeURIComponent(ic.code)}`;
       const chCount = (ic.channels && ic.channels.length)
         ? `${ic.channels.length} channel${ic.channels.length === 1 ? '' : 's'}`
@@ -4487,9 +4502,9 @@ _setupUI() {
             <button class="btn-sm" data-act="edit-all">Select all</button>
             <button class="btn-sm" data-act="edit-none">Select none</button>
           </div>
-          <label class="select-row" style="margin-top:8px"><span>Max uses (0 = unlimited)</span><input type="number" min="0" max="100000" value="${ic.max_uses || 0}" class="settings-number-input" data-role="edit-maxuses"></label>
+          <label class="select-row" style="margin-top:8px"><span>Max uses (0 = unlimited)</span><input type="number" min="${minUsesInput}" max="${maxUsesInput}" value="${ic.max_uses || 0}" class="settings-number-input" data-role="edit-maxuses"></label>
           <label class="select-row" style="margin-top:4px"><span>Reset expiry</span>
-            <select class="settings-number-input" data-role="edit-expiry">
+            <select class="settings-number-input" data-role="edit-expiry" style="width: 6.5rem;">
               <option value="-1" selected>Keep current</option>
               <option value="0">Never</option>
               <option value="1">After 1 hour</option>
@@ -4599,12 +4614,74 @@ _setupUI() {
       const exp = parseInt(card.querySelector('[data-role="edit-expiry"]')?.value);
       if (Number.isFinite(exp) && exp >= 0) payload.expiresInHours = exp;
       this.socket.emit('update-invite-code', payload);
-      this._showToast?.('Invite link updated', 'success');
     }
   });
 
   // Invite Links popout — open/close. Refresh the list and create-form channels
   // on open so the modal always reflects current state.
+  // Active sessions. Refreshed whenever the Account settings pane is opened
+  // rather than polled, since the list is only interesting while you look at it.
+  document.getElementById('revoke-sessions-btn')?.addEventListener('click', async () => {
+    const status = document.getElementById('sessions-status');
+    const pw = prompt(t('settings.sessions_section.confirm_prompt'));
+    if (pw === null) return;                       // cancelled
+    if (!pw) { status.textContent = t('settings.sessions_section.need_password'); return; }
+    status.classList.remove('error', 'success');
+    status.textContent = t('settings.sessions_section.working');
+    // Set before the request: the server disconnects every socket including
+    // ours, and this is what tells our own force-logout handler to sit still.
+    this._justRevokedSessions = true;
+    try {
+      const res = await fetch('/api/auth/revoke-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        this._justRevokedSessions = false;
+        status.textContent = data.error || t('settings.sessions_section.failed');
+        status.classList.add('error');
+        return;
+      }
+      this.token = data.token;
+      localStorage.setItem('haven_token', data.token);
+      this.socket.auth.token = data.token;         // so the auto-reconnect authenticates
+      status.textContent = t('settings.sessions_section.done');
+      status.classList.add('success');
+    } catch {
+      this._justRevokedSessions = false;
+      status.textContent = t('settings.sessions_section.failed');
+      status.classList.add('error');
+    }
+  });
+
+  // Member search in the right sidebar. Re-rendering the roster from the last
+  // payload rather than asking the server keeps typing instant and costs the
+  // server nothing.
+  const userSearch = document.getElementById('user-search');
+  const userSearchClear = document.getElementById('user-search-clear');
+  const applyUserFilter = (value) => {
+    this._userFilter = value;
+    if (userSearchClear) userSearchClear.style.display = value ? '' : 'none';
+    if (this._lastOnlineUsers) this._renderOnlineUsers(this._lastOnlineUsers);
+  };
+  userSearch?.addEventListener('input', (e) => applyUserFilter(e.target.value));
+  userSearch?.addEventListener('keydown', (e) => {
+    // Escape clears rather than just blurring, which is what the key does in
+    // every other search box in the app.
+    if (e.key === 'Escape' && userSearch.value) {
+      e.stopPropagation();
+      userSearch.value = '';
+      applyUserFilter('');
+    }
+  });
+  userSearchClear?.addEventListener('click', () => {
+    if (userSearch) userSearch.value = '';
+    applyUserFilter('');
+    userSearch?.focus();
+  });
+
   document.getElementById('open-invite-links-btn')?.addEventListener('click', () => {
     this._openInviteLinksModal();
   });
@@ -4644,87 +4721,9 @@ _setupUI() {
  */
 _buildLanguagePicker() {
   const select = document.getElementById('language-select');
-  if (!select || select.dataset.havenPicker) return;
-  select.dataset.havenPicker = '1';
-
-  // Locale -> flag SVG. Only ISO country codes with artwork in
-  // public/emoji/flags/ can appear; anything unmapped falls back to a text
-  // badge rather than a broken image.
-  const FLAGS = { en: 'gb', fr: 'fr', de: 'de', es: 'es', pl: 'pl', ru: 'ru', zh: 'cn' };
-
-  const options = Array.from(select.options).map(o => ({
-    value: o.value,
-    // Strip the now-redundant emoji prefix from the label.
-    label: o.textContent.replace(/^[\p{Extended_Pictographic}\p{Regional_Indicator}️\s]+/u, '').trim() || o.value,
-    flag: FLAGS[o.value] || null,
-  }));
-
-  const wrap = document.createElement('div');
-  wrap.className = 'lang-picker';
-
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'lang-picker-btn';
-  button.setAttribute('aria-haspopup', 'listbox');
-  button.setAttribute('aria-expanded', 'false');
-
-  const list = document.createElement('div');
-  list.className = 'lang-picker-list';
-  list.setAttribute('role', 'listbox');
-  list.hidden = true;
-
-  const faceFor = (opt) => {
-    const flag = opt.flag
-      ? `<img class="lang-flag" src="/emoji/flags/${opt.flag}.svg" alt="">`
-      : `<span class="lang-flag lang-flag-text">${this._escapeHtml(opt.value.toUpperCase())}</span>`;
-    return `${flag}<span class="lang-name">${this._escapeHtml(opt.label)}</span>`;
-  };
-
-  const paintButton = () => {
-    const cur = options.find(o => o.value === select.value) || options[0];
-    if (cur) button.innerHTML = faceFor(cur) + '<span class="lang-caret">▾</span>';
-  };
-
-  list.innerHTML = options.map(o =>
-    `<button type="button" class="lang-picker-item" role="option" data-value="${this._escapeHtml(o.value)}">${faceFor(o)}</button>`
-  ).join('');
-
-  const close = () => {
-    list.hidden = true;
-    button.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('click', onOutside, true);
-  };
-  const onOutside = (e) => { if (!wrap.contains(e.target)) close(); };
-
-  button.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const opening = list.hidden;
-    list.hidden = !opening;
-    button.setAttribute('aria-expanded', String(opening));
-    if (opening) setTimeout(() => document.addEventListener('click', onOutside, true), 0);
-    else close();
-  });
-
-  list.querySelectorAll('.lang-picker-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      select.value = item.dataset.value;
-      // Drive the real control so the existing listener does the work.
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      paintButton();
-      close();
-    });
-  });
-
-  paintButton();
-  wrap.appendChild(button);
-  wrap.appendChild(list);
-  select.parentElement.insertBefore(wrap, select);
-  // Kept for state + the change event, but no longer the visible control.
-  select.classList.add('lang-select-hidden');
-
-  // Locale changes made elsewhere (or restored on load) must repaint the face.
-  select.addEventListener('change', paintButton);
+  if (!select || !window.i18n) return;
+  select.value = i18n.preference;
+  i18n.buildLocalePicker(select);
 },
 
 _canShareChannelLink(code) {
@@ -6232,7 +6231,7 @@ _handleMobileBack() {
   const search = document.getElementById('search-container');
   if (search && search.style.display !== 'none' && search.style.display !== '') {
     search.style.display = 'none';
-    document.getElementById('search-results-panel').style.display = 'none';
+    document.getElementById('search-panel').style.display = 'none';
     return;
   }
 
