@@ -856,6 +856,104 @@ Click the **🔐** button in the DM header to view your **safety number** — a 
 
 ---
 
+## 🛶 Ferry (Discord Bridge)
+
+Ferry relays messages between your Haven channels and Discord channels. Haven users
+appear on Discord under their own names, and Discord messages show up in Haven.
+
+**Every Haven server needs its own Discord bot.** Haven cannot ship a shared one:
+Discord caps unverified applications at 100 servers and verification requires a company
+review. Setting one up takes a couple of minutes and is free.
+
+### 1. Create the Discord bot
+
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications) and click **New Application**
+2. Open the **Bot** tab
+3. Turn on **Message Content Intent**. Without it Discord sends every message with an
+   empty body, so nothing reaches Haven
+4. If you want the Discord DM feature, also turn on **Server Members Intent**
+5. Click **Reset Token**, then copy the token. Treat it like a password
+
+### 2. Connect it to Haven
+
+1. In Haven, go to **Settings → Server Admin Settings → Ferry**
+2. Click **Set up Ferry** and paste the token
+3. Haven checks the token with Discord and then shows an invite link
+4. Open the invite link and add the bot to your Discord server. Keep the
+   **Manage Webhooks** permission checked: it is what lets relayed messages carry the
+   Haven author's name and picture instead of all arriving as one anonymous bot
+5. Back in Haven, turn on the **Ferry is on** switch
+
+### 3. Pair some channels
+
+A pairing joins one Haven channel to one Discord channel. Each pairing has two settings:
+
+| Setting | Options |
+|---|---|
+| **Direction** | Two-way, Haven → Discord only, or Discord → Haven only |
+| **Outgoing** | **On command** (only messages addressed with `=>`) or **Mirror everything** (every message in the channel) |
+
+Pairings are also the boundary: members can only send to Discord channels paired with
+the Haven channel they are in. They cannot reach other servers the bot happens to
+belong to.
+
+### 4. Grant the permission
+
+Sending to Discord needs the **Send to Discord (Ferry)** role permission
+(`use_ferry`), granted under **Settings → Roles**. Admins always have it. Without it a
+member's messages stay in Haven even in a mirrored channel.
+
+### Sending a message
+
+In a **mirrored** channel, just talk. Everything crosses.
+
+In an **on command** channel, start the message with `=>` and pick a destination from
+the autocomplete:
+
+```
+=>My Server#general hey everyone
+```
+
+The `=>` prefix is stripped before the message is stored, and a small badge on the
+message shows where it went. If the destination does not match a pairing, the prefix
+stays visible so you can see it did not send.
+
+To DM a Discord user (when the admin has enabled it), type `=>@` and search by name:
+
+```
+=>@Alice quick question
+```
+
+### Things worth knowing
+
+- **DMs are one way.** A bot cannot impersonate in a DM, so the message arrives from the
+  bot with your Haven name in the body. Replies stay in Discord and do not come back to
+  Haven. Discord also flags bots that DM a lot of people, so use it sparingly
+- **Pings are off by default.** Relayed messages do not ping anyone on Discord unless an
+  admin turns on **Allow pings**. Even then `@everyone` and role pings stay blocked
+- **Set `PUBLIC_URL`** in your `.env` if you want Haven avatars and uploaded images to
+  appear on the Discord side. Discord has to be able to reach them over the internet.
+  Without it names still come through, just without pictures
+- **Discord attachments arrive as links**, and Discord's own links expire after about a
+  day. The text of the message is permanent, the pictures are not
+- **Other Discord bots are ignored** unless an admin turns on **Relay other bots**,
+  which can flood a channel
+- **Personas are off by default.** With them off, a relayed message always carries the
+  sender's real Haven name so a Discord server cannot be addressed by an untraceable alias
+
+### If it stops working
+
+The Ferry panel shows the connection state and the last error on each pairing.
+
+| Message | Fix |
+|---|---|
+| Discord refused the Message Content intent | Turn it on in the Developer Portal, Bot tab |
+| Discord rejected the bot token | Reset the token in the portal and paste the new one |
+| The bot needs "Manage Webhooks" | Give the bot that permission in the Discord channel |
+| Discord refused the Server Members intent | Turn it on in the portal, or leave DMs off |
+
+---
+
 ## 🤖 Bot & Webhook Developer Guide
 
 Haven has a built-in bot API powered by webhooks. Bots can send messages, delete messages, play soundboard sounds, and register custom slash commands.

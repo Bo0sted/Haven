@@ -201,6 +201,7 @@ Or manually: `npm install && node server.js`
 | **Security** | Bcrypt passwords, JWT auth, HTTPS/SSL, rate limiting, CSP headers, input validation |
 | **E2E Encryption** | ECDH P-256 + AES-256-GCM encrypted DMs — private keys never leave the browser |
 | **Discord Import** | Import your entire Discord server history — channels, threads, forums, reactions, pins, avatars — directly from Haven's UI or via file upload |
+| **Ferry (Discord bridge)** | Relay messages both ways between Haven channels and Discord channels. Haven users appear on Discord under their own names. Per-pairing direction and mirror-or-on-command modes, gated by a role permission |
 | **Game** | Shippy Container — Drew's shipment got hung up. Server-wide leaderboard. |
 | **Translations** | 8 languages out of the box (English, French, German, Spanish, Polish, Russian, Chinese, Brazilian Portuguese). Community-contributed. |
 
@@ -676,6 +677,7 @@ Planned features — roughly in priority order:
 | **Avatar system** | ✅ Done | Profile picture uploads with selectable avatar shapes (circle, square, hexagon, diamond) |
 | **Effect system** | ✅ Done | 15+ stackable visual effects with configurable intensity/frequency |
 | **Webhook / Bot support** | ✅ Done | Incoming webhooks and a lightweight bot API for external integrations |
+| **Discord bridge (Ferry)** | ✅ Done | Two-way message relay between Haven and Discord channels, with per-channel pairings |
 | **Thread replies** | ✅ Done | Threaded conversations that branch off a message |
 | **End-to-end encryption** | ✅ Done | ECDH P-256 + AES-256-GCM encryption for DMs — private keys stay in the browser |
 | **Multi-factor authentication** | ✅ Done | TOTP authenticator app support (Google Authenticator, Authy, etc.) with backup codes |
