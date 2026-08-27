@@ -27,6 +27,7 @@
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
     "web-push": "^3.6.7",
+    "ws": "^8.18.3",
     "yauzl": "^3.4.0"
   },
   "overrides": {

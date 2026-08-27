@@ -38,6 +38,7 @@ const {
 } = require('../botVoice');
 
 const { createActivity } = require('../activity');
+const ferry = require('../ferry');
 
 const registerChannels   = require('./channels');
 const registerMessages   = require('./messages');
@@ -47,6 +48,7 @@ const registerUsers      = require('./users');
 const registerModeration = require('./moderation');
 const registerRoles      = require('./roles');
 const registerAdmin      = require('./admin');
+const registerFerry      = require('./ferry');
 
 const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
 
@@ -1206,6 +1208,94 @@ function setupSocketHandlers(io, db, opts = {}) {
     }
   }
 
+  // ══════════════════════════════════════════════════════
+  // Ferry: outbound relay to Discord
+  // ══════════════════════════════════════════════════════
+  // The pairings in ferry_links are the allowlist, not just a routing table.
+  // A Haven user can only reach Discord channels an admin explicitly paired
+  // with the channel they are standing in, so gaining `use_ferry` never means
+  // "post anywhere the bot can see".
+
+  function ferryLinksFor(channelId) {
+    try {
+      return db.prepare(`
+        SELECT id, channel_id, guild_id, guild_name, discord_channel_id, discord_channel_name,
+               direction, out_mode, webhook_id, webhook_token
+        FROM ferry_links
+        WHERE channel_id = ? AND is_active = 1 AND direction IN ('both', 'to_discord')
+      `).all(channelId);
+    } catch { return []; }
+  }
+
+  /**
+   * Wraps the pure resolver with this server's live settings and the pairings
+   * for one channel. Returns null when Ferry is off, so the prefix stays in the
+   * message body and the user can see their target did not take.
+   */
+  function parseFerryTarget(channelId, content, dmUserId) {
+    const cfg = ferry.getConfig();
+    if (!cfg.enabled) return null;
+    return ferry.resolveFerryTarget({
+      trigger: cfg.trigger,
+      links: ferryLinksFor(channelId),
+      content,
+      dmUserId,
+      allowDms: cfg.allowDms,
+    });
+  }
+
+  /**
+   * Relays one just-sent Haven message onward. Fire and forget: a Discord
+   * outage must never fail or delay the Haven send that already succeeded,
+   * so failures land on the pairing's health row and in a toast to the
+   * author, never as a thrown error in the message path.
+   */
+  function ferryRelay({ channelId, user, body, target, personaUsername, personaAvatar, notify }) {
+    const cfg = ferry.getConfig();
+    if (!cfg.enabled || !cfg.token) return;
+
+    const links = ferryLinksFor(channelId);
+    if (!links.length && !target?.dm) return;
+
+    if (!user.isAdmin && !userHasPermission(user.id, 'use_ferry')) {
+      // Only complain when they actually aimed at Discord. Someone simply
+      // talking in a mirrored channel should not get a permission toast on
+      // every message.
+      if (target) notify("You don't have permission to send to Discord");
+      return;
+    }
+
+    // Personas are an admin decision: with them off, a relayed message always
+    // carries the author's real Haven name so a Discord server cannot be
+    // addressed by an untraceable alias.
+    const usePersona = cfg.allowPersonas && personaUsername;
+    const identity = {
+      username: usePersona ? personaUsername : user.displayName,
+      avatar: usePersona ? personaAvatar : (user.avatar || null),
+    };
+
+    if (target && target.dm) {
+      ferry.sendDiscordDm(target.discordUserId, { fromName: identity.username, content: body })
+        .then(() => notify('Sent to Discord'))
+        .catch(err => notify(err.message));
+      return;
+    }
+
+    // Mirror pairings carry everything. An explicitly addressed pairing is
+    // added on top, deduped so a message aimed at a mirror is not sent twice.
+    const destinations = links.filter(l => l.out_mode === 'all');
+    if (target && target.link && !destinations.some(l => l.id === target.link.id)) {
+      destinations.push(target.link);
+    }
+    if (!destinations.length) return;
+    if (!body.trim()) return;
+
+    for (const link of destinations) {
+      ferry.sendToDiscord(link, { ...identity, content: body })
+        .catch(err => notify(`Discord relay failed: ${err.message}`));
+    }
+  }
+
   function fireWebhookCallbacks(channelId, channelCode, message) {
     if (message && message.is_webhook) return;
     fireWebhookEvent(channelId, channelCode, 'message', {
@@ -2002,6 +2092,8 @@ function setupSocketHandlers(io, db, opts = {}) {
       broadcastStreamInfo, touchVoiceActivity, rotateChannelCode,
       // Push / webhooks
       sendPushNotifications, fireWebhookCallbacks, fireWebhookEvent,
+      // Ferry (Discord bridge)
+      ferry, ferryLinksFor, parseFerryTarget, ferryRelay,
       // Slash commands
       processSlashCommand,
       // Music helpers
@@ -2047,6 +2139,7 @@ function setupSocketHandlers(io, db, opts = {}) {
     registerModeration(socket, ctx);
     registerRoles(socket, ctx);
     registerAdmin(socket, ctx);
+    registerFerry(socket, ctx);
 
     // ── Disconnect handler ────────────────────────────────
     // Socket.IO hands us why the socket went away, and throwing that away made

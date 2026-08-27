@@ -119,6 +119,7 @@ webpush.setVapidDetails(vapidEmail, process.env.VAPID_PUBLIC_KEY, process.env.VA
 const { initDatabase } = require('./src/database');
 const { router: authRoutes, authLimiter, verifyToken } = require('./src/auth');
 const { setupSocketHandlers, sanitizeText, sanitizeBorderTransform } = require('./src/socketHandlers');
+const { initFerry, stopFerry } = require('./src/ferry');
 const { getAccessibleVoiceChannels } = require('./src/botVoice');
 const { startTunnel, stopTunnel, getTunnelStatus, registerProcessCleanup } = require('./src/tunnel');
 const { startDdns, getDdnsStatus, triggerDdnsNow } = require('./src/ddns');
@@ -4743,7 +4744,55 @@ socketRuntime = setupSocketHandlers(io, db, {
   onReferrerPolicyChange: (v) => { if (VALID_REFERRER_POLICIES.includes(v)) currentReferrerPolicy = v; }
 });
 activityRef.engine = socketRuntime.activity;
+
+// ── Ferry: Haven <-> Discord bridge ─────────────────────
+// Started after the socket layer so an inbound Discord message always has a
+// live io to broadcast on. Inserting the message is done here rather than
+// inside ferry.js so the bridge reuses the exact same row shape and event
+// payload as the existing bot webhook endpoint above, and Discord messages
+// render in every client with no client-side changes at all.
+initFerry({
+  db,
+  io,
+  sanitizeText,
+  insertHavenMessage: ({ channelId, channelCode, username, avatarUrl, content }) => {
+    try {
+      const result = db.prepare(
+        'INSERT INTO messages (channel_id, user_id, content, is_webhook, webhook_username, webhook_avatar) VALUES (?, ?, ?, 1, ?, ?)'
+      ).run(channelId, null, content, username, avatarUrl || null);
+
+      io.to(`channel:${channelCode}`).emit('new-message', {
+        channelCode,
+        message: {
+          id: result.lastInsertRowid,
+          content,
+          created_at: new Date().toISOString(),
+          username: `[BOT] ${username}`,
+          user_id: null,
+          avatar: avatarUrl || null,
+          avatar_shape: 'square',
+          reply_to: null,
+          replyContext: null,
+          reactions: [],
+          is_webhook: true,
+          webhook_name: username,
+          from_discord: true
+        }
+      });
+      return result.lastInsertRowid;
+    } catch (err) {
+      console.error('Ferry could not store an inbound Discord message:', err.message);
+      return null;
+    }
+  }
+});
+
 registerProcessCleanup();
+// Close the Discord socket deliberately on shutdown. Without this a container
+// restart leaves Discord holding a session it will keep feeding for a minute.
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => { try { stopFerry(); } catch { /* exit cleanup */ } });
+}
 
 // ── Auto-cleanup interval (runs every 15 minutes) ───────
 function runAutoCleanup() {

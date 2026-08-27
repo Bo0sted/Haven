@@ -451,7 +451,7 @@ module.exports = function register(socket, ctx) {
       const insertPerm = db.prepare('INSERT INTO role_permissions (role_id, permission, allowed) VALUES (?, ?, 1)');
 
       const serverMod = insertRole.run('Server Mod', 50, 'server', '#3498db');
-      ['kick_user','mute_user','delete_message','pin_message','set_channel_topic','manage_sub_channels','rename_channel','rename_sub_channel','delete_lower_messages','manage_webhooks','upload_files','use_voice','view_history','view_all_members','manage_music_queue','delete_own_messages','edit_own_messages']
+      ['kick_user','mute_user','delete_message','pin_message','set_channel_topic','manage_sub_channels','rename_channel','rename_sub_channel','delete_lower_messages','manage_webhooks','use_ferry','upload_files','use_voice','view_history','view_all_members','manage_music_queue','delete_own_messages','edit_own_messages']
         .forEach(p => insertPerm.run(serverMod.lastInsertRowid, p));
 
       const channelMod = insertRole.run('Channel Mod', 25, 'channel', '#2ecc71');

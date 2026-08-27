@@ -8,7 +8,8 @@ const { getActiveTokenizer, minQueryChars, buildMatchQuery } = require('../searc
 module.exports = function register(socket, ctx) {
   const { io, db, state, userHasPermission, getUserEffectiveLevel, getChannelRoleChain,
           sendPushNotifications, fireWebhookCallbacks, fireWebhookEvent, processSlashCommand,
-          touchVoiceActivity, floodCheck, enforceAutomod, UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = ctx;
+          touchVoiceActivity, floodCheck, enforceAutomod, parseFerryTarget, ferryRelay,
+          UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = ctx;
   const { slowModeTracker } = state;
 
   const UPLOAD_PATH_RE = /\/uploads\/((?!(?:deleted-attachments|stickers)\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+)/g;
@@ -61,7 +62,7 @@ module.exports = function register(socket, ctx) {
     let messages;
     if (before) {
       messages = db.prepare(`
-        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.type,
+        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.ferry_target, m.type,
                COALESCE(u.display_name, u.username, '[Deleted User]') as real_username,
                COALESCE(m.persona_username, m.webhook_username, u.display_name, u.username, '[Deleted User]') as username, u.id as user_id, u.avatar, COALESCE(u.avatar_shape, 'circle') as avatar_shape, u.border, u.border_transform, COALESCE(u.animate_profile, 'trigger') as animate_profile
         FROM messages m LEFT JOIN users u ON m.user_id = u.id
@@ -70,7 +71,7 @@ module.exports = function register(socket, ctx) {
       `).all(channel.id, before, limit);
     } else if (after) {
       messages = db.prepare(`
-        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.type,
+        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.ferry_target, m.type,
                COALESCE(u.display_name, u.username, '[Deleted User]') as real_username,
                COALESCE(m.persona_username, m.webhook_username, u.display_name, u.username, '[Deleted User]') as username, u.id as user_id, u.avatar, COALESCE(u.avatar_shape, 'circle') as avatar_shape, u.border, u.border_transform, COALESCE(u.animate_profile, 'trigger') as animate_profile
         FROM messages m LEFT JOIN users u ON m.user_id = u.id
@@ -80,7 +81,7 @@ module.exports = function register(socket, ctx) {
     } else if (around) {
       const half = Math.floor(limit / 2);
       const beforeMsgs = db.prepare(`
-        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.type,
+        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.ferry_target, m.type,
                COALESCE(u.display_name, u.username, '[Deleted User]') as real_username,
                COALESCE(m.persona_username, m.webhook_username, u.display_name, u.username, '[Deleted User]') as username, u.id as user_id, u.avatar, COALESCE(u.avatar_shape, 'circle') as avatar_shape, u.border, u.border_transform, COALESCE(u.animate_profile, 'trigger') as animate_profile
         FROM messages m LEFT JOIN users u ON m.user_id = u.id
@@ -88,14 +89,14 @@ module.exports = function register(socket, ctx) {
         ORDER BY m.created_at DESC, m.id DESC LIMIT ?
       `).all(channel.id, around, half);
       const targetMsg = db.prepare(`
-        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.type,
+        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.ferry_target, m.type,
                COALESCE(u.display_name, u.username, '[Deleted User]') as real_username,
                COALESCE(m.persona_username, m.webhook_username, u.display_name, u.username, '[Deleted User]') as username, u.id as user_id, u.avatar, COALESCE(u.avatar_shape, 'circle') as avatar_shape, u.border, u.border_transform, COALESCE(u.animate_profile, 'trigger') as animate_profile
         FROM messages m LEFT JOIN users u ON m.user_id = u.id
         WHERE m.channel_id = ? AND m.id = ?
       `).all(channel.id, around);
       const afterMsgs = db.prepare(`
-        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.type,
+        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.ferry_target, m.type,
                COALESCE(u.display_name, u.username, '[Deleted User]') as real_username,
                COALESCE(m.persona_username, m.webhook_username, u.display_name, u.username, '[Deleted User]') as username, u.id as user_id, u.avatar, COALESCE(u.avatar_shape, 'circle') as avatar_shape, u.border, u.border_transform, COALESCE(u.animate_profile, 'trigger') as animate_profile
         FROM messages m LEFT JOIN users u ON m.user_id = u.id
@@ -106,7 +107,7 @@ module.exports = function register(socket, ctx) {
       messages = [...beforeMsgs.reverse(), ...targetMsg, ...afterMsgs];
     } else {
       messages = db.prepare(`
-        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.type,
+        SELECT m.id, m.content, m.created_at, m.reply_to, m.edited_at, m.is_webhook, m.webhook_username, m.webhook_avatar, m.imported_from, m.is_archived, m.poll_data, m.burn_seconds, m.burning_started_at, m.persona_id, m.persona_username, m.persona_avatar, m.break_chain, m.ferry_target, m.type,
                COALESCE(u.display_name, u.username, '[Deleted User]') as real_username,
                COALESCE(m.persona_username, m.webhook_username, u.display_name, u.username, '[Deleted User]') as username, u.id as user_id, u.avatar, COALESCE(u.avatar_shape, 'circle') as avatar_shape, u.border, u.border_transform, COALESCE(u.animate_profile, 'trigger') as animate_profile
         FROM messages m LEFT JOIN users u ON m.user_id = u.id
@@ -1004,10 +1005,31 @@ module.exports = function register(socket, ctx) {
       }
     }
 
+    // ── Ferry target (Discord bridge) ─────────────────────
+    // Runs after persona detection so the two prefixes compose: "::Alter
+    // =>Server#general hi" resolves the persona first and leaves the ferry
+    // prefix for this step. The target is stripped from what Haven stores and
+    // kept in ferry_target instead, so channel history reads as plain messages
+    // with a small destination badge rather than raw routing syntax.
+    let ferryTarget = null;
+    let ferryLabel = null;
+    if (!channel.is_dm) {
+      ferryTarget = parseFerryTarget(channel.id, finalContent, data.ferryDiscordUserId);
+      if (ferryTarget) {
+        finalContent = ferryTarget.body;
+        ferryLabel = ferryTarget.dm
+          ? 'dm'
+          : `${ferryTarget.link.guild_name || 'Discord'}#${ferryTarget.link.discord_channel_name || ''}`;
+        // An addressed message with nothing after the target is a typo, not a
+        // send. Bail before writing an empty row into channel history.
+        if (!finalContent) return socket.emit('error-msg', 'Add a message after the Discord target');
+      }
+    }
+
     try {
       const result = db.prepare(
-        'INSERT INTO messages (channel_id, user_id, content, reply_to, burn_seconds, persona_id, persona_username, persona_avatar, break_chain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(channel.id, socket.user.id, finalContent, replyTo, burnSeconds, personaId, personaUsername, personaAvatar, breakChain);
+        'INSERT INTO messages (channel_id, user_id, content, reply_to, burn_seconds, persona_id, persona_username, persona_avatar, break_chain, ferry_target) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(channel.id, socket.user.id, finalContent, replyTo, burnSeconds, personaId, personaUsername, personaAvatar, breakChain, ferryLabel);
 
       const message = {
         id: result.lastInsertRowid,
@@ -1031,6 +1053,7 @@ module.exports = function register(socket, ctx) {
         persona_avatar: personaAvatar || undefined,
         real_username: personaId ? socket.user.displayName : undefined,
         break_chain: breakChain || undefined,
+        ferry_target: ferryLabel || undefined,
       };
 
       if (replyTo) {
@@ -1047,6 +1070,19 @@ module.exports = function register(socket, ctx) {
       const pushDisplayName = personaUsername || socket.user.displayName;
       sendPushNotifications(channel.id, code, channel.name, socket.user.id, pushDisplayName, pushContent);
       fireWebhookCallbacks(channel.id, code, message);
+
+      // Deliberately after the broadcast: the Haven message is already sent and
+      // stored, so a slow or broken Discord never holds up the channel.
+      if (!channel.is_dm) {
+        ferryRelay({
+          channelId: channel.id,
+          user: socket.user,
+          body: finalContent,
+          target: ferryTarget,
+          personaUsername, personaAvatar,
+          notify: (msg) => socket.emit('error-msg', msg),
+        });
+      }
 
       try {
         db.prepare(`
