@@ -10,7 +10,7 @@
 // off, because there is no database behind it in a unit test and the module
 // short-circuits to { ok: true }. That is why the bug got through, so this file
 // loads ferry with a stubbed automod that is switched ON and carrying the real
-// seeded allowlist from src/database.js. (#5540)
+// seeded allowlist from src/database.js.
 
 const assert = require('node:assert/strict');
 const test = require('node:test');

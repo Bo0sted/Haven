@@ -623,7 +623,7 @@ function buildHavenContent(msg) {
   // are not on the default allowlist. Checking them meant a stock server threw
   // away every Discord message carrying an image, the text along with it. Adding
   // Discord's CDN to the allowlist instead would have opened that domain to
-  // everybody on the server rather than just to the bridge. (#5540)
+  // everybody on the server rather than just to the bridge.
   try {
     if (authoredText && automod.checkText(authoredText, { surface: 'message' }).ok === false) return '';
   } catch { /* an automod fault must never take the bridge down */ }
