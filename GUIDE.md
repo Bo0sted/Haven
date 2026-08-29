@@ -762,6 +762,10 @@ tls-listening-port=5349
 realm=your-domain.com
 use-auth-secret
 static-auth-secret=YOUR_RANDOM_SECRET_HERE
+
+# Only if coturn is behind a router (home server, NAT'd VM, Docker bridge).
+# Leave this out when the machine holds its public IP directly.
+external-ip=YOUR_PUBLIC_IP
 ```
 
 Then add to your Haven `.env`:
@@ -780,6 +784,14 @@ Restart Haven, and voice/screen sharing will work across any network.
 > **Docker users:** Add `TURN_URL` and `TURN_SECRET` as environment variables in your `docker-compose.yml`. See the commented example in the default compose file.
 
 > **Oracle Cloud / cloud VMs:** Make sure ports 3478 (UDP+TCP) and 49152–65535 (UDP) are open in your security group / firewall rules. These are needed for TURN relay traffic.
+
+> **Home server behind a router:** this is where TURN most often looks configured but silently does nothing, because coturn has no idea it is behind NAT and hands out its LAN address as the relay. Three things to get right:
+>
+> - Set `external-ip=YOUR_PUBLIC_IP` in `turnserver.conf`. Without it every relay candidate points at a private address that nobody outside your network can reach. It wants a literal IP, not a hostname, so if yours is dynamic you have to update the line and restart coturn when it changes.
+> - Forward **UDP**, not just TCP. TURN media is UDP: port 3478 plus the whole `min-port` to `max-port` range. A TCP-only forward lets coturn start up, answer, and relay nothing.
+> - Turn on NAT reflection (also called hairpin NAT) on your router, or people on your own LAN cannot reach `turn:your-domain.com`, because that name resolves to your public IP. pfSense and OPNsense call it NAT Reflection. Some routers do not support it at all, in which case split DNS pointing the name at the LAN address is the way round it.
+>
+> To check the relay by itself, put your TURN URL and credentials into the WebRTC project's Trickle ICE page (https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/). If it never produces a candidate of type `relay`, the problem is coturn or the firewall in front of it, not Haven.
 
 ---
 
