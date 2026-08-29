@@ -101,7 +101,7 @@
       if (d.default_theme.startsWith('file:')) {
         applyPublishedThemeBase(d.default_theme.slice(5), false);
       } else {
-        document.documentElement.setAttribute('data-theme', d.default_theme);
+        applyThemeFromServer(d.default_theme);
       }
     }
     if (d.server_title) {
