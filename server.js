@@ -1,5 +1,5 @@
 ﻿// ── Resolve data directory BEFORE loading .env ────────────
-const { DATA_DIR, DB_PATH, ENV_PATH, CERTS_DIR, UPLOADS_DIR } = require('./src/paths');
+const { DATA_DIR, DB_PATH, ENV_PATH, CERTS_DIR, UPLOADS_DIR, DELETED_ATTACHMENTS_DIR } = require('./src/paths');
 
 // ── Node.js version guard ─────────────────────────────────
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
