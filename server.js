@@ -428,9 +428,35 @@ app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: 0,              // always revalidate — prevents stale JS/CSS after deploys
 }));
 
-// ── Block access to deleted-attachments folder ──────────
-// Files moved here are no longer part of any message; they should not be accessible.
-app.use('/uploads/deleted-attachments', (req, res) => res.status(404).end());
+// ── Block access to internal upload folders ─────────────
+// Files moved into deleted-attachments are no longer part of any message and
+// must stop being reachable, which is the entire point of moving them.
+//
+// A 404 mounted at the prefix does not achieve that. Express matches the mount
+// against the raw path while express.static decodes before it resolves, so
+// three shapes walked straight past the guard and served the file:
+// /uploads/deleted%2Dattachments/x, /uploads//deleted-attachments/x, and
+// /uploads/deleted-attachments%2Fx. Anyone who saw an attachment before it was
+// deleted knows its filename, so deletion was not actually revoking access.
+//
+// Decode the path, resolve it against the uploads root, and check containment,
+// so it is the real target on disk being judged rather than the spelling of
+// the URL. Compared case-insensitively because NTFS is.
+const BLOCKED_UPLOAD_DIRS = ['deleted-attachments'].map(
+  dir => path.resolve(UPLOADS_DIR, dir).toLowerCase()
+);
+app.use('/uploads', (req, res, next) => {
+  let decoded;
+  try { decoded = decodeURIComponent(req.path); } catch { return res.status(400).end(); }
+  // path.resolve treats a backslash as a separator on Windows and as an
+  // ordinary filename character on Linux, which is exactly right in both
+  // cases, so the raw decoded path goes in as-is.
+  const target = path.resolve(UPLOADS_DIR, '.' + decoded).toLowerCase();
+  for (const blocked of BLOCKED_UPLOAD_DIRS) {
+    if (target === blocked || target.startsWith(blocked + path.sep)) return res.status(404).end();
+  }
+  return next();
+});
 
 // ── Serve uploads from external data directory ──────────
 app.use('/uploads', express.static(UPLOADS_DIR, {
