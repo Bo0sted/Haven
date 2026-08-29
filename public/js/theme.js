@@ -538,7 +538,7 @@ function _deactivateAllEffects() {
   [..._activeFx].forEach(_deactivateEffect);
 }
 
-function applyEffects(mode) {
+function applyEffects(mode, themeOverride) {
   _deactivateAllEffects();
 
   // Always strip theme pseudo-element effects — JS manages all overlays now
@@ -547,7 +547,7 @@ function applyEffects(mode) {
   if (mode === 'none') return;
 
   if (mode === 'auto') {
-    const theme = localStorage.getItem('haven_theme') || 'haven';
+    const theme = themeOverride || localStorage.getItem('haven_theme') || 'haven';
     const defaults = THEME_DEFAULT_FX[theme];
     if (defaults) defaults.forEach(_activateEffect);
     return;
@@ -1552,7 +1552,11 @@ function initThemeSwitcher(containerId, socket) {
   showEffectEditorIfDynamic(saved);
 }
 
-function applyThemeFromServer(theme) {
+// `persist` is on by default because the app page applies the server default
+// on every connect, so re-storing it there keeps the two in step. The login
+// page passes false: it re-reads the default on each visit, and storing it
+// would freeze the first default a visitor ever saw. (#5536)
+function applyThemeFromServer(theme, persist = true) {
   if (!theme) return;
 
   // File theme — delegate to plugin-loader if available; otherwise fall back to haven
@@ -1568,7 +1572,7 @@ function applyThemeFromServer(theme) {
   }
 
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('haven_theme', theme);
+  if (persist) localStorage.setItem('haven_theme', theme);
   document.querySelectorAll('.theme-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.theme === theme);
   });
@@ -1592,7 +1596,7 @@ function applyThemeFromServer(theme) {
   }
   // Re-apply effects for new theme
   const fxMode = _getStoredEffectMode();
-  applyEffects(fxMode);
+  applyEffects(fxMode, theme);
   showEffectEditorIfDynamic(theme);
 }
 
