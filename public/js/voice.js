@@ -1860,8 +1860,44 @@ class VoiceManager {
    * tight. Default browser behaviour is `balanced`, which on screen share
    * tends to chop framerate first (bad for motion content like games/video).
    */
+  // Opt-in relay profile for screen share (#5426). Read live so flipping the
+  // toggle mid-share takes effect on the next apply.
+  //
+  // 3.18.1 (#5379) did three things together: raised the ceilings 2-3x, pinned
+  // maxFramerate, and set degradationPreference to 'maintain-framerate'. On a
+  // direct connection that is what makes 1080p30 actually deliver 1080p30. Over
+  // a TURN relay that has fallen back to TCP it is the opposite of what you
+  // want: TCP hides packet loss, so the encoder never gets the signal to back
+  // off, and pinning the framerate removes the one lever it had left. The queue
+  // grows instead, which is the "fine for a minute, then stutter every few
+  // seconds, getting worse" shape reported in #5426.
+  //
+  // This profile restores the pre-3.18.1 ceilings and hands the encoder back
+  // both levers. Nobody gets it unless they turn it on.
+  _screenRelayProfileEnabled() {
+    try { return localStorage.getItem('haven_screen_relay_profile') === '1'; } catch { return false; }
+  }
+
+  _screenBitrateFor(res) {
+    const table = this._screenRelayProfileEnabled()
+      ? { 0: 3_000_000, 720: 1_500_000, 1080: 3_000_000, 1440: 5_000_000 }
+      : this._screenBitrates;
+    return table[res] || table[0];
+  }
+
+  // Re-apply the current cap to every peer, for when the toggle changes while
+  // a share is already running.
+  reapplyScreenBitrate() {
+    if (!this.isScreenSharing) return;
+    const maxBitrate = this._screenBitrateFor(this.screenResolution);
+    for (const [, peer] of this.peers) {
+      this._applyScreenBitrate(peer.connection, maxBitrate);
+    }
+  }
+
   _applyScreenBitrate(connection, maxBitrate) {
     try {
+      const relayProfile = this._screenRelayProfileEnabled();
       const senders = connection.getSenders();
       for (const sender of senders) {
         if (sender.track && sender.track.kind === 'video' &&
@@ -1870,13 +1906,19 @@ class VoiceManager {
           if (!params.encodings || params.encodings.length === 0) {
             params.encodings = [{}];
           }
-          params.encodings[0].maxBitrate = maxBitrate;
+          params.encodings[0].maxBitrate = relayProfile
+            ? this._screenBitrateFor(this.screenResolution)
+            : maxBitrate;
           // Per-encoding cap is the primary control; framerate hint also helps
-          // browsers that respect it (Chromium-based ones do).
-          if (this.screenFrameRate) {
+          // browsers that respect it (Chromium-based ones do). Under the relay
+          // profile the framerate stays unpinned on purpose, so the encoder can
+          // shed frames instead of filling a queue it cannot drain.
+          if (relayProfile) {
+            delete params.encodings[0].maxFramerate;
+          } else if (this.screenFrameRate) {
             params.encodings[0].maxFramerate = this.screenFrameRate;
           }
-          params.degradationPreference = 'maintain-framerate';
+          params.degradationPreference = relayProfile ? 'balanced' : 'maintain-framerate';
           sender.setParameters(params).catch(() => {});
         }
       }

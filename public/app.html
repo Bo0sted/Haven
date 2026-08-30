@@ -2114,6 +2114,14 @@
           <p class="settings-hint" data-i18n="settings.debug_section.screen_audio_webaudio_hint">By default Haven plays incoming screen-share audio straight through the audio element, which keeps it in sync with the video over a TURN/relay connection. Turn this on to route it through Haven's Web Audio mixer instead, which unlocks the per-stream volume boost above 100% but can cause audio stutter and audio/video desync over a relay (it's fine on a local network). Leave it off if a screen share's audio stutters or drifts out of sync. (#5426)</p>
         </div>
 
+        <div class="settings-group">
+          <label class="toggle-row">
+            <input type="checkbox" id="pref-debug-screen-relay-profile">
+            <span class="toggle-label" data-i18n="settings.debug_section.screen_relay_profile">Gentler screen share for relay connections</span>
+          </label>
+          <p class="settings-hint" data-i18n="settings.debug_section.screen_relay_profile_hint">Turn this on if your screen share stutters and drifts out of sync for viewers, but only when the call goes through a TURN server and never on your local network. It lowers the video bitrate back to the pre-3.18.1 values and lets the encoder drop frames when the connection is struggling, instead of holding the framerate and letting the backlog grow. Picture quality will be lower. Only the person sharing needs it on. (#5426)</p>
+        </div>
+
         <div class="desktop-pref-row">
           <label class="toggle-row">
             <input type="checkbox" id="pref-debug-voice-glare-ice-fix">
@@ -4137,7 +4145,7 @@
   <script src="/js/theme.js?v=4.0.1"></script>
   <script src="/js/notifications.js?v=3.16.15"></script>
   <script src="/js/servers.js?v=3.16.15"></script>
-  <script src="/js/voice.js?v=3.34.1"></script>
+  <script src="/js/voice.js?v=3.34.2"></script>
   <script src="/js/modmode.js?v=3.16.15"></script>
   <script src="/js/e2e.js?v=3.16.15"></script>
   <!-- Shared with the server (src/automod.js requires the same file) so both

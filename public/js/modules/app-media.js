@@ -3879,6 +3879,28 @@ _setupDebugSection() {
     });
   }
 
+  // #5426 — opt-in gentler screen-share encoding for relayed calls. 3.18.1
+  // raised the bitrate ceilings, pinned maxFramerate and set
+  // degradationPreference to 'maintain-framerate', which is right on a direct
+  // connection and wrong once a TURN relay falls back to TCP: loss is hidden,
+  // so the encoder never backs off, and pinning the framerate takes away its
+  // last lever. This restores the pre-3.18.1 ceilings and unpins both. Off by
+  // default while it is unverified; read live by voice.js on every apply, and
+  // re-applied here so flipping it mid-share works without restarting it.
+  const relayCb = document.getElementById('pref-debug-screen-relay-profile');
+  if (relayCb) {
+    try { relayCb.checked = localStorage.getItem('haven_screen_relay_profile') === '1'; } catch {}
+    relayCb.addEventListener('change', () => {
+      try {
+        if (relayCb.checked) localStorage.setItem('haven_screen_relay_profile', '1');
+        else localStorage.removeItem('haven_screen_relay_profile');
+      } catch {}
+      if (this.voice && typeof this.voice.reapplyScreenBitrate === 'function') {
+        this.voice.reapplyScreenBitrate();
+      }
+    });
+  }
+
   // #5444 — opt-in glare/ICE-restart recovery for voice. When two peers
   // reconnect simultaneously their ICE restarts can collide and leave one
   // audio direction dead until a manual rejoin. This re-queues the restart so
