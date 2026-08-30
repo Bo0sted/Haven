@@ -2258,10 +2258,24 @@ _enhanceSelectAsCustom(selectEl) {
     else panel.style.display = 'none';
   });
 
-  const docClick = (e) => {
-    if (!wrap.contains(e.target)) panel.style.display = 'none';
-  };
-  document.addEventListener('click', docClick);
+  // Closing on an outside click used to register a document listener per
+  // dropdown, capturing that wrap and panel. Every rebuild of a settings
+  // surface makes fresh <select> elements, so each open left another handler
+  // behind pinning detached DOM. Ten opens, ten listeners, none removed.
+  //
+  // One delegated listener for every custom select instead, installed once and
+  // finding open panels from the DOM rather than from a closure, so nothing is
+  // captured and there is nothing to clean up. (#5426)
+  if (!document._csOutsideClickBound) {
+    document._csOutsideClickBound = true;
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('.custom-select-panel').forEach(openPanel => {
+        if (openPanel.style.display === 'none') return;
+        const owner = openPanel.closest('.custom-select-wrap');
+        if (!owner || !owner.contains(e.target)) openPanel.style.display = 'none';
+      });
+    });
+  }
 
   selectEl.addEventListener('change', syncLabel);
   wrap._csRebuild = buildPanel;
