@@ -793,6 +793,8 @@ Restart Haven, and voice/screen sharing will work across any network.
 >
 > To check the relay by itself, put your TURN URL and credentials into the WebRTC project's Trickle ICE page (https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/). If it never produces a candidate of type `relay`, the problem is coturn or the firewall in front of it, not Haven.
 
+> **coturn is not the only option.** [eturnal](https://eturnal.net/) does the same job and several people running Haven at home have found it easier to get working. The setting that matters is the same one under a different name: `relay_ipv4_addr` in `eturnal.yml` is coturn's `external-ip`, and its autodetection does not reliably find your public address behind NAT, so set it explicitly there too. Everything else on this page (UDP forwarding, the relay port range, NAT reflection) applies unchanged, and Haven does not care which one you point `TURN_URL` at.
+
 ---
 
 ## 🎮 Rich Presence (What You're Playing & Listening To)
