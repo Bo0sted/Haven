@@ -604,9 +604,32 @@ function buildHavenContent(msg) {
   // A link-only message arrives with an empty body and one embed. Without this
   // it would relay as nothing at all. This counts as authored: the person chose
   // to post the link, Discord only unfurled it.
+  //
+  // Image bots (SaucyBot and friends) are the other shape here: the picture is
+  // the point of the message and it lives in embed.image, with the source page
+  // in embed.url. Relaying the summary alone gave Haven a link to unfurl, and a
+  // link preview is the fragile path, so a channel full of them ends up with
+  // dead previews. Carrying the image URL instead lets it render as an ordinary
+  // chat image, which is what was asked for.
+  //
+  // The image goes in media rather than authored for the same reason
+  // attachments do: Ferry builds it out of Discord's own response instead of
+  // anyone typing it, and running it through the link filter would throw the
+  // whole message away on an allowlist server. Nothing is loosened by that,
+  // because whether a viewer's browser actually fetches the image is decided by
+  // the preview allowlist at render time, which is the control that exists to
+  // stop a third-party host seeing everyone who scrolls past.
   if (!authored.length && !media.length && (msg.embeds || []).length) {
-    const e = msg.embeds[0];
-    const summary = [e.title, e.url, e.description].filter(Boolean).join(' ');
+    const embeds = msg.embeds.slice(0, 10);
+    for (const e of embeds) {
+      const image = (e.image && e.image.url) || (e.thumbnail && e.thumbnail.url);
+      if (image) media.push(image);
+    }
+    const e = embeds[0];
+    // Once the image is coming through, e.url is the link that would be
+    // unfurled, so it is dropped and the readable parts are kept for context.
+    const parts = media.length ? [e.title, e.description] : [e.title, e.url, e.description];
+    const summary = parts.filter(Boolean).join(' ');
     if (summary) authored.push(summary.slice(0, 500));
   }
 
