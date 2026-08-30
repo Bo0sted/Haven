@@ -251,7 +251,14 @@ module.exports = function register(socket, ctx) {
   // connection. With multiple interfaces or TURN relays, a normal
   // voice + screen + webcam SDP can exceed 16 KB; silently rejecting it left
   // that peer stuck waiting for an answer until they rejoined the call.
-  const MAX_SDP_SIZE = 65536;
+  //
+  // Deliberately below socket.io's maxHttpBufferSize (64 KB). The frame also
+  // carries the event name, channel code, target id and offer id, so an SDP
+  // sized at the transport limit puts the frame over it, and socket.io does
+  // not drop those, it closes the connection. Measured: a 65536 byte offer
+  // disconnected the sender outright. Rejecting an oversized SDP has to stay a
+  // clean application-level refusal, not a dropped call.
+  const MAX_SDP_SIZE = 49152;
   const MAX_OFFER_ID_SIZE = 96;
   const MAX_ICE_SIZE = 2048;  // 2 KB — ICE candidates are small
 
