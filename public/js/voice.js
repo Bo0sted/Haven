@@ -1403,13 +1403,17 @@ class VoiceManager {
         stack: new Error().stack
       });
     } catch {}
-    // Stop screen share first if active
+    // Stop screen share and webcam first if active, in teardown mode: the
+    // peers are closed a few lines down, so there is nobody to renegotiate
+    // with. The normal path fired renegotiations at connections about to be
+    // closed and then finished up to 8 seconds later, nulling screenStream
+    // and flipping isScreenSharing even if the user had already rejoined and
+    // started a fresh share in the meantime. (#5426)
     if (this.isScreenSharing) {
-      this.stopScreenShare();
+      this.stopScreenShare({ teardown: true });
     }
-    // Stop webcam if active
     if (this.isWebcamActive) {
-      this.stopWebcam();
+      this.stopWebcam({ teardown: true });
     }
 
     // Stop noise gate and talk detection
@@ -1786,15 +1790,20 @@ class VoiceManager {
 
       // Add screen tracks to all existing peer connections and cap bitrate
       const maxBitrate = this._screenBitrates[res] || this._screenBitrates[0];
+      // Renegotiate with every peer at once. Each peer is its own
+      // RTCPeerConnection, so there is nothing to serialise, and awaiting
+      // them one at a time meant the last viewer in a bigger call waited for
+      // every earlier negotiation to settle before their tile started. (#5426)
+      const renegotiations = [];
       for (const [userId, peer] of this.peers) {
         this.screenStream.getTracks().forEach(track => {
           peer.connection.addTrack(track, this.screenStream);
         });
         // Cap the video bitrate so WebRTC doesn't starve framerate
         this._applyScreenBitrate(peer.connection, maxBitrate);
-        // Renegotiate with each peer
-        await this._renegotiate(userId, peer.connection);
+        renegotiations.push(this._renegotiate(userId, peer.connection));
       }
+      await Promise.all(renegotiations);
 
       return true;
     } catch (err) {
@@ -1805,10 +1814,24 @@ class VoiceManager {
     }
   }
 
-  async stopScreenShare() {
+  async stopScreenShare({ teardown = false } = {}) {
     if (!this.isScreenSharing || !this.screenStream) return;
 
     const tracks = this.screenStream.getTracks();
+
+    if (teardown) {
+      // Leaving voice: every peer is about to be closed, so skip the
+      // renegotiation round and release the capture right away. Nothing is
+      // awaited before this point, so leave() sees the state cleared
+      // synchronously. (#5426)
+      tracks.forEach(t => t.stop());
+      this.screenStream = null;
+      this.isScreenSharing = false;
+      this._captureController = null;
+      this.socket.emit('screen-share-stopped', { code: this.currentChannel });
+      if (this.onScreenStream) this.onScreenStream(this.localUserId, null);
+      return;
+    }
 
     // Remove screen tracks from all peer connections FIRST, then stop them.
     // Stopping tracks before all peers have removed them causes renegotiation
@@ -1882,10 +1905,12 @@ class VoiceManager {
 
       // Add webcam video track to all existing peer connections
       const camTrack = this.webcamStream.getVideoTracks()[0];
+      const renegotiations = [];
       for (const [userId, peer] of this.peers) {
         peer.connection.addTrack(camTrack, this.webcamStream);
-        await this._renegotiate(userId, peer.connection);
+        renegotiations.push(this._renegotiate(userId, peer.connection));
       }
+      await Promise.all(renegotiations);
 
       // Tell the server
       this.socket.emit('webcam-started', { code: this.currentChannel });
@@ -1898,10 +1923,20 @@ class VoiceManager {
     }
   }
 
-  async stopWebcam() {
+  async stopWebcam({ teardown = false } = {}) {
     if (!this.isWebcamActive || !this.webcamStream) return;
 
     const tracks = this.webcamStream.getTracks();
+
+    if (teardown) {
+      // Leaving voice: see stopScreenShare. (#5426)
+      tracks.forEach(t => t.stop());
+      this.webcamStream = null;
+      this.isWebcamActive = false;
+      this.socket.emit('webcam-stopped', { code: this.currentChannel });
+      if (this.onWebcamStream) this.onWebcamStream(this.localUserId, null);
+      return;
+    }
 
     // Remove webcam track from all peer connections
     const renegotiations = [];
@@ -1951,17 +1986,21 @@ class VoiceManager {
 
     const newTrack = newStream.getVideoTracks()[0];
 
-    // Replace track on all peers
+    // Replace the track on all peers concurrently. replaceTrack needs no
+    // renegotiation and each peer is independent, so waiting on them in turn
+    // only delayed the last peer. (#5426)
+    const swaps = [];
     for (const [, peer] of this.peers) {
       const senders = peer.connection.getSenders();
       const camSender = senders.find(s => s.track && s.track.kind === 'video' &&
         this.webcamStream && this.webcamStream.getVideoTracks().includes(s.track));
       if (camSender) {
-        await camSender.replaceTrack(newTrack).catch(e =>
+        swaps.push(camSender.replaceTrack(newTrack).catch(e =>
           console.warn('[Voice] replaceTrack (cam) failed:', e)
-        );
+        ));
       }
     }
+    await Promise.all(swaps);
 
     // Stop old tracks and update stream reference
     this.webcamStream.getTracks().forEach(t => t.stop());
@@ -2866,18 +2905,21 @@ class VoiceManager {
       this.setNoiseSensitivity(0);
     }
 
-    // Replace the audio track on every peer connection
+    // Replace the audio track on every peer connection, concurrently (see
+    // switchCamera). (#5426)
     const newTrack = this.localStream.getAudioTracks()[0];
+    const swaps = [];
     for (const [, peer] of this.peers) {
       const senders = peer.connection.getSenders();
       const audioSender = senders.find(s => s.track && s.track.kind === 'audio' &&
         (!this.screenStream || !this.screenStream.getAudioTracks().includes(s.track)));
       if (audioSender) {
-        await audioSender.replaceTrack(newTrack).catch(e =>
+        swaps.push(audioSender.replaceTrack(newTrack).catch(e =>
           console.warn('[Voice] replaceTrack failed for peer:', e)
-        );
+        ));
       }
     }
+    await Promise.all(swaps);
 
     // Re-apply mute state
     if (this.isMuted) {
