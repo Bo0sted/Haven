@@ -270,14 +270,45 @@ class VoiceManager {
       console.error(`[Voice] Configured STUN server(s) not responding: ${dead.join(', ')}`);
       if (dead.length < urls.length || hasTurn) return;
 
-      // Nothing configured works and there is no relay to fall back on, so
-      // calls between different networks cannot connect at all.
+      // Nothing configured works and there is no relay, so as it stands calls
+      // between two networks cannot connect at all. Reporting that was the
+      // first half of #5542; this is the other half.
+      //
+      // Setting STUN_URLS replaces the built-in pool rather than adding to it,
+      // so a single typo in one entry takes browser-to-browser voice out
+      // entirely for everyone off the LAN. That is never what the admin was
+      // choosing. "Use my server" is a preference; "have no working voice" is
+      // not something anyone picks on purpose, and the reporter here lost days
+      // to a mistyped port before the difference was visible anywhere.
+      //
+      // Narrow on purpose. It engages only when every configured server failed
+      // the probe AND there is no TURN, which is exactly the case where the
+      // alternative is nothing at all. An admin who deliberately wants only
+      // their own servers has a relay configured too, and that path returns
+      // above without reaching this. The stored setting is never written to;
+      // this lasts for the session and the warning still names what to fix.
+      const revived = await Promise.all(this._stunPreferred.map(u => this._probeStunUrl(u)));
+      const live = revived.filter(r => r.ok).map(r => r.url);
+
+      if (live.length) {
+        const keep = (iceServers || []).filter(entry =>
+          ![].concat(entry && entry.urls || []).some(u => /^stuns?:/i.test(String(u))));
+        this.rtcConfig.iceServers = keep.concat(live.map(urls => ({ urls })));
+        console.warn(
+          `[Voice] Falling back to Haven's built-in STUN pool for this session (${live.join(', ')}). ` +
+          'The configured servers stay saved and untouched.'
+        );
+      }
+
       if (!this._connectivityWarned && typeof this.onConnectivityWarning === 'function') {
         this._connectivityWarned = true;
-        this.onConnectivityWarning(
-          `None of this server's configured STUN servers are responding (${dead.join(', ')}). ` +
-          'Calls will only work on your local network until an admin fixes them in ' +
-          'Settings, Voice & Connectivity, or clears the setting to fall back on the defaults.'
+        this.onConnectivityWarning(live.length
+          ? `None of this server's configured STUN servers are responding (${dead.join(', ')}). ` +
+            'Haven is using its built-in servers for now so calls keep working, but an admin ' +
+            'should fix or clear that setting in Settings, Voice & Connectivity.'
+          : `None of this server's configured STUN servers are responding (${dead.join(', ')}). ` +
+            'Calls will only work on your local network until an admin fixes them in ' +
+            'Settings, Voice & Connectivity, or clears the setting to fall back on the defaults.'
         );
       }
     } catch (err) {
