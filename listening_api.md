@@ -4,13 +4,6 @@ Haven can show what you are listening to on your profile. Any music player that
 supports plugins or scripting can report your current track by posting to a
 personal webhook URL, and a short standalone script works just as well.
 
-The player itself does not need to know anything about Haven. Virtually no music
-player has ever heard of Haven or this API, and it does not have to. A plugin or a
-small script does the posting on the player's behalf. If your player can run a
-plugin, run a script on track change, or call a command, it can report to Haven.
-
-This document explains how that webhook works.
-
 ## Getting your webhook URL
 
 1. Open Settings, then the Activity section.
