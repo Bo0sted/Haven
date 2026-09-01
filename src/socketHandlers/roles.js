@@ -313,7 +313,7 @@ module.exports = function register(socket, ctx) {
     }
     const newLevel = isInt(data.level) && data.level >= 0 && data.level <= 99 ? data.level : role.level;
     let permissionsChanged = false;
-    
+
     const updateRoleTx = db.transaction(() => {
       const updates = [];
       const values = [];
@@ -376,7 +376,7 @@ module.exports = function register(socket, ctx) {
           const controlledChosen = requested.filter(p => controllable(p));
           finalPerms = [...new Set([...lockedKept, ...controlledChosen])];
         }
-         permissionsChanged = currentPerms.length !== finalPerms.length || currentPerms.some(p => !finalPerms.includes(p));
+        permissionsChanged = currentPerms.length !== finalPerms.length || currentPerms.some(p => !finalPerms.includes(p));
 
         db.prepare('DELETE FROM role_permissions WHERE role_id = ?').run(roleId);
         const insertPerm = db.prepare('INSERT INTO role_permissions (role_id, permission, allowed) VALUES (?, ?, 1)');
@@ -405,7 +405,7 @@ module.exports = function register(socket, ctx) {
     // set just grew — refresh their lists live, like assign-role does.
     if (roleGrantsSeeAll(roleId)) for (const row of affected) pushChannelList(row.user_id);
     else for (const row of affected) syncSeeAllMemberships(row.user_id);
-    
+
     const nameChanged = data.name !== undefined && isString(data.name, 1, 30) && data.name.trim() !== role.name;
     const levelChanged = data.level !== undefined && newLevel !== role.level;
     const newPermissions = permissionsChanged ? (newLevel === 0 ? [] : data.permissions): undefined;
@@ -795,11 +795,9 @@ module.exports = function register(socket, ctx) {
     let roleIds;
     if (isInt(data.roleId)) {
       roleIds = [data.roleId];
-    } 
-    else if (Array.isArray(data.roleIds)) {
+    } else if (Array.isArray(data.roleIds)) {
       roleIds = [...new Set(data.roleIds.map(id => isInt(id) ? id : null).filter(id => id !== null))];
-    } 
-    else {
+    } else {
       return cb({ error: 'Invalid role ID' });
     }
 
@@ -817,9 +815,18 @@ module.exports = function register(socket, ctx) {
     }
 
     const placeholders = roleIds.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT role_id, channel_id, grant_on_promote, revoke_on_demote FROM role_channel_access WHERE role_id IN (${placeholders})`).all(...roleIds);
-    const channels = db.prepare(`SELECT id, name, parent_channel_id, is_dm, is_private, position FROM channels WHERE is_dm = 0 ORDER BY parent_channel_id IS NOT NULL, position, name`).all();
-    cb({success: true, access: rows, channels});
+    let rows = db.prepare(`SELECT role_id, channel_id, grant_on_promote, revoke_on_demote FROM role_channel_access WHERE role_id IN (${placeholders})`).all(...roleIds);
+    let channels = db.prepare(`SELECT id, name, parent_channel_id, is_dm, is_private, position FROM channels WHERE is_dm = 0 ORDER BY parent_channel_id IS NOT NULL, position, name`).all();
+    // A regular member asking what a group would give them only needs the
+    // channels that group grants. The full channel table would hand them the
+    // name of every private channel on the server, which the channel list
+    // itself deliberately keeps from non-members.
+    if (!canManageRoles) {
+      rows = rows.filter(r => r.grant_on_promote);
+      const granted = new Set(rows.map(r => r.channel_id));
+      channels = channels.filter(c => granted.has(c.id));
+    }
+    cb({ success: true, access: rows, channels });
   });
 
   socket.on('update-role-channel-access', (data, callback) => {

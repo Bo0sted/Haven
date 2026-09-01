@@ -6902,7 +6902,7 @@ _loadGroupChannelAccess(roleIds, callback) {
   });
 },
 
-// user Groups 
+// user Groups
 _renderUserProfileGroupsList() {
   const section = document.getElementById('rename-modal-groups-section');
   const list = document.getElementById('user-profile-groups-list');
@@ -6910,19 +6910,23 @@ _renderUserProfileGroupsList() {
   const managerSaveBtn = document.getElementById('save-groups-btn');
   const manageGroupsBtn = document.getElementById('manage-groups-btn');
   if (!section || !list || !manager || !managerSaveBtn || !manageGroupsBtn) return;
-  
+
   // Hide Groups section if there are no groups available to join.
   const availableGroups = (this._allRoles || []).filter(r => r.level === 0).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   section.style.display = availableGroups.length > 0 ? '' : 'none';
-   
+
+  // Always start from the read-only view. Clearing the manager's checkboxes
+  // matters: Save Profile calls _GroupManagerSaveGroups too, and stale
+  // checkboxes from an earlier visit would otherwise be replayed as the
+  // user's current choice.
+  manager.style.display = 'none';
+  manager.innerHTML = '';
+  managerSaveBtn.style.display = 'none';
+
   if (availableGroups.length > 0) {
     // Make Sure non manager parts are visible:
     manageGroupsBtn.style.display = '';
     list.style.display = '';
-
-    // Make sure manager is hidden.
-    manager.style.display = 'none';
-    managerSaveBtn.style.display = 'none';
 
     const groups = (this.user?.roles || []).filter(r => r.level === 0).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
     const esc = (s) => this._escapeHtml ? this._escapeHtml(s) : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -6950,7 +6954,7 @@ _showGroupManager() {
   const availableGroups = (this._allRoles || []).filter(r => r.level === 0).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const groups = (this.user?.roles || []).filter(r => r.level === 0).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const esc = (s) => this._escapeHtml ? this._escapeHtml(s) : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  
+
   list.style.display = 'none';
   manageGroupsBtn.style.display = 'none';
 
@@ -7014,7 +7018,13 @@ _showGroupManager() {
 },
 
 _GroupManagerSaveGroups() {
-  const selectedGroupIds = Array.from(document.querySelectorAll('.user-group-checkbox:checked')).map(el => parseInt(el.dataset.role, 10)).filter(Number.isInteger);
+  // Only send a selection while the group manager is open. Save Profile calls
+  // this unconditionally, and with the manager closed there are no checkboxes
+  // in the DOM, so an empty list would go out and the server would read it as
+  // "leave every group".
+  const manager = document.getElementById('user-profile-groups-manager');
+  if (!manager || manager.style.display === 'none') return;
+  const selectedGroupIds = Array.from(manager.querySelectorAll('.user-group-checkbox:checked')).map(el => parseInt(el.dataset.role, 10)).filter(Number.isInteger);
   this._roleEmit('update-groups', {groupIds: selectedGroupIds}, (res) => {
     if (res.error) {
       return this._showToast(res.error, 'error');

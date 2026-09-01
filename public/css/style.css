@@ -7287,11 +7287,11 @@ details.sound-section:not([open]) .sound-section-label::before {
 
 .group-channel-info-row {
   color: var(--text-secondary);
+}
 
-  &.sub {
-    padding-left: 0.75rem;
-    color: var(--text-muted);
-  }
+.group-channel-info-row.sub {
+  padding-left: 0.75rem;
+  color: var(--text-muted);
 }
 
 /* Read-only banner shown when a non-admin opens a role at or above their own
