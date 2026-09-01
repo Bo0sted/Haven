@@ -2224,6 +2224,93 @@ _openMemberChannelPicker(userId, username, mode) {
 // INVITE LINKS
 // ═══════════════════════════════════════════════════════
 
+// Run the configured STUN/TURN through a real ICE gathering and say, in words
+// an admin can act on, what works and what does not.
+//
+// Every voice thread has run the same course: it fails for users, the admin has
+// no way to see why, and it only gets solved when someone walks them through a
+// third-party ICE test page and reads the candidate list back to them. The
+// browser knows all of this the moment it gathers candidates. #5542 cost three
+// people several days between them, and the answer in the end was a mistyped
+// port that this would have named in ten seconds.
+async _runConnectivityTest() {
+  const btn = document.getElementById('test-connectivity-btn');
+  const box = document.getElementById('connectivity-test-result');
+  if (!btn || !box || !this.voice) return;
+
+  const line = (icon, text, muted) =>
+    `<div style="display:flex;gap:6px;align-items:flex-start;margin:3px 0${muted ? ';opacity:0.75' : ''}">` +
+    `<span style="flex:none">${icon}</span><span>${text}</span></div>`;
+
+  btn.disabled = true;
+  box.style.display = '';
+  box.innerHTML = `<small class="settings-hint">${t('settings.admin.test_connectivity_running')}</small>`;
+
+  try {
+    // Deliberately the live endpoint rather than the values in the boxes, so
+    // this tests what users are actually handed, including unsaved edits being
+    // absent. Saying "save first" in the hint is cheaper than guessing here.
+    const res = await fetch('/api/ice-servers', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('haven_token')}` }
+    });
+    if (!res.ok) throw new Error('could not read the server list');
+    const cfg = await res.json();
+    const report = await this.voice.diagnoseConnectivity(cfg.iceServers || []);
+
+    const out = [];
+
+    if (!report.stunTotal && !report.turnTotal) {
+      out.push(line('⚠️', t('settings.admin.test_none_configured')));
+    }
+
+    // Headline first: can two people on different networks reach each other.
+    if (report.hasRelay) {
+      out.push(line('✅', t('settings.admin.test_ok_relay')));
+    } else if (report.canCrossNetworks) {
+      out.push(line('✅', t('settings.admin.test_ok_stun')));
+    } else if (report.stunTotal || report.turnTotal) {
+      out.push(line('❌', t('settings.admin.test_fail_nothing')));
+    }
+
+    // Then the specifics, naming each server, because "one of them is wrong"
+    // is the part that takes days to find by hand.
+    for (const r of report.results) {
+      const name = this._escapeHtml(r.urls);
+      const why = r.error ? ` <span style="opacity:0.8">(${this._escapeHtml(r.error)})</span>` : '';
+      if (r.isTurn) {
+        out.push(r.relay
+          ? line('✅', t('settings.admin.test_turn_ok', { server: name }), true)
+          : line('❌', t('settings.admin.test_turn_dead', { server: name }) + why));
+      } else {
+        out.push(r.srflx
+          ? line('✅', t('settings.admin.test_stun_ok', { server: name }), true)
+          : line('❌', t('settings.admin.test_stun_dead', { server: name }) + why));
+      }
+    }
+
+    // Advice, only where it applies.
+    if (report.deadTurn.length) {
+      out.push(line('💡', t('settings.admin.test_tip_turn')));
+    } else if (report.canCrossNetworks && !report.turnTotal) {
+      out.push(line('💡', t('settings.admin.test_tip_no_turn')));
+    }
+    if (report.deadStun.length && report.stunLive) {
+      out.push(line('💡', t('settings.admin.test_tip_partial')));
+    }
+
+    // The caveat that actually bit people: this ran from wherever the admin is
+    // sitting. A server reachable only on the LAN passes here and fails for
+    // everyone else, which is precisely how #5542 stayed hidden for days.
+    out.push(line('ℹ️', t('settings.admin.test_caveat'), true));
+
+    box.innerHTML = `<div style="font-size:0.8125rem;line-height:1.45">${out.join('')}</div>`;
+  } catch (err) {
+    box.innerHTML = `<small class="settings-hint">${this._escapeHtml(t('settings.admin.test_connectivity_failed', { error: err.message || 'unknown error' }))}</small>`;
+  } finally {
+    btn.disabled = false;
+  }
+},
+
 _openInviteLinksModal() {
   const modal = document.getElementById('invite-links-modal');
   if (!modal) return;

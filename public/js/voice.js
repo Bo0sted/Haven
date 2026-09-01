@@ -204,6 +204,83 @@ class VoiceManager {
   // resolves and accepts packets but never produces a srflx candidate is
   // indistinguishable from a working one until a call fails, which is the whole
   // problem this measures.
+  // Test one ICE server the way a real call would use it, and report what came
+  // back rather than just pass or fail.
+  //
+  // Written for the admin-facing connectivity test. Every thread about voice not
+  // working has gone the same way: it fails for users, the admin has no way to
+  // see why, and the answer only turns up after someone walks them through a
+  // third-party ICE test page and reads the candidate list for them. The browser
+  // already knows all of this at gathering time. (#5542)
+  _probeIceServer(server, timeoutMs = 5000) {
+    return new Promise(resolve => {
+      const urls = [].concat((server && server.urls) || []).map(String);
+      const isTurn = urls.some(u => /^turns?:/i.test(u));
+      const result = { urls: urls.join(', '), isTurn, srflx: false, relay: false, error: '' };
+      let settled = false;
+      let pc;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        try { pc && pc.close(); } catch { /* ignore */ }
+        resolve(result);
+      };
+      try {
+        pc = new RTCPeerConnection({ iceServers: [server] });
+        // The browser reports why a server could not be used here: a bad
+        // hostname, a refused allocation, a timeout. That message is the single
+        // most useful thing in the whole test, so keep the first one.
+        pc.onicecandidateerror = e => {
+          if (result.error) return;
+          const text = (e && e.errorText) || '';
+          const code = (e && e.errorCode) || 0;
+          if (text || code) result.error = text ? `${text}${code ? ` (${code})` : ''}` : `error ${code}`;
+        };
+        pc.createDataChannel('probe');
+        pc.onicecandidate = e => {
+          // A null candidate means gathering finished on its own.
+          if (!e.candidate) return done();
+          const cand = e.candidate.candidate || '';
+          if (cand.includes('typ srflx')) result.srflx = true;
+          if (cand.includes('typ relay')) result.relay = true;
+          // Stop as soon as we have the answer this server was asked for.
+          if (isTurn ? result.relay : result.srflx) done();
+        };
+        pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => done());
+        setTimeout(done, timeoutMs);
+      } catch {
+        done();
+      }
+    });
+  }
+
+  // Run the whole configured ICE list and turn it into something an admin can
+  // act on. Returns plain data; the wording lives in the settings panel.
+  async diagnoseConnectivity(iceServers) {
+    const servers = (iceServers || []).filter(s => s && s.urls);
+    const results = await Promise.all(servers.map(s => this._probeIceServer(s)));
+
+    const stun = results.filter(r => !r.isTurn);
+    const turn = results.filter(r => r.isTurn);
+    const liveStun = stun.filter(r => r.srflx);
+    const liveTurn = turn.filter(r => r.relay);
+
+    return {
+      results,
+      stunTotal: stun.length,
+      stunLive: liveStun.length,
+      deadStun: stun.filter(r => !r.srflx),
+      turnTotal: turn.length,
+      turnLive: liveTurn.length,
+      deadTurn: turn.filter(r => !r.relay),
+      // No server-reflexive candidate anywhere means nobody learns their own
+      // public address, and two people on different networks have nothing to
+      // exchange. That is the failure this whole test exists to catch early.
+      canCrossNetworks: liveStun.length > 0 || liveTurn.length > 0,
+      hasRelay: liveTurn.length > 0
+    };
+  }
+
   _probeStunUrl(url, timeoutMs = 2500) {
     return new Promise(resolve => {
       let settled = false;

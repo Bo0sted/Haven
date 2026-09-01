@@ -4288,6 +4288,9 @@ _setupUI() {
       value: e.target.checked ? 'true' : 'false'
     });
   });
+  document.getElementById('test-connectivity-btn')?.addEventListener('click', () => {
+    this._runConnectivityTest();
+  });
   document.getElementById('generate-registration-token-btn')?.addEventListener('click', () => {
     this.socket.emit('generate-registration-token');
   });
