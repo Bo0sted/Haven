@@ -14677,6 +14677,30 @@ ul.chat-list { list-style-type: disc; }
   white-space: nowrap;
 }
 
+/* Titles/artists past 30 chars scroll instead of clipping, so everyone sees the
+   whole text at the same constant pace. Two identical copies scroll as one, and
+   translating by half the track lands copy two exactly where copy one began for
+   a seamless loop. Duration is set inline per length to keep the speed uniform. */
+.pa-marquee {
+  display: block;
+  overflow: hidden;
+}
+.pa-marquee-track {
+  display: inline-flex;
+  width: max-content;
+  animation: pa-marquee-scroll var(--pa-marquee-dur, 12s) linear infinite;
+}
+.pa-marquee-seg {
+  white-space: nowrap;
+  padding-right: 2rem;
+}
+@keyframes pa-marquee-scroll {
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pa-marquee-track { animation: none; }
+}
+
 /* Playback progress: a line with a dot playhead, plus elapsed/total times. */
 .profile-activity-progress {
   display: block;

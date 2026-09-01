@@ -826,6 +826,20 @@ _sidebarActivityHtml(activity) {
 },
 
 /**
+ * Escaped activity text that scrolls instead of clipping once it runs past 30
+ * characters. Gated on character count, not pixel width, so a long title or
+ * artist reads the same for everyone. Two copies scroll as one seamless loop,
+ * at a constant speed (duration scales with length).
+ */
+_scrollText(text) {
+  const t = text || '';
+  const esc = this._escapeHtml(t);
+  if (t.length <= 30) return esc;
+  const dur = Math.max(8, Math.round(t.length * 0.4));
+  return `<span class="pa-marquee" style="--pa-marquee-dur:${dur}s"><span class="pa-marquee-track"><span class="pa-marquee-seg">${esc}</span><span class="pa-marquee-seg" aria-hidden="true">${esc}</span></span></span>`;
+},
+
+/**
  * Profile-card form: one row per activity that's actually present, game first.
  * A user doing both gets both; a user doing neither (or sharing nothing) gets
  * no section at all rather than an empty heading.
@@ -840,14 +854,14 @@ _profileActivityHtml(activity) {
         ? `<img class="profile-activity-art" src="${this._escapeHtml(act.image)}" alt="" loading="lazy">`
         : `<span class="profile-activity-icon">${meta.icon}</span>`;
       const details = act.details
-        ? `<span class="profile-activity-details">${this._escapeHtml(act.details)}</span>`
+        ? `<span class="profile-activity-details">${this._scrollText(act.details)}</span>`
         : '';
       return `
         <div class="profile-activity-row">
           ${art}
           <span class="profile-activity-text">
             <span class="profile-activity-verb">${act.type === 'listening' && act.paused ? '⏸ Paused' : meta.verb}</span>
-            <span class="profile-activity-name">${this._escapeHtml(act.name)}</span>
+            <span class="profile-activity-name">${this._scrollText(act.name)}</span>
             ${details}
             ${this._activityProgressHtml(act)}
           </span>
