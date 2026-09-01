@@ -4024,7 +4024,7 @@ _initRoleManagement() {
     const levelStr = await this._showPromptModal(t('settings.admin.roles_level_title'), t('settings.admin.roles_level_hint'), '25');
     if (levelStr === null) return;
     const level = parseInt(levelStr, 10);
-    if (isNaN(level) || level < 1 || level > 99) { this._showToast(t('settings.admin.roles_level_invalid'), 'error'); return; }
+    if (isNaN(level) || level < 0 || level > 99) { this._showToast(t('settings.admin.roles_level_invalid'), 'error'); return; }
     this._roleEmit('create-role', { name: name.trim(), level, color: '#aaaaaa' }, (res) => {
       if (res.error) { this._showToast(res.error, 'error'); return; }
       this._showToast(t('settings.admin.roles_created'), 'success');
@@ -4199,12 +4199,30 @@ _renderRoleSidebar() {
     </div>
     <div class="role-sidebar-divider"></div>`;
   }
-  html += this._allRoles.map(r =>
+
+  // leveled roles
+  const leveledRoles = this._allRoles.filter(r => r.level > 0);
+  html += leveledRoles.map(r =>
+    `<div class="role-sidebar-item${this._selectedRoleId === r.id ? ' active' : ''}" data-role-id="${r.id}">
+      <span class="role-color-dot" style="background:${this._safeColor(r.color, '#aaa')}"></span>
+      ${this._escapeHtml(r.name)}
+      <span class="role-sidebar-level ">Lv.${r.level}</span>
+    </div>`
+  ).join('');
+
+  // Groups (level 0) sit below real roles, separated by a divider.
+  const groups = this._allRoles.filter(r => r.level === 0);
+  if (leveledRoles.length && groups.length) {
+    html += '<div class="role-sidebar-divider"></div>';
+    html += '<div class="role-sidebar-section-label">' + t('modals.role_management.groups_label') + '</div>';
+  }
+  html += groups.map(r =>
     `<div class="role-sidebar-item${this._selectedRoleId === r.id ? ' active' : ''}" data-role-id="${r.id}">
       <span class="role-color-dot" style="background:${this._safeColor(r.color, '#aaa')}"></span>
       ${this._escapeHtml(r.name)}
     </div>`
   ).join('');
+
   list.innerHTML = html;
   list.querySelectorAll('.role-sidebar-item').forEach(el => {
     el.addEventListener('click', () => {
@@ -4324,6 +4342,24 @@ _renderAdminRoleDetail() {
   });
 },
 
+_updateRoleLevelPermsVis(levelInputId, permissionsSectionId, permissionsNoteId) {
+  const levelInput = document.getElementById(levelInputId);
+  const permissionsSection = document.getElementById(permissionsSectionId);
+  const permissionsNote = document.getElementById(permissionsNoteId);
+
+  if (!levelInput || (!permissionsSection && !permissionsNote)) return;
+  const update = () => {
+    const level = parseInt(levelInput.value, 10);
+    const isLevelZero = level === 0;
+
+    if(permissionsSection) permissionsSection.style.display = isLevelZero ? 'none' : '';
+    if (permissionsNote) permissionsNote.textContent = isLevelZero ? t('settings.admin.role_form.level_0_role_note') : t('settings.admin.role_form.admin_only_note');
+  };
+
+  levelInput.addEventListener('input', update);
+  update();
+},
+
 _renderRoleDetail() {
   const panel = document.getElementById('role-detail-panel');
   if (this._selectedRoleId === 'admin') { this._renderAdminRoleDetail(); return; }
@@ -4343,7 +4379,7 @@ _renderRoleDetail() {
       <label class="settings-label">${t('settings.admin.role_form.name')}</label>
       <input type="text" class="settings-text-input" id="role-edit-name" value="${this._escapeHtml(role.name)}" maxlength="30">
       <label class="settings-label" style="margin-top:8px;">${t('settings.admin.role_form.level')}</label>
-      <input type="number" class="settings-number-input" id="role-edit-level" value="${role.level}" min="1" max="99">
+      <input type="number" class="settings-number-input" id="role-edit-level" value="${role.level}" min="0" max="99">
       <label class="settings-label" style="margin-top:8px;">${t('settings.admin.role_form.color')}</label>
       <input type="color" id="role-edit-color" value="${role.color || '#aaaaaa'}" style="width:50px;height:30px;border:none;cursor:pointer">
       <label class="settings-label" style="margin-top:8px;">Role Icon</label>
@@ -4374,16 +4410,18 @@ _renderRoleDetail() {
         </div>
       </div>
       <h5 class="settings-section-subtitle" style="margin-top:12px;">${t('settings.admin.role_form.permissions')}</h5>
-      <p class="perm-admin-note">${t('settings.admin.role_form.admin_only_note')}</p>
-      ${allPerms.map(p => {
-        const locked = !this._canControlRolePerm(p);
-        const adminOnly = ADMIN_ONLY_PERMS.includes(p);
-        return `
-        <label class="toggle-row${adminOnly ? ' perm-admin-only' : ''}"${locked ? ' style="opacity:.55" title="You can only change permissions you hold"' : ''}>
-          <span>${permLabels[p] || p.replace(/_/g, ' ')}</span>
-          <input type="checkbox" class="role-perm-checkbox" data-perm="${p}" ${rolePerms.includes(p) ? 'checked' : ''}${locked ? ' disabled' : ''}>
-        </label>`;
-      }).join('')}
+      <p class="perm-admin-note" id="perm-admin-note">${role.level === 0 ? t('settings.admin.role_form.level_0_role_note') : t('settings.admin.role_form.admin_only_note')}</p>
+      <div id="role-permissions-list" style="${role.level === 0 ? 'display:none;' : ''}">
+        ${allPerms.map(p => {
+          const locked = !this._canControlRolePerm(p);
+          const adminOnly = ADMIN_ONLY_PERMS.includes(p);
+          return `
+          <label class="toggle-row${adminOnly ? ' perm-admin-only' : ''}"${locked ? ' style="opacity:.55" title="You can only change permissions you hold"' : ''}>
+            <span>${permLabels[p] || p.replace(/_/g, ' ')}</span>
+            <input type="checkbox" class="role-perm-checkbox" data-perm="${p}" ${rolePerms.includes(p) ? 'checked' : ''}${locked ? ' disabled' : ''}>
+          </label>`;
+        }).join('')}
+      </div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-sm btn-accent" id="role-members-btn">👥 Members</button>
         <button class="btn-sm" id="duplicate-role-btn">📋 Duplicate</button>
@@ -4391,6 +4429,9 @@ _renderRoleDetail() {
       </div>
     </div>
   `;
+
+  // Toggle permissions visibility based on the current role level.
+  this._updateRoleLevelPermsVis('role-edit-level', 'role-permissions-list', 'perm-admin-note');
 
   // Toggle channel access panel visibility
   const linkCheckbox = document.getElementById('role-edit-link-channel-access');
@@ -4912,13 +4953,25 @@ _renderChannelRolesRoleList() {
     list.innerHTML = `<p style="font-size:0.82rem;color:var(--text-muted);text-align:center;padding:8px">${t('settings.admin.roles_none_yet')}</p>`;
     return;
   }
-  list.innerHTML = this._allRoles.map(r =>
+
+  const renderRole = r =>
     `<div class="channel-roles-role-item${this._channelRolesSelectedRole === r.id ? ' active' : ''}" data-role-id="${r.id}">
       <span class="role-color-dot" style="background:${this._safeColor(r.color, '#aaa')}"></span>
       <span class="channel-roles-role-name">${this._escapeHtml(r.name)}</span>
       <span class="channel-roles-role-level">Lv.${r.level}</span>
-    </div>`
-  ).join('');
+    </div>`;
+  
+  const leveledRoles = this._allRoles.filter(r => r.level > 0);
+  let html = leveledRoles.map(renderRole).join('');
+
+  const groups = this._allRoles.filter(r => r.level === 0);
+  if (leveledRoles.length && groups.length) {
+    html += '<div class="role-sidebar-divider"></div>';
+    html += '<div class="role-sidebar-section-label">' + t('modals.role_management.groups_label') + '</div>';
+  }
+  html += groups.map(renderRole).join('');
+
+  list.innerHTML = html;
   list.querySelectorAll('.channel-roles-role-item').forEach(el => {
     el.addEventListener('click', () => {
       this._channelRolesSelectedRole = parseInt(el.dataset.roleId, 10);
@@ -4949,7 +5002,7 @@ _renderChannelRolesRoleDetail() {
       <div class="cr-role-form-row cr-role-inline">
         <div>
           <label class="cr-role-label">${t('settings.admin.role_form.level')}</label>
-          <input type="number" class="settings-number-input" id="cr-role-level" value="${role.level}" min="1" max="99" style="width:60px">
+          <input type="number" class="settings-number-input" id="cr-role-level" value="${role.level}" min="0" max="99" style="width:60px">
         </div>
         <div>
           <label class="cr-role-label">${t('settings.admin.role_form.color')}</label>
@@ -4961,8 +5014,8 @@ _renderChannelRolesRoleDetail() {
         <span>${t('settings.admin.role_form.auto_assign')}</span>
       </label>
       <label class="cr-role-label" style="margin-top:4px">${t('settings.admin.role_form.permissions')}</label>
-      <p class="perm-admin-note">${t('settings.admin.role_form.admin_only_note')}</p>
-      <div class="cr-role-perms">
+      <p class="perm-admin-note" id="cr-perm-admin-note">${role.level === 0 ? t('settings.admin.role_form.level_0_role_note') : t('settings.admin.role_form.admin_only_note')}</p>
+      <div class="cr-role-perms" id="cr-role-permissions-list" style="${role.level === 0 ? 'display:none;' : ''}">
         ${allPerms.map(p => {
           const locked = !this._canControlRolePerm(p);
           const adminOnly = ADMIN_ONLY_PERMS.includes(p);
@@ -4980,10 +5033,13 @@ _renderChannelRolesRoleDetail() {
     </div>
   `;
 
+  // Toggle permissions visibility based on the current role level.
+  this._updateRoleLevelPermsVis('cr-role-level', 'cr-role-permissions-list', 'cr-perm-admin-note');
+
   document.getElementById('cr-save-role-btn').addEventListener('click', () => {
     const perms = [...panel.querySelectorAll('.cr-perm-cb:checked')].map(cb => cb.dataset.perm);
     const newLevel = parseInt(document.getElementById('cr-role-level').value, 10);
-    if (isNaN(newLevel) || newLevel < 1 || newLevel > 99) { this._showToast(t('settings.admin.roles_level_invalid'), 'error'); return; }
+    if (isNaN(newLevel) || newLevel < 0 || newLevel > 99) { this._showToast(t('settings.admin.roles_level_invalid'), 'error'); return; }
     this._roleEmit('update-role', {
       roleId: role.id,
       name: document.getElementById('cr-role-name').value.trim(),
@@ -5037,7 +5093,7 @@ async _createChannelRole() {
   const levelStr = await this._showPromptModal(t('settings.admin.roles_level_title'), t('settings.admin.roles_level_hint'), '25');
   if (levelStr === null) return;
   const level = parseInt(levelStr, 10);
-  if (isNaN(level) || level < 1 || level > 99) { this._showToast(t('settings.admin.roles_level_invalid'), 'error'); return; }
+  if (isNaN(level) || level < 0 || level > 99) { this._showToast(t('settings.admin.roles_level_invalid'), 'error'); return; }
   this._roleEmit('create-role', { name: name.trim(), level, color: '#aaaaaa' }, (res) => {
     if (res.error) { this._showToast(res.error, 'error'); return; }
     this._showToast(t('settings.admin.roles_created'), 'success');
