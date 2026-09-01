@@ -515,24 +515,24 @@ _setupNotifications() {
   // credentials for, so we don't offer a button that can only fail.
   this.socket?.emit('get-connections');
 
-  // ── Navidrome rich presence (companion Havidrome plugin) ──
-  // A single on/off switch: on generates a webhook token the plugin posts to,
+  // ── Listening presence (any music player) ──
+  // A single on/off switch: on generates a webhook token a player posts to,
   // off removes it. The read-only URL box is only shown once we have a token.
-  const navidromeToggle = document.getElementById('navidrome-enabled');
-  const navidromeUrlRow = document.getElementById('navidrome-url-row');
-  const navidromeUrlInput = document.getElementById('navidrome-url');
+  const listeningToggle = document.getElementById('listening-enabled');
+  const listeningUrlRow = document.getElementById('listening-url-row');
+  const listeningUrlInput = document.getElementById('listening-url');
   // Selecting the whole URL on focus makes copy-paste one gesture.
-  navidromeUrlInput?.addEventListener('focus', () => navidromeUrlInput.select());
-  this._applyNavidromeState = (token) => {
+  listeningUrlInput?.addEventListener('focus', () => listeningUrlInput.select());
+  this._applyListeningState = (token) => {
     const on = !!token;
-    if (navidromeToggle) navidromeToggle.checked = on;
-    if (navidromeUrlInput) navidromeUrlInput.value = on ? `${location.origin}/api/webhooks/navidrome/${token}` : '';
-    if (navidromeUrlRow) navidromeUrlRow.hidden = !on;
+    if (listeningToggle) listeningToggle.checked = on;
+    if (listeningUrlInput) listeningUrlInput.value = on ? `${location.origin}/api/webhooks/listening/${token}` : '';
+    if (listeningUrlRow) listeningUrlRow.hidden = !on;
   };
-  navidromeToggle?.addEventListener('change', () => {
-    this.socket?.emit('set-navidrome', { enabled: navidromeToggle.checked });
+  listeningToggle?.addEventListener('change', () => {
+    this.socket?.emit('set-listening', { enabled: listeningToggle.checked });
   });
-  this.socket?.emit('get-navidrome');
+  this.socket?.emit('get-listening');
 
   // Coming back from a Steam/Spotify redirect? Report the outcome once.
   this._handleConnectRedirect?.();

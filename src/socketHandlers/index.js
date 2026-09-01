@@ -2072,9 +2072,9 @@ function setupSocketHandlers(io, db, opts = {}) {
             if (s.user && s.user.id === uid) return; // still online elsewhere
           }
           presenceTimers.delete(uid);
-          // Drop pushed Navidrome presence so it doesn't render for a user
+          // Drop pushed listening presence so it doesn't render for a user
           // whose app is now closed.
-          state.activity?.clearNavidromePresence(uid);
+          state.activity?.clearListeningPresence(uid);
         }, 5000);
       }
 

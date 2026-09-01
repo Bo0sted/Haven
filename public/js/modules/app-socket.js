@@ -2361,11 +2361,11 @@ _setupSocketListeners() {
     }
   });
 
-  // ── Navidrome rich presence: webhook token state ───
+  // ── Listening presence: webhook token state ───
   // token is a string when the feature is on, null when off. The full URL is
   // built client-side from this origin so the server never handles it.
-  this.socket.on('navidrome-state', (data) => {
-    this._applyNavidromeState?.(data?.token || null);
+  this.socket.on('listening-state', (data) => {
+    this._applyListeningState?.(data?.token || null);
   });
 
   // Server issued a short-lived link token — hand off to the provider in a

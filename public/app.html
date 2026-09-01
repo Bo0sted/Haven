@@ -1673,20 +1673,20 @@
         </div>
         <small class="settings-hint" style="display:block;margin-top:6px">Haven's own music player needs no connection — it shares automatically while you're listening in a voice channel.</small>
 
-        <!-- Navidrome rich presence (companion Havidrome plugin) -->
-        <div id="navidrome-connection" style="margin-top:14px">
-          <h5 class="settings-section-title">🎶 <span data-i18n="settings.navidrome.title">Navidrome</span></h5>
-          <small class="settings-hint" style="display:block;margin-bottom:8px" data-i18n-html="settings.navidrome.note">This feature depends on <a href="https://github.com/Bo0sted/HavidromePlugin" target="_blank" rel="noopener noreferrer">Havidrome</a>, a companion plugin for Navidrome.</small>
+        <!-- Listening presence (any music player) -->
+        <div id="listening-connection" style="margin-top:14px">
+          <h5 class="settings-section-title">🎶 <span data-i18n="settings.listening.title">Listening Webhook</span></h5>
+          <small class="settings-hint" style="display:block;margin-bottom:8px" data-i18n-html="settings.listening.note">Please refer to the <a href="https://github.com/ancsemi/Haven/blob/main/listening_api.md" target="_blank" rel="noopener noreferrer">Listening API</a>.</small>
           <label class="toggle-row">
-            <span data-i18n="settings.navidrome.toggle">Show my Navidrome music on Haven</span>
-            <input type="checkbox" id="navidrome-enabled">
+            <span data-i18n="settings.listening.toggle">Show my music on Haven</span>
+            <input type="checkbox" id="listening-enabled">
           </label>
-          <div id="navidrome-url-row" hidden style="margin-top:8px">
+          <div id="listening-url-row" hidden style="margin-top:8px">
             <label class="connection-field">
-              <span data-i18n="settings.navidrome.url_label">Your webhook URL</span>
-              <input type="text" id="navidrome-url" readonly autocomplete="off" spellcheck="false">
+              <span data-i18n="settings.listening.url_label">Your webhook URL</span>
+              <input type="text" id="listening-url" readonly autocomplete="off" spellcheck="false">
             </label>
-            <small class="settings-hint" style="display:block;margin-top:4px" data-i18n="settings.navidrome.url_hint">Paste this into the Havidrome plugin config. Keep it secret — anyone with this URL can post to your profile.</small>
+            <small class="settings-hint" style="display:block;margin-top:4px" data-i18n="settings.listening.url_hint">Point your player's plugin or script at this URL. Keep it secret; anyone with it can post to your profile.</small>
           </div>
         </div>
       </div>

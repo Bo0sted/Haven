@@ -728,7 +728,7 @@ _formatClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 },
 
-/** Playback progress bar for a listen that reports duration (Navidrome). */
+/** Playback progress bar for a listen that reports duration. */
 _activityProgressHtml(act) {
   if (!act || act.type !== 'listening' || !act.duration || !act.startedAt) return '';
   const elapsed = act.paused

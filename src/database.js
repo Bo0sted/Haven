@@ -1520,20 +1520,29 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_user_connections_provider ON user_connections(provider);
   `);
 
-  // ── Navidrome rich-presence webhook tokens ──────────────
-  // Per-user bearer secret for the reserved /api/webhooks/navidrome/:token
-  // path that the companion Havidrome plugin posts to. Stored (not derived)
-  // so a leaked URL can be revoked: regenerating replaces the row and the old
-  // token stops resolving on the next request. One row per user; the token is
-  // removed when the user turns the feature off, and cascades away with the
-  // account.
+  // ── Listening presence webhook tokens ───────────────────
+  // Per-user bearer secret for the reserved /api/webhooks/listening/:token
+  // path that any music player's plugin or script posts to. Stored (not
+  // derived) so a leaked URL can be revoked: regenerating replaces the row and
+  // the old token stops resolving on the next request. One row per user; the
+  // token is removed when the user turns the feature off, and cascades away
+  // with the account.
+  //
+  // The table used to be named navidrome_tokens, back when this was tied to a
+  // single source. Rename it in place so an existing install keeps its tokens.
+  if (
+    db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='navidrome_tokens'`).get() &&
+    !db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='listening_tokens'`).get()
+  ) {
+    db.exec(`ALTER TABLE navidrome_tokens RENAME TO listening_tokens`);
+  }
   db.exec(`
-    CREATE TABLE IF NOT EXISTS navidrome_tokens (
+    CREATE TABLE IF NOT EXISTS listening_tokens (
       user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       token      TEXT UNIQUE NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_navidrome_tokens_token ON navidrome_tokens(token);
+    CREATE INDEX IF NOT EXISTS idx_listening_tokens_token ON listening_tokens(token);
   `);
 
   // Full-text search index (messages_fts) — created/reconciled here so it runs

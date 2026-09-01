@@ -3576,19 +3576,21 @@ app.post('/api/webhooks/:token', webhookLimiter, express.json({ limit: '64kb' })
   res.status(200).json({ success: true, message_id: result.lastInsertRowid });
 });
 
-// ── Navidrome rich presence webhook (companion Havidrome plugin) ──
+// ── Listening presence webhook (any music player) ──
 // A reserved path, deliberately kept off the generic /api/webhooks/:token bot
 // route (different segment count, so the two never collide). A user generates
-// the token from Settings → Activity → Navidrome; the Havidrome plugin posts
-// multipart presence here (title/artist/album/position/duration + cover bytes).
+// the token from Settings → Activity → Listening; any player's plugin or a
+// small script posts presence here (title/artist/album/position/duration +
+// optional cover bytes). See listening_api.md for the full contract.
 //
 // Strict on purpose: this is an unauthenticated-by-header endpoint reachable by
 // a user-generated token, and the cover bytes are served back to other users.
-const navidromeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: 'Rate limit exceeded' } });
+const MAX_LISTENING_DURATION = 24 * 60 * 60; // cap seconds so a phony duration can't linger
+const listeningLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: 'Rate limit exceeded' } });
 // The cover route is viewer-facing (every open profile card fetches it), so it
 // gets a looser cap than the single-poster webhook while still bounding abuse.
-const navidromeCoverLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: { error: 'Rate limit exceeded' } });
-const navidromeUpload = multer({
+const listeningCoverLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: { error: 'Rate limit exceeded' } });
+const listeningUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 512 * 1024, files: 1, fields: 8, fieldSize: 4096 },
 }).single('cover');
@@ -3605,8 +3607,8 @@ function sniffImageType(buf) {
   return null;
 }
 
-app.post('/api/webhooks/navidrome/:token', navidromeLimiter, (req, res) => {
-  navidromeUpload(req, res, (err) => {
+app.post('/api/webhooks/listening/:token', listeningLimiter, (req, res) => {
+  listeningUpload(req, res, (err) => {
     if (err) return res.status(400).json({ error: 'Invalid upload' });
 
     const { token } = req.params;
@@ -3614,7 +3616,7 @@ app.post('/api/webhooks/navidrome/:token', navidromeLimiter, (req, res) => {
       return res.status(400).json({ error: 'Invalid token' });
     }
     const row = require('./src/database').getDb()
-      .prepare('SELECT user_id FROM navidrome_tokens WHERE token = ?')
+      .prepare('SELECT user_id FROM listening_tokens WHERE token = ?')
       .get(token);
     if (!row) return res.status(404).json({ error: 'Webhook not found' });
 
@@ -3626,7 +3628,7 @@ app.post('/api/webhooks/navidrome/:token', navidromeLimiter, (req, res) => {
 
     // Stop/expired clears the profile; no track fields needed.
     if (state === 'stopped' || state === 'expired') {
-      engine.clearNavidromePresence(row.user_id);
+      engine.clearListeningPresence(row.user_id);
       return res.sendStatus(204);
     }
 
@@ -3639,15 +3641,17 @@ app.post('/api/webhooks/navidrome/:token', navidromeLimiter, (req, res) => {
     }
 
     const hasTitle = typeof b.title === 'string' && b.title.trim();
-    // An empty body is a reachability ping (or nothing playing) — accept it.
+    // An empty body is a reachability ping (or nothing playing); accept it.
     if (!cover && !hasTitle) return res.sendStatus(204);
     if (!hasTitle) return res.status(400).json({ error: 'Title required' });
 
-    // Every track has a duration by definition; reject anything without one.
-    const duration = parseInt(b.duration, 10);
+    // Every track has a duration by definition; reject anything without one and
+    // cap it so a track can't schedule a runaway expiry.
+    let duration = parseInt(b.duration, 10);
     if (!duration || duration <= 0) return res.status(400).json({ error: 'Duration required' });
+    duration = Math.min(duration, MAX_LISTENING_DURATION);
 
-    engine.setNavidromePresence(row.user_id, {
+    engine.setListeningPresence(row.user_id, {
       title: b.title,
       artist: typeof b.artist === 'string' ? b.artist : '',
       album: typeof b.album === 'string' ? b.album : '',
@@ -3656,17 +3660,19 @@ app.post('/api/webhooks/navidrome/:token', navidromeLimiter, (req, res) => {
       cover,
       coverType,
       paused: state === 'paused',
+      heartbeat: state === 'heartbeat',
+      source: typeof b.source === 'string' ? b.source : '',
     });
     return res.sendStatus(204);
   });
 });
 
-// Serves a user's current Navidrome cover from memory. The opaque version must
+// Serves a user's current listening cover from memory. The opaque version must
 // match, so the URL only works for someone who received the current presence.
-app.get('/api/activity/navidrome-cover/:userId', navidromeCoverLimiter, (req, res) => {
+app.get('/api/activity/listening-cover/:userId', listeningCoverLimiter, (req, res) => {
   const engine = activityRef.engine;
   const userId = parseInt(req.params.userId, 10);
-  const cover = engine && !isNaN(userId) ? engine.getNavidromeCover(userId) : null;
+  const cover = engine && !isNaN(userId) ? engine.getListeningCover(userId) : null;
   if (!cover || req.query.v !== cover.version) return res.sendStatus(404);
   res.setHeader('Content-Type', cover.contentType);
   res.setHeader('Cache-Control', 'private, max-age=300');
