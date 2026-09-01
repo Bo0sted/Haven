@@ -748,7 +748,7 @@ _syncSettingsNav() {
   const canManageServer = isAdmin || this._hasPerm('manage_server');
   const canManageWebhooks = isAdmin || this._hasPerm('manage_webhooks');
   const canInviteUsers = isAdmin || this._hasPerm('invite_users'); // (#5470)
-  const hasAnyAdminAccess = isAdmin || canManageEmojis || canManageStickers || canManageSounds || canManageRoles || canManageServer || canManageWebhooks || canInviteUsers;
+  const hasAnyAdminAccess = this._hasAnyAdminSettingsAccess();
 
   // Show/hide individual admin nav items (default: hidden for non-admins)
   document.querySelectorAll('.settings-nav-admin').forEach(el => {

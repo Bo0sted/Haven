@@ -3197,14 +3197,7 @@ _setupUI() {
     if (tab === 'admin') {
       // Defensive gate: refuse switching to the admin tab if the user has no
       // admin/manage permissions, regardless of where the call came from.
-      const isAdmin = !!(this.user && this.user.isAdmin);
-      const hasAdminAccess = isAdmin
-        || this._hasPerm?.('manage_emojis')
-        || this._hasPerm?.('manage_stickers')
-        || this._hasPerm?.('manage_soundboard')
-        || this._hasPerm?.('manage_roles')
-        || this._hasPerm?.('manage_server')
-        || this._hasPerm?.('view_audit_log');
+      const hasAdminAccess = !!this.user && this._hasAnyAdminSettingsAccess();
       if (!hasAdminAccess) return this._switchSettingsTab('user');
       if (userBody) userBody.style.display = 'none';
       if (adminBody) adminBody.style.display = '';
