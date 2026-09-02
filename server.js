@@ -3737,7 +3737,7 @@ app.post('/api/webhooks/:token', webhookLimiter, express.json({ limit: '64kb' })
 // route (different segment count, so the two never collide). A user generates
 // the token from Settings → Activity → Listening; any player's plugin or a
 // small script posts presence here (title/artist/album/position/duration +
-// optional cover bytes). See listening_api.md for the full contract.
+// optional cover bytes). See docs/listening-api.md for the full contract.
 //
 // Strict on purpose: this is an unauthenticated-by-header endpoint reachable by
 // a user-generated token, and the cover bytes are served back to other users.
@@ -3764,17 +3764,19 @@ function sniffImageType(buf) {
 }
 
 app.post('/api/webhooks/listening/:token', listeningLimiter, (req, res) => {
+  // Resolve the token before touching the body, so a post to an unknown or
+  // malformed token is refused without buffering up to 512KB of upload first.
+  const { token } = req.params;
+  if (!token || typeof token !== 'string' || !/^[0-9a-f]{64}$/i.test(token)) {
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+  const row = require('./src/database').getDb()
+    .prepare('SELECT user_id FROM listening_tokens WHERE token = ?')
+    .get(token);
+  if (!row) return res.status(404).json({ error: 'Webhook not found' });
+
   listeningUpload(req, res, (err) => {
     if (err) return res.status(400).json({ error: 'Invalid upload' });
-
-    const { token } = req.params;
-    if (!token || typeof token !== 'string' || token.length !== 64) {
-      return res.status(400).json({ error: 'Invalid token' });
-    }
-    const row = require('./src/database').getDb()
-      .prepare('SELECT user_id FROM listening_tokens WHERE token = ?')
-      .get(token);
-    if (!row) return res.status(404).json({ error: 'Webhook not found' });
 
     const engine = activityRef.engine;
     if (!engine) return res.sendStatus(204);

@@ -784,11 +784,21 @@ _refreshOpenProfileCard() {
     dot.title = this._statusLabel(u);
   }
 
+  // online-users fires on every join, leave, status change and activity poll,
+  // not only when this user changed, so compare before writing. Rewriting the
+  // activity slot would recreate its cover <img> and restart the progress
+  // timer on every broadcast.
   const statusSlot = popup.querySelector('#profile-popup-status-slot');
-  if (statusSlot) statusSlot.innerHTML = this._profileStatusTextHtml(u.statusText);
+  const statusKey = u.statusText || '';
+  if (statusSlot && this._openProfileStatusKey !== statusKey) {
+    this._openProfileStatusKey = statusKey;
+    statusSlot.innerHTML = this._profileStatusTextHtml(u.statusText);
+  }
 
   const slot = popup.querySelector('#profile-popup-activity-slot');
-  if (slot) {
+  const activityKey = JSON.stringify(u.activity || null);
+  if (slot && this._openProfileActivityKey !== activityKey) {
+    this._openProfileActivityKey = activityKey;
     slot.innerHTML = this._profileActivityHtml(u.activity);
     this._startActivityProgress(slot);
   }
@@ -980,6 +990,8 @@ _showProfilePopup(profile) {
   // Keep the music progress bar moving, and let presence updates refresh the
   // card live (pause, resume, track change, clear) while it's open.
   this._openProfileUserId = profile.id;
+  this._openProfileStatusKey = profile.statusText || '';
+  this._openProfileActivityKey = JSON.stringify(profile.activity || null);
   this._startActivityProgress(popup);
 
   // Hover-mode: no interactive handlers needed — the popup is pointer-events:none.

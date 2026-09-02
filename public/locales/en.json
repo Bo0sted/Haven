@@ -818,7 +818,7 @@
     },
     "listening": {
       "title": "Listening Webhook",
-      "note": "Please refer to the <a href=\"https://github.com/ancsemi/Haven/blob/main/listening_api.md\" target=\"_blank\" rel=\"noopener noreferrer\">Listening API</a>.",
+      "note": "Please refer to the <a href=\"https://github.com/ancsemi/Haven/blob/main/docs/listening-api.md\" target=\"_blank\" rel=\"noopener noreferrer\">Listening API</a>.",
       "toggle": "Show my music on Haven",
       "url_label": "Your webhook URL",
       "url_hint": "Point your player's plugin or script at this URL. Keep it secret; anyone with it can post to your profile."
