@@ -6875,10 +6875,14 @@ details.sound-section:not([open]) .sound-section-label::before {
 @keyframes e2eImgPulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
 .e2e-img-failed { opacity: 0.4; border-color: var(--danger, #e74c3c); }
 
-/* Full inline mode (Discord-style, toggled via client setting) */
+/* Full inline mode (toggled via client setting). The largest setting lets an
+   image use the whole message width; the height cap keeps a tall screenshot
+   from taking over the screen, and scales with the window so a wide image can
+   still fill the row on a big display. Both caps together preserve the aspect
+   ratio, so nothing is letterboxed. */
 .image-mode-full .chat-image {
-  max-width: min(25rem, 70%);
-  max-height: 18.75rem;
+  max-width: 100%;
+  max-height: min(50rem, 75vh);
   object-fit: contain;
 }
 
