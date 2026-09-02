@@ -49,6 +49,7 @@ const registerModeration = require('./moderation');
 const registerRoles      = require('./roles');
 const registerAdmin      = require('./admin');
 const registerFerry      = require('./ferry');
+const registerGroupE2E   = require('./groupE2E');
 
 const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
 
@@ -2165,6 +2166,7 @@ function setupSocketHandlers(io, db, opts = {}) {
     registerRoles(socket, ctx);
     registerAdmin(socket, ctx);
     registerFerry(socket, ctx);
+    registerGroupE2E(socket, ctx);
 
     // ── Disconnect handler ────────────────────────────────
     // Socket.IO hands us why the socket went away, and throwing that away made
