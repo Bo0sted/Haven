@@ -1569,7 +1569,7 @@ module.exports = function register(socket, ctx) {
       WHERE c.is_dm = 1
       AND EXISTS (SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = ?)
       AND EXISTS (SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = ?)
-      ${isSelfDm ? 'AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = 1' : ''}
+      AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = ${isSelfDm ? 1 : 2}
     `).get(socket.user.id, targetId);
     if (existingDm) {
       socket.emit('dm-opened', {
