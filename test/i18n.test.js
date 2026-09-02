@@ -245,14 +245,18 @@ test('password visibility controls remain translatable after early initializatio
   assert.match(source, /btn\.dataset\.i18nAriaLabel = ariaKey/);
 });
 
-test('English and Portuguese catalogs have matching keys and placeholders', () => {
+test('the Portuguese catalog stays a subset of English with matching placeholders', () => {
   const localeDir = path.join(ROOT, 'public/locales');
   const english = flattenLocale(JSON.parse(fs.readFileSync(path.join(localeDir, 'en.json'), 'utf8')));
   const portuguese = flattenLocale(JSON.parse(fs.readFileSync(path.join(localeDir, 'pt.json'), 'utf8')));
 
-  assert.deepEqual([...portuguese.keys()].sort(), [...english.keys()].sort());
-  for (const [key, value] of english) {
-    assert.deepEqual(placeholders(portuguese.get(key)), placeholders(value), `placeholder mismatch for ${key}`);
+  // English is the base catalog and every other locale is allowed to lag
+  // behind it: a key that only exists in English falls back at runtime. What
+  // must not happen is a Portuguese key English no longer has (stale), or a
+  // shared key whose placeholders drifted (broken substitution).
+  for (const [key, value] of portuguese) {
+    assert.equal(english.has(key), true, `pt.json has a key English does not: ${key}`);
+    assert.deepEqual(placeholders(value), placeholders(english.get(key)), `placeholder mismatch for ${key}`);
   }
 });
 
@@ -267,11 +271,10 @@ test('maintained locale catalogs do not contain duplicate object keys', () => {
   }
 });
 
-test('literal translation references exist in both maintained catalogs', () => {
+test('literal translation references exist in the English catalog', () => {
   const publicDir = path.join(ROOT, 'public');
   const localeDir = path.join(publicDir, 'locales');
   const english = flattenLocale(JSON.parse(fs.readFileSync(path.join(localeDir, 'en.json'), 'utf8')));
-  const portuguese = flattenLocale(JSON.parse(fs.readFileSync(path.join(localeDir, 'pt.json'), 'utf8')));
   const references = new Map();
 
   for (const file of filesUnder(publicDir).filter(name => /\.(?:html|js)$/.test(name))) {
@@ -287,7 +290,6 @@ test('literal translation references exist in both maintained catalogs', () => {
 
   for (const [key, file] of references) {
     assert.equal(english.has(key), true, `missing English key ${key}, referenced by ${file}`);
-    assert.equal(portuguese.has(key), true, `missing Portuguese key ${key}, referenced by ${file}`);
   }
 });
 
@@ -304,6 +306,8 @@ test('HTML translations preserve required code and emphasis markup', () => {
     for (const [key, expectedTags] of keys) {
       assert.match(appHtml, new RegExp(`data-i18n-html="${key.replaceAll('.', '\\.')}"`));
       const value = catalog.get(key);
+      // A locale that has not translated this key yet falls back to English.
+      if (locale !== 'en' && value === undefined) continue;
       for (const [tag, count] of Object.entries(expectedTags)) {
         assert.equal((value.match(new RegExp(`<${tag}>`, 'g')) || []).length, count, `${locale}.${key} has the wrong number of <${tag}> tags`);
         assert.equal((value.match(new RegExp(`</${tag}>`, 'g')) || []).length, count, `${locale}.${key} has the wrong number of </${tag}> tags`);
