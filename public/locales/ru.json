@@ -576,6 +576,7 @@
     "bio_placeholder": "Расскажите о себе…",
     "gear_menu": {
       "assign_role": "Назначить роль",
+      "role_management": "Управление ролями",
       "add_to_channel": "Добавить в канал",
       "kick": "Выгнать",
       "mute": "Заглушить",

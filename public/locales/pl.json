@@ -572,6 +572,7 @@
     "bio_placeholder": "Opowiedz coś o sobie…",
     "gear_menu": {
       "assign_role": "Przypisz rolę",
+      "role_management": "Zarządzanie rolami",
       "kick": "Wyrzuć",
       "mute": "Wycisz",
       "ban": "Zablokuj",

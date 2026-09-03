@@ -549,6 +549,7 @@
     "bio_placeholder": "向大家介绍一下自己…",
     "gear_menu": {
       "assign_role": "分配角色",
+      "role_management": "角色管理",
       "kick": "踢出",
       "mute": "禁言",
       "ban": "封禁",

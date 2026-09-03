@@ -74,18 +74,6 @@ _renderOnlineUsers(users) {
 
   el.innerHTML = html;
 
-  // Bind gear button → dropdown menu with mod actions
-  if (this.user.isAdmin || this._canModerate() || this._hasPerm('promote_user')) {
-    el.querySelectorAll('.user-gear-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const userId = parseInt(btn.dataset.uid);
-        const username = btn.dataset.uname;
-        this._showUserGearMenu(btn, userId, username);
-      });
-    });
-  }
-
   // Bind DM buttons
   el.querySelectorAll('.user-dm-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -101,100 +89,6 @@ _renderOnlineUsers(users) {
       setTimeout(() => { btn.disabled = false; btn.style.opacity = ''; }, 5000);
     });
   });
-},
-
-_showUserGearMenu(anchorEl, userId, username) {
-  // Close any existing gear menu
-  this._closeUserGearMenu();
-
-  const canMod = this.user.isAdmin || this._canModerate();
-  const canPromote = this._hasPerm('promote_user');
-  const isAdmin = this.user.isAdmin;
-  // Ban was gated on isAdmin here, which meant a moderator holding ban_user
-  // could ban from the admin members list but not from the sidebar they
-  // actually work in. The server has always accepted ban_user; this menu was
-  // the only thing hiding it. (v3.43.0)
-  const canBan = isAdmin || this._hasPerm('ban_user');
-
-  // Mirror of the right-click context menu's invite filter: any non-DM,
-  // non-private channel the user can see (admins also see private channels).
-  // Showing the entry only when there's at least one channel available.
-  // Same rule as the right-click menu: the server accepts invites to a private
-  // channel from its creator or a moderator in it, not admins alone. (#5466)
-  const inviteChannels = (this.channels || []).filter(ch =>
-    !ch.is_dm && ch.name && !ch.parent_channel_id &&
-    ((!ch.is_private && ch.code_visibility !== 'private') || isAdmin || ch.canInvitePrivate)
-  );
-  const canInvite = inviteChannels.length > 0 && userId !== this.user?.id;
-
-  let items = '';
-  if (canPromote) items += `<button class="gear-menu-item" data-action="assign-role">👑 ${t('users.gear_menu.assign_role')}</button>`;
-  if (canInvite) items += `<button class="gear-menu-item" data-action="add-to-channel">➕ ${t('users.gear_menu.add_to_channel')}</button>`;
-  if (canMod) items += `<button class="gear-menu-item" data-action="kick">👢 ${t('users.gear_menu.kick')}</button>`;
-  if (canMod) items += `<button class="gear-menu-item" data-action="mute">🔇 ${t('users.gear_menu.mute')}</button>`;
-  if (canBan) items += `<button class="gear-menu-item gear-menu-danger" data-action="ban">⛔ ${t('users.gear_menu.ban')}</button>`;
-  if (isAdmin) items += `<button class="gear-menu-item gear-menu-danger" data-action="delete-user">🗑️ ${t('users.gear_menu.delete_user')}</button>`;
-  // Admin password reset (#5300): gated on server setting AND target is not self.
-  if (isAdmin && this.serverSettings?.admin_password_reset_enabled === 'true' && userId !== this.user?.id) {
-    items += `<button class="gear-menu-item gear-menu-danger" data-action="reset-password">🔑 ${t('users.gear_menu.reset_password')}</button>`;
-  }
-  if (isAdmin) items += `<div class="gear-menu-divider"></div><button class="gear-menu-item gear-menu-danger" data-action="transfer-admin">🔑 ${t('users.gear_menu.transfer_admin')}</button>`;
-
-  const menu = document.createElement('div');
-  menu.className = 'user-gear-menu';
-  menu.innerHTML = items;
-  document.body.appendChild(menu);
-
-  // Position near the gear button
-  const rect = anchorEl.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${rect.left - 100}px`;
-
-  // Keep in viewport
-  requestAnimationFrame(() => {
-    const mr = menu.getBoundingClientRect();
-    if (mr.right > window.innerWidth - 8) menu.style.left = `${window.innerWidth - mr.width - 8}px`;
-    if (mr.bottom > window.innerHeight - 8) menu.style.top = `${rect.top - mr.height - 4}px`;
-    if (mr.left < 8) menu.style.left = '8px';
-  });
-
-  // Bind item clicks
-  menu.querySelectorAll('.gear-menu-item').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const action = btn.dataset.action;
-      this._closeUserGearMenu();
-      this._closeProfilePopup();
-      if (action === 'assign-role') {
-        this._openRoleAssignCenter(userId);
-      } else if (action === 'add-to-channel') {
-        this._openGearMenuChannelPicker(userId, username, inviteChannels);
-      } else if (action === 'transfer-admin') {
-        this._confirmTransferAdmin(userId, username);
-      } else if (action === 'reset-password') {
-        this._confirmAdminResetPassword(userId, username);
-      } else {
-        this._showAdminActionModal(action, userId, username);
-      }
-    });
-  });
-
-  // Close on outside click
-  setTimeout(() => {
-    this._gearMenuOutsideHandler = (e) => {
-      if (!menu.contains(e.target)) this._closeUserGearMenu();
-    };
-    document.addEventListener('click', this._gearMenuOutsideHandler, true);
-  }, 10);
-},
-
-_closeUserGearMenu() {
-  const existing = document.querySelector('.user-gear-menu');
-  if (existing) existing.remove();
-  if (this._gearMenuOutsideHandler) {
-    document.removeEventListener('click', this._gearMenuOutsideHandler, true);
-    this._gearMenuOutsideHandler = null;
-  }
 },
 
 // Lightweight channel picker for the user gear menu's "Add to Channel"
@@ -322,18 +216,10 @@ _renderUserItem(u, scoreLookup) {
     ? `<button class="user-action-btn user-dm-btn" data-dm-uid="${u.id}" title="${t('users.notes_to_self_hint')}">📝</button>`
     : `<button class="user-action-btn user-dm-btn" data-dm-uid="${u.id}" title="${t('users.direct_message')}">💬</button>`;
 
-  // Show DM + Gear icon. Gear opens a dropdown with mod actions.
-  const canModThis = (this.user.isAdmin || this._canModerate()) && u.id !== this.user.id;
-  const canPromote = this._hasPerm('promote_user') && u.id !== this.user.id;
-  // A moderator whose role grants ban_user but who sits below the level-25
-  // _canModerate() threshold still needs the gear to appear. (v3.43.0)
-  const canBanThis = this._hasPerm('ban_user') && u.id !== this.user.id;
-  const hasGear = canModThis || canPromote || canBanThis;
-  const gearBtn = hasGear
-    ? `<button class="user-action-btn user-gear-btn" data-uid="${u.id}" data-uname="${this._escapeHtml(u.username)}" title="${t('users.more_actions')}">⚙️</button>`
-    : '';
-  const modBtns = (dmBtn || gearBtn)
-    ? `<div class="user-admin-actions">${dmBtn}${gearBtn}</div>`
+  // Mod actions moved to the unified right-click context menu; the sidebar row
+  // keeps just the DM shortcut.
+  const modBtns = dmBtn
+    ? `<div class="user-admin-actions">${dmBtn}</div>`
     : '';
   // The name gets a line to itself. Everything used to sit on one row, so a
   // custom status and an activity together squeezed the username down to a
@@ -923,17 +809,10 @@ _showProfilePopup(profile) {
   // Join date
   const joinDate = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
-  // Action buttons
-  const nickBtnLabel = currentNick ? `✏️ ${t('users.edit_nickname')}` : `🏷️ ${t('users.set_nickname')}`;
-  const canMod = this.user.isAdmin || this._canModerate();
-  const canPromote = this._hasPerm('promote_user');
-  const gearVisible = !isSelf && (canMod || canPromote || this.user.isAdmin);
-  const gearBtnHtml = gearVisible
-    ? `<button class="profile-popup-action-btn profile-gear-btn" title="${this._escapeHtml(t('users.more_actions'))}">⚙️ ${t('users.more_actions')}</button>`
-    : '';
+  // Action buttons (nickname lives in the right-click context menu now)
   const actionsHtml = isSelf
     ? `<button class="profile-popup-action-btn profile-edit-btn" id="profile-popup-edit-btn">✏️ ${t('users.edit_profile')}</button><button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}" title="${t('users.notes_to_self')}">📝 ${t('users.notes_to_self')}</button>`
-    : `<button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}">💬 ${t('users.message_btn')}</button><button class="profile-popup-action-btn profile-nick-btn" data-nick-uid="${profile.id}" data-nick-uname="${this._escapeHtml(profile.username)}" data-nick-dname="${this._escapeHtml(profile.displayName)}">${nickBtnLabel}</button>${gearBtnHtml}`;
+    : `<button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}">💬 ${t('users.message_btn')}</button>`;
 
   const popup = document.createElement('div');
   popup.id = 'profile-popup';
@@ -1008,29 +887,6 @@ _showProfilePopup(profile) {
       this.socket.emit('start-dm', { targetUserId: targetId });
       this._closeProfilePopup();
       this._showToast(t('users.opening_dm', { name: profile.displayName }), 'info');
-    });
-  }
-
-  // Nickname button
-  const nickBtnEl = popup.querySelector('.profile-nick-btn');
-  if (nickBtnEl) {
-    nickBtnEl.addEventListener('click', () => {
-      const uid = parseInt(nickBtnEl.dataset.nickUid);
-      const uname = nickBtnEl.dataset.nickUname;
-      const dname = nickBtnEl.dataset.nickDname;
-      this._closeProfilePopup();
-      this._showNicknameDialog(uid, uname, dname);
-    });
-  }
-
-  // Gear / moderation button — opens the same dropdown as the sidebar gear.
-  // Do NOT close the popup first; the anchor element must be in the DOM
-  // so _showUserGearMenu can read its position.
-  const gearBtnEl = popup.querySelector('.profile-gear-btn');
-  if (gearBtnEl) {
-    gearBtnEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._showUserGearMenu(gearBtnEl, profile.id, profile.username);
     });
   }
 

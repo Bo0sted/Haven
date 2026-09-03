@@ -2077,6 +2077,18 @@ _setupUI() {
     if (this._moveSelectionActive) return;
     const msgEl = e.target.closest('.message, .message-compact');
     if (!msgEl || !msgEl.dataset.msgId) return; // empty gutter / unsent rows → native menu
+    // Right-click directly on the author name or avatar → unified user menu,
+    // same as right-clicking the member list. Everything else on the row keeps
+    // the message context menu.
+    const authorTrigger = e.target.closest('.message-author, .message-avatar, .message-avatar-img');
+    if (authorTrigger && !e.target.closest('.msg-toolbar')) {
+      const userId = parseInt(msgEl.dataset.userId);
+      if (!isNaN(userId) && userId !== this.user.id) {
+        e.preventDefault();
+        this._showUserContextMenu(e, userId, msgEl.dataset.username);
+        return;
+      }
+    }
     // Preserve native copy: if text is selected inside this message, defer.
     const sel = window.getSelection?.();
     if (sel && !sel.isCollapsed && msgEl.contains(sel.anchorNode)) return;
