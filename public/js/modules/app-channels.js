@@ -1887,7 +1887,7 @@ _renderChannels() {
     const isAnnouncement = ch.notification_type === 'announcement';
     const isTemporary = !!ch.expires_at;
     const isTempVoice = !!ch.is_temp_voice;
-    const hashIcon = isSub ? (ch.is_private ? '🔒' : '↳') : (isTempVoice ? '🔊' : (isTemporary ? '⏱️' : (isAnnouncement ? '📢' : (ch.is_forum ? '📋' : '#'))));
+    const hashIcon = isSub ? (ch.is_private ? '🔒' : '↳') : (isTempVoice ? '🔊' : (isTemporary ? '⏱️' : (isAnnouncement ? '📢' : (ch.is_forum ? '🗂️' : '#'))));
 
     // Build small status indicators for channel features
     const _badges = [];
