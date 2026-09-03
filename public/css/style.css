@@ -6868,9 +6868,9 @@ details.sound-section:not([open]) .sound-section-label::before {
 .image-lightbox {
   position: fixed;
   inset: 0;
-  /* Sit above modal overlays (which use z-index: 100001) so opening a
-     lightbox from inside the media gallery actually appears in front. */
-  z-index: 100010;
+  /* Sit above modal overlays (100001) and the profile card (100010) so opening
+     a lightbox from the media gallery or a profile avatar appears in front. */
+  z-index: 100020;
   background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;

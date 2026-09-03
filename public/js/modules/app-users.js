@@ -861,6 +861,19 @@ _showProfilePopup(profile) {
   // Close button
   popup.querySelector('.profile-popup-close').addEventListener('click', () => this._closeProfilePopup());
 
+  // Avatar → open the full-resolution image in the lightbox. Only real avatars
+  // are clickable; the letter fallback (a div) isn't an <img> so it's skipped.
+  // The card stays open behind the lightbox; the outside-click handler below
+  // ignores clicks that land on the lightbox so closing it keeps the card.
+  const avatarImgEl = popup.querySelector('img.profile-popup-avatar');
+  if (avatarImgEl) {
+    avatarImgEl.style.cursor = 'zoom-in';
+    avatarImgEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openLightbox(profile.avatar);
+    });
+  }
+
   // Bio toggle
   const bioToggle = popup.querySelector('.profile-bio-toggle');
   if (bioToggle) {
@@ -900,9 +913,13 @@ _showProfilePopup(profile) {
     });
   }
 
-  // Close on outside click (delay to avoid instant close)
+  // Close on outside click (delay to avoid instant close). Clicks on the image
+  // lightbox (opened by clicking the avatar) are ignored so dismissing the
+  // lightbox leaves the card open.
   setTimeout(() => {
     this._profilePopupOutsideHandler = (e) => {
+      const lightbox = document.getElementById('image-lightbox');
+      if (lightbox && lightbox.contains(e.target)) return;
       if (!popup.contains(e.target)) this._closeProfilePopup();
     };
     document.addEventListener('click', this._profilePopupOutsideHandler);
