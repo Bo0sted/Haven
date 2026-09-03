@@ -2917,6 +2917,11 @@ _setupUI() {
     if (!msgEl) return;
     const userId = parseInt(msgEl.dataset.userId);
     if (!isNaN(userId)) {
+      // Toggle: clicking the same user whose card is open closes it.
+      if (this._openProfileUserId === userId && document.getElementById('profile-popup')) {
+        this._closeProfilePopup();
+        return;
+      }
       this._profilePopupAnchor = e.target;
       this.socket.emit('get-user-profile', { userId });
     }
@@ -2930,6 +2935,11 @@ _setupUI() {
     if (!userItem) return;
     const userId = parseInt(userItem.dataset.userId);
     if (!isNaN(userId)) {
+      // Toggle: clicking the same user whose card is open closes it.
+      if (this._openProfileUserId === userId && document.getElementById('profile-popup')) {
+        this._closeProfilePopup();
+        return;
+      }
       this._profilePopupAnchor = userItem;
       this.socket.emit('get-user-profile', { userId });
     }
