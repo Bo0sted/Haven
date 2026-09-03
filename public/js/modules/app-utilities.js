@@ -4263,7 +4263,7 @@ _showAdminActionModal(action, userId, username) {
 // gates on the target user having 2FA enabled, (3) reveal modal that
 // shows the temp password once for the admin to transmit out-of-band.
 _confirmAdminResetPassword(userId, username) {
-  this._closeUserGearMenu();
+  this._hideUserContextMenu();
   this._closeProfilePopup();
   const safeName = this._escapeHtml(username);
   const overlay = document.createElement('div');
@@ -4408,7 +4408,7 @@ _confirmTransferAdmin(userId, username) {
   // An SSO admin has no Haven password, so they confirm with an authenticator
   // code instead. The server decides which it will accept and rejects the
   // wrong one, this only picks which field to put in front of you. (#5539)
-  this._closeUserGearMenu();
+  this._hideUserContextMenu();
   const ssoConfirm = !!this.user?.isSso;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay transfer-admin-overlay';

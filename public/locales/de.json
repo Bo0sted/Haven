@@ -549,6 +549,7 @@
     "bio_placeholder": "Erzähl den Leuten von dir…",
     "gear_menu": {
       "assign_role": "Rolle zuweisen",
+      "role_management": "Rollenverwaltung",
       "kick": "Kicken",
       "mute": "Stummschalten",
       "ban": "Bannen",

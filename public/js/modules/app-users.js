@@ -74,18 +74,6 @@ _renderOnlineUsers(users) {
 
   el.innerHTML = html;
 
-  // Bind gear button → dropdown menu with mod actions
-  if (this.user.isAdmin || this._canModerate() || this._hasPerm('promote_user')) {
-    el.querySelectorAll('.user-gear-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const userId = parseInt(btn.dataset.uid);
-        const username = btn.dataset.uname;
-        this._showUserGearMenu(btn, userId, username);
-      });
-    });
-  }
-
   // Bind DM buttons
   el.querySelectorAll('.user-dm-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -101,100 +89,6 @@ _renderOnlineUsers(users) {
       setTimeout(() => { btn.disabled = false; btn.style.opacity = ''; }, 5000);
     });
   });
-},
-
-_showUserGearMenu(anchorEl, userId, username) {
-  // Close any existing gear menu
-  this._closeUserGearMenu();
-
-  const canMod = this.user.isAdmin || this._canModerate();
-  const canPromote = this._hasPerm('promote_user');
-  const isAdmin = this.user.isAdmin;
-  // Ban was gated on isAdmin here, which meant a moderator holding ban_user
-  // could ban from the admin members list but not from the sidebar they
-  // actually work in. The server has always accepted ban_user; this menu was
-  // the only thing hiding it. (v3.43.0)
-  const canBan = isAdmin || this._hasPerm('ban_user');
-
-  // Mirror of the right-click context menu's invite filter: any non-DM,
-  // non-private channel the user can see (admins also see private channels).
-  // Showing the entry only when there's at least one channel available.
-  // Same rule as the right-click menu: the server accepts invites to a private
-  // channel from its creator or a moderator in it, not admins alone. (#5466)
-  const inviteChannels = (this.channels || []).filter(ch =>
-    !ch.is_dm && ch.name && !ch.parent_channel_id &&
-    ((!ch.is_private && ch.code_visibility !== 'private') || isAdmin || ch.canInvitePrivate)
-  );
-  const canInvite = inviteChannels.length > 0 && userId !== this.user?.id;
-
-  let items = '';
-  if (canPromote) items += `<button class="gear-menu-item" data-action="assign-role">👑 ${t('users.gear_menu.assign_role')}</button>`;
-  if (canInvite) items += `<button class="gear-menu-item" data-action="add-to-channel">➕ ${t('users.gear_menu.add_to_channel')}</button>`;
-  if (canMod) items += `<button class="gear-menu-item" data-action="kick">👢 ${t('users.gear_menu.kick')}</button>`;
-  if (canMod) items += `<button class="gear-menu-item" data-action="mute">🔇 ${t('users.gear_menu.mute')}</button>`;
-  if (canBan) items += `<button class="gear-menu-item gear-menu-danger" data-action="ban">⛔ ${t('users.gear_menu.ban')}</button>`;
-  if (isAdmin) items += `<button class="gear-menu-item gear-menu-danger" data-action="delete-user">🗑️ ${t('users.gear_menu.delete_user')}</button>`;
-  // Admin password reset (#5300): gated on server setting AND target is not self.
-  if (isAdmin && this.serverSettings?.admin_password_reset_enabled === 'true' && userId !== this.user?.id) {
-    items += `<button class="gear-menu-item gear-menu-danger" data-action="reset-password">🔑 ${t('users.gear_menu.reset_password')}</button>`;
-  }
-  if (isAdmin) items += `<div class="gear-menu-divider"></div><button class="gear-menu-item gear-menu-danger" data-action="transfer-admin">🔑 ${t('users.gear_menu.transfer_admin')}</button>`;
-
-  const menu = document.createElement('div');
-  menu.className = 'user-gear-menu';
-  menu.innerHTML = items;
-  document.body.appendChild(menu);
-
-  // Position near the gear button
-  const rect = anchorEl.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${rect.left - 100}px`;
-
-  // Keep in viewport
-  requestAnimationFrame(() => {
-    const mr = menu.getBoundingClientRect();
-    if (mr.right > window.innerWidth - 8) menu.style.left = `${window.innerWidth - mr.width - 8}px`;
-    if (mr.bottom > window.innerHeight - 8) menu.style.top = `${rect.top - mr.height - 4}px`;
-    if (mr.left < 8) menu.style.left = '8px';
-  });
-
-  // Bind item clicks
-  menu.querySelectorAll('.gear-menu-item').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const action = btn.dataset.action;
-      this._closeUserGearMenu();
-      this._closeProfilePopup();
-      if (action === 'assign-role') {
-        this._openRoleAssignCenter(userId);
-      } else if (action === 'add-to-channel') {
-        this._openGearMenuChannelPicker(userId, username, inviteChannels);
-      } else if (action === 'transfer-admin') {
-        this._confirmTransferAdmin(userId, username);
-      } else if (action === 'reset-password') {
-        this._confirmAdminResetPassword(userId, username);
-      } else {
-        this._showAdminActionModal(action, userId, username);
-      }
-    });
-  });
-
-  // Close on outside click
-  setTimeout(() => {
-    this._gearMenuOutsideHandler = (e) => {
-      if (!menu.contains(e.target)) this._closeUserGearMenu();
-    };
-    document.addEventListener('click', this._gearMenuOutsideHandler, true);
-  }, 10);
-},
-
-_closeUserGearMenu() {
-  const existing = document.querySelector('.user-gear-menu');
-  if (existing) existing.remove();
-  if (this._gearMenuOutsideHandler) {
-    document.removeEventListener('click', this._gearMenuOutsideHandler, true);
-    this._gearMenuOutsideHandler = null;
-  }
 },
 
 // Lightweight channel picker for the user gear menu's "Add to Channel"
@@ -322,18 +216,10 @@ _renderUserItem(u, scoreLookup) {
     ? `<button class="user-action-btn user-dm-btn" data-dm-uid="${u.id}" title="${t('users.notes_to_self_hint')}">📝</button>`
     : `<button class="user-action-btn user-dm-btn" data-dm-uid="${u.id}" title="${t('users.direct_message')}">💬</button>`;
 
-  // Show DM + Gear icon. Gear opens a dropdown with mod actions.
-  const canModThis = (this.user.isAdmin || this._canModerate()) && u.id !== this.user.id;
-  const canPromote = this._hasPerm('promote_user') && u.id !== this.user.id;
-  // A moderator whose role grants ban_user but who sits below the level-25
-  // _canModerate() threshold still needs the gear to appear. (v3.43.0)
-  const canBanThis = this._hasPerm('ban_user') && u.id !== this.user.id;
-  const hasGear = canModThis || canPromote || canBanThis;
-  const gearBtn = hasGear
-    ? `<button class="user-action-btn user-gear-btn" data-uid="${u.id}" data-uname="${this._escapeHtml(u.username)}" title="${t('users.more_actions')}">⚙️</button>`
-    : '';
-  const modBtns = (dmBtn || gearBtn)
-    ? `<div class="user-admin-actions">${dmBtn}${gearBtn}</div>`
+  // Mod actions moved to the unified right-click context menu; the sidebar row
+  // keeps just the DM shortcut.
+  const modBtns = dmBtn
+    ? `<div class="user-admin-actions">${dmBtn}</div>`
     : '';
   // The name gets a line to itself. Everything used to sit on one row, so a
   // custom status and an activity together squeezed the username down to a
@@ -883,9 +769,6 @@ _profileActivityHtml(activity) {
 // ── Profile Popup (Discord-style mini profile) ────────
 
 _showProfilePopup(profile) {
-  // If this was a hover-triggered popup but the mouse already left, abort
-  if (this._isHoverPopup && !this._hoverTarget) return;
-
   this._closeProfilePopup();
 
   const isSelf = profile.id === this.user.id;
@@ -926,17 +809,10 @@ _showProfilePopup(profile) {
   // Join date
   const joinDate = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
-  // Action buttons
-  const nickBtnLabel = currentNick ? `✏️ ${t('users.edit_nickname')}` : `🏷️ ${t('users.set_nickname')}`;
-  const canMod = this.user.isAdmin || this._canModerate();
-  const canPromote = this._hasPerm('promote_user');
-  const gearVisible = !isSelf && (canMod || canPromote || this.user.isAdmin);
-  const gearBtnHtml = gearVisible
-    ? `<button class="profile-popup-action-btn profile-gear-btn" title="${this._escapeHtml(t('users.more_actions'))}">⚙️ ${t('users.more_actions')}</button>`
-    : '';
+  // Action buttons (nickname lives in the right-click context menu now)
   const actionsHtml = isSelf
     ? `<button class="profile-popup-action-btn profile-edit-btn" id="profile-popup-edit-btn">✏️ ${t('users.edit_profile')}</button><button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}" title="${t('users.notes_to_self')}">📝 ${t('users.notes_to_self')}</button>`
-    : `<button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}">💬 ${t('users.message_btn')}</button><button class="profile-popup-action-btn profile-nick-btn" data-nick-uid="${profile.id}" data-nick-uname="${this._escapeHtml(profile.username)}" data-nick-dname="${this._escapeHtml(profile.displayName)}">${nickBtnLabel}</button>${gearBtnHtml}`;
+    : `<button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}">💬 ${t('users.message_btn')}</button>`;
 
   const popup = document.createElement('div');
   popup.id = 'profile-popup';
@@ -966,14 +842,6 @@ _showProfilePopup(profile) {
     </div>
   `;
 
-  // Hover mode: add translucent class — popup is non-interactive (tooltip)
-  if (this._isHoverPopup) {
-    popup.classList.add('profile-popup-hover');
-    // pointer-events:none is set via CSS on .profile-popup-hover so
-    // the user can't accidentally interact with it; close is driven
-    // entirely by setupHoverProfile's mouseover/mouseleave.
-  }
-
   document.body.appendChild(popup);
 
   // Opening the profile card is a trigger context: flag the card so the freeze
@@ -990,16 +858,21 @@ _showProfilePopup(profile) {
   this._openProfileActivityKey = JSON.stringify(profile.activity || null);
   this._startActivityProgress(popup);
 
-  // Hover-mode: no interactive handlers needed — the popup is pointer-events:none.
-  // Safety-net auto-close in case the mouseover handler misses.
-  if (this._isHoverPopup) {
-    this._hoverAutoCloseTimer = setTimeout(() => {
-      if (this._isHoverPopup) this._closeProfilePopup();
-    }, 3000);
-  }
-
   // Close button
   popup.querySelector('.profile-popup-close').addEventListener('click', () => this._closeProfilePopup());
+
+  // Avatar → open the full-resolution image in the lightbox. Only real avatars
+  // are clickable; the letter fallback (a div) isn't an <img> so it's skipped.
+  // The card stays open behind the lightbox; the outside-click handler below
+  // ignores clicks that land on the lightbox so closing it keeps the card.
+  const avatarImgEl = popup.querySelector('img.profile-popup-avatar');
+  if (avatarImgEl) {
+    avatarImgEl.style.cursor = 'zoom-in';
+    avatarImgEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openLightbox(profile.avatar);
+    });
+  }
 
   // Bio toggle
   const bioToggle = popup.querySelector('.profile-bio-toggle');
@@ -1030,29 +903,6 @@ _showProfilePopup(profile) {
     });
   }
 
-  // Nickname button
-  const nickBtnEl = popup.querySelector('.profile-nick-btn');
-  if (nickBtnEl) {
-    nickBtnEl.addEventListener('click', () => {
-      const uid = parseInt(nickBtnEl.dataset.nickUid);
-      const uname = nickBtnEl.dataset.nickUname;
-      const dname = nickBtnEl.dataset.nickDname;
-      this._closeProfilePopup();
-      this._showNicknameDialog(uid, uname, dname);
-    });
-  }
-
-  // Gear / moderation button — opens the same dropdown as the sidebar gear.
-  // Do NOT close the popup first; the anchor element must be in the DOM
-  // so _showUserGearMenu can read its position.
-  const gearBtnEl = popup.querySelector('.profile-gear-btn');
-  if (gearBtnEl) {
-    gearBtnEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._showUserGearMenu(gearBtnEl, profile.id, profile.username);
-    });
-  }
-
   // Edit profile button (for self)
   const editBtnEl = popup.querySelector('#profile-popup-edit-btn');
   if (editBtnEl) {
@@ -1063,39 +913,13 @@ _showProfilePopup(profile) {
     });
   }
 
-  // Close on outside click (delay to avoid instant close) — skip for hover popups
-  if (!this._isHoverPopup) {
-    setTimeout(() => {
-      this._profilePopupOutsideHandler = (e) => {
-        if (!popup.contains(e.target)) this._closeProfilePopup();
-      };
-      document.addEventListener('click', this._profilePopupOutsideHandler);
-    }, 50);
-  }
-},
-
-// Convert a hover popup to a permanent (click-based) popup in-place
-_promoteHoverPopup(popup) {
-  this._isHoverPopup = false;
-  this._hoverTarget = null;
-  clearTimeout(this._hoverAutoCloseTimer);
-  clearTimeout(this._hoverFadeTimeout);
-  // Remove hover styling
-  popup.classList.remove('profile-popup-hover', 'profile-popup-fading');
-  popup.style.pointerEvents = '';
-  // Show close button
-  const closeBtn = popup.querySelector('.profile-popup-close');
-  if (closeBtn) closeBtn.style.display = '';
-  // Show action buttons
-  const actions = popup.querySelector('.profile-popup-actions');
-  if (actions) actions.style.display = '';
-  // Re-run entrance animation for the full card
-  popup.style.animation = 'none';
-  popup.offsetHeight; // force reflow
-  popup.style.animation = '';
-  // Add close-on-outside-click handler
+  // Close on outside click (delay to avoid instant close). Clicks on the image
+  // lightbox (opened by clicking the avatar) are ignored so dismissing the
+  // lightbox leaves the card open.
   setTimeout(() => {
     this._profilePopupOutsideHandler = (e) => {
+      const lightbox = document.getElementById('image-lightbox');
+      if (lightbox && lightbox.contains(e.target)) return;
       if (!popup.contains(e.target)) this._closeProfilePopup();
     };
     document.addEventListener('click', this._profilePopupOutsideHandler);
@@ -1119,18 +943,17 @@ _positionProfilePopup(popup) {
   const ph = popup.offsetHeight;
   const margin = 8;
 
-  let left = rect.left + rect.width / 2 - pw / 2;
-  let top = rect.bottom + margin;
-
-  // Clamp horizontally within the viewport.
-  left = Math.max(margin, Math.min(left, window.innerWidth - pw - margin));
-
-  // Flip above the anchor if it overflows the bottom; if it fits neither way
-  // (very short viewport) clamp so the top edge stays on-screen.
-  if (top + ph > window.innerHeight - margin) {
-    const above = rect.top - ph - margin;
-    top = above >= margin ? above : Math.max(margin, window.innerHeight - ph - margin);
+  // Place the card to the right of the clicked element (the icon or the name).
+  // Flip to the left side only if it would overflow the right viewport edge.
+  let left = rect.right + margin;
+  if (left + pw > window.innerWidth - margin) {
+    const leftSide = rect.left - pw - margin;
+    left = leftSide >= margin ? leftSide : Math.max(margin, window.innerWidth - pw - margin);
   }
+
+  // Vertically align the top of the card with the clicked element, then clamp
+  // so it stays fully on-screen in short viewports.
+  let top = Math.max(margin, Math.min(rect.top, window.innerHeight - ph - margin));
 
   popup.style.left = left + 'px';
   popup.style.top = top + 'px';
@@ -1145,19 +968,6 @@ _closeProfilePopup() {
     document.removeEventListener('click', this._profilePopupOutsideHandler);
     this._profilePopupOutsideHandler = null;
   }
-  if (this._hoverMousemoveHandler) {
-    document.removeEventListener('mousemove', this._hoverMousemoveHandler);
-    this._hoverMousemoveHandler = null;
-  }
-  // NOTE: do NOT reset _isHoverPopup here.  It is only cleared by
-  // explicit user actions (click, promote, context-menu).  Resetting it
-  // on close caused a race: hover request in-flight → mouseout closes
-  // popup/resets flag → stale server response arrives with
-  // _isHoverPopup=false → guard fails → permanent popup appears.
-  this._hoverTarget = null;
-  clearTimeout(this._hoverCloseTimer);
-  clearTimeout(this._hoverAutoCloseTimer);
-  clearTimeout(this._hoverFadeTimeout);
 },
 
 _openEditProfileModal(profile) {

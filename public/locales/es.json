@@ -549,6 +549,7 @@
     "bio_placeholder": "Cuéntale a la gente sobre ti…",
     "gear_menu": {
       "assign_role": "Asignar rol",
+      "role_management": "Gestión de roles",
       "kick": "Expulsar",
       "mute": "Silenciar",
       "ban": "Banear",

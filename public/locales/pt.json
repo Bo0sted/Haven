@@ -912,6 +912,7 @@
     "bio_placeholder": "Conte um pouco sobre você…",
     "gear_menu": {
       "assign_role": "Atribuir cargo",
+      "role_management": "Gerenciamento de cargos",
       "add_to_channel": "Adicionar ao canal",
       "kick": "Expulsar",
       "mute": "Silenciar",

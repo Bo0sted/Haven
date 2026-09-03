@@ -2,7 +2,7 @@ export default {
 
 // ── User Context Menu (right-click → options) ──
 
-_showUserContextMenu(e, targetUserId) {
+_showUserContextMenu(e, targetUserId, targetNameOverride) {
   this._hideUserContextMenu();
   this._closeProfilePopup();
 
@@ -10,9 +10,10 @@ _showUserContextMenu(e, targetUserId) {
   menu.id = 'user-context-menu';
   menu.className = 'user-context-menu';
 
-  // Find target username from online users
+  // Find target username from online users; fall back to a caller-supplied name
+  // (e.g. the author name on a chat message, whose sender may be offline).
   const targetUser = (this._lastOnlineUsers || []).find(u => u.id === targetUserId);
-  const targetName = targetUser ? targetUser.username : 'User';
+  const targetName = targetUser ? targetUser.username : (targetNameOverride || 'User');
 
   // Header with username
   const header = document.createElement('div');
@@ -20,28 +21,37 @@ _showUserContextMenu(e, targetUserId) {
   header.textContent = targetName;
   menu.appendChild(header);
 
-  // 1) View Profile
-  const profileBtn = document.createElement('button');
-  profileBtn.innerHTML = `👤 ${t('context.view_profile')}`;
-  profileBtn.addEventListener('click', () => {
+  // Helper: append a menu button. `danger` paints it red (destructive action).
+  const addBtn = (label, onClick, danger = false) => {
+    const btn = document.createElement('button');
+    btn.innerHTML = label;
+    if (danger) btn.classList.add('user-ctx-danger');
+    btn.addEventListener('click', onClick);
+    menu.appendChild(btn);
+  };
+  const addDivider = () => {
+    const div = document.createElement('div');
+    div.className = 'user-ctx-divider';
+    menu.appendChild(div);
+  };
+
+  // ── Section 1: profile / social (always available) ──
+
+  // View Profile
+  addBtn(`👤 ${t('context.view_profile')}`, () => {
     this._hideUserContextMenu();
-    this._isHoverPopup = false;
     this._profilePopupAnchor = e.target.closest('.user-item') || e.target;
     this.socket.emit('get-user-profile', { userId: targetUserId });
   });
-  menu.appendChild(profileBtn);
 
-  // 2) Direct Message
-  const dmBtn = document.createElement('button');
-  dmBtn.innerHTML = `💬 ${t('users.direct_message')}`;
-  dmBtn.addEventListener('click', () => {
+  // Direct Message
+  addBtn(`💬 ${t('users.direct_message')}`, () => {
     this._hideUserContextMenu();
     this.socket.emit('start-dm', { targetUserId });
     this._showToast(t('users.opening_dm', { name: this._escapeHtml(targetName) }), 'info');
   });
-  menu.appendChild(dmBtn);
 
-  // 3) Invite to Channel (submenu)
+  // Invite to Channel (submenu)
   // Private channels are excluded for non-admins: regular members can't bypass
   // the code requirement by using the right-click invite menu.
   // Both is_private=1 and code_visibility='private' count as private here.
@@ -93,14 +103,74 @@ _showUserContextMenu(e, targetUserId) {
     menu.appendChild(inviteItem);
   }
 
-  // 4) Set Nickname
-  const nickBtn = document.createElement('button');
-  nickBtn.innerHTML = `🏷️ ${t('users.set_nickname')}`;
-  nickBtn.addEventListener('click', () => {
+  // Set Nickname
+  addBtn(`🏷️ ${t('users.set_nickname')}`, () => {
     this._hideUserContextMenu();
     this._showNicknameDialog(targetUserId, targetName, targetName);
   });
-  menu.appendChild(nickBtn);
+
+  // ── Moderation sections: same gating the old gear menu used ──
+  const isAdmin = this.user.isAdmin;
+  const canMod = isAdmin || this._canModerate();
+  const canPromote = this._hasPerm('promote_user');
+  // The server has always accepted ban_user; a moderator who holds it should
+  // see Ban even when below the level-25 _canModerate() threshold. (v3.43.0)
+  const canBan = isAdmin || this._hasPerm('ban_user');
+
+  // "Add to Channel" mirrors the invite filter but also skips sub-channels and
+  // never targets yourself. Its own picker validates membership server-side.
+  // It used to live inside the mod-only gear menu, so it stays gated on the same
+  // mod-ish powers — regular members use "Invite to Channel" above instead.
+  const addToChannelList = (this.channels || []).filter(ch =>
+    !ch.is_dm && ch.name && !ch.parent_channel_id &&
+    ((!ch.is_private && ch.code_visibility !== 'private') || isAdmin || ch.canInvitePrivate)
+  );
+  const canAddToChannel = (canMod || canPromote || canBan) && addToChannelList.length > 0 && targetUserId !== this.user?.id;
+
+  // ── Section 2: role / channel management ──
+  if (canPromote || canAddToChannel) {
+    addDivider();
+    if (canPromote) addBtn(`👑 ${t('users.gear_menu.role_management')}`, () => {
+      this._hideUserContextMenu();
+      this._openRoleAssignCenter(targetUserId);
+    });
+    if (canAddToChannel) addBtn(`➕ ${t('users.gear_menu.add_to_channel')}`, () => {
+      this._hideUserContextMenu();
+      this._openGearMenuChannelPicker(targetUserId, targetName, addToChannelList);
+    });
+  }
+
+  // ── Section 3: moderation (kick / mute / ban / delete / transfer) ──
+  // Admin password reset stays opt-in: hidden unless the server setting is on
+  // and the target isn't yourself (#5300).
+  const canResetPassword = isAdmin && this.serverSettings?.admin_password_reset_enabled === 'true' && targetUserId !== this.user?.id;
+  if (canMod || canBan || isAdmin) {
+    addDivider();
+    if (canMod) addBtn(`👢 ${t('users.gear_menu.kick')}`, () => {
+      this._hideUserContextMenu();
+      this._showAdminActionModal('kick', targetUserId, targetName);
+    });
+    if (canMod) addBtn(`🔇 ${t('users.gear_menu.mute')}`, () => {
+      this._hideUserContextMenu();
+      this._showAdminActionModal('mute', targetUserId, targetName);
+    });
+    if (canBan) addBtn(`⛔ ${t('users.gear_menu.ban')}`, () => {
+      this._hideUserContextMenu();
+      this._showAdminActionModal('ban', targetUserId, targetName);
+    }, true);
+    if (isAdmin) addBtn(`🗑️ ${t('users.gear_menu.delete_user')}`, () => {
+      this._hideUserContextMenu();
+      this._showAdminActionModal('delete-user', targetUserId, targetName);
+    }, true);
+    if (canResetPassword) addBtn(`🔑 ${t('users.gear_menu.reset_password')}`, () => {
+      this._hideUserContextMenu();
+      this._confirmAdminResetPassword(targetUserId, targetName);
+    }, true);
+    if (isAdmin) addBtn(`🔑 ${t('users.gear_menu.transfer_admin')}`, () => {
+      this._hideUserContextMenu();
+      this._confirmTransferAdmin(targetUserId, targetName);
+    }, true);
+  }
 
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
