@@ -239,7 +239,7 @@ _setupUI() {
 
   // insert a markdown link when a link is pasted over selected text
   msgInput.addEventListener('paste', (event) => {
-    this._handleMarkdownLinkPaste(msgInput, event); 
+    this._handleMarkdownLinkPaste(msgInput, event);
   });
 
   document.getElementById('send-btn').addEventListener('click', () => this._sendMessage());
@@ -2387,7 +2387,7 @@ _setupUI() {
       }
 
       // insert a markdown link when a link is pasted over selected text
-      this._handleMarkdownLinkPaste(threadInput, e); 
+      this._handleMarkdownLinkPaste(threadInput, e);
     });
 
     // Drag & drop parity with the other composers — queue, never insta-post.
