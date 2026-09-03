@@ -883,9 +883,6 @@ _profileActivityHtml(activity) {
 // ── Profile Popup (Discord-style mini profile) ────────
 
 _showProfilePopup(profile) {
-  // If this was a hover-triggered popup but the mouse already left, abort
-  if (this._isHoverPopup && !this._hoverTarget) return;
-
   this._closeProfilePopup();
 
   const isSelf = profile.id === this.user.id;
@@ -966,14 +963,6 @@ _showProfilePopup(profile) {
     </div>
   `;
 
-  // Hover mode: add translucent class — popup is non-interactive (tooltip)
-  if (this._isHoverPopup) {
-    popup.classList.add('profile-popup-hover');
-    // pointer-events:none is set via CSS on .profile-popup-hover so
-    // the user can't accidentally interact with it; close is driven
-    // entirely by setupHoverProfile's mouseover/mouseleave.
-  }
-
   document.body.appendChild(popup);
 
   // Opening the profile card is a trigger context: flag the card so the freeze
@@ -989,14 +978,6 @@ _showProfilePopup(profile) {
   this._openProfileStatusKey = profile.statusText || '';
   this._openProfileActivityKey = JSON.stringify(profile.activity || null);
   this._startActivityProgress(popup);
-
-  // Hover-mode: no interactive handlers needed — the popup is pointer-events:none.
-  // Safety-net auto-close in case the mouseover handler misses.
-  if (this._isHoverPopup) {
-    this._hoverAutoCloseTimer = setTimeout(() => {
-      if (this._isHoverPopup) this._closeProfilePopup();
-    }, 3000);
-  }
 
   // Close button
   popup.querySelector('.profile-popup-close').addEventListener('click', () => this._closeProfilePopup());
@@ -1063,37 +1044,7 @@ _showProfilePopup(profile) {
     });
   }
 
-  // Close on outside click (delay to avoid instant close) — skip for hover popups
-  if (!this._isHoverPopup) {
-    setTimeout(() => {
-      this._profilePopupOutsideHandler = (e) => {
-        if (!popup.contains(e.target)) this._closeProfilePopup();
-      };
-      document.addEventListener('click', this._profilePopupOutsideHandler);
-    }, 50);
-  }
-},
-
-// Convert a hover popup to a permanent (click-based) popup in-place
-_promoteHoverPopup(popup) {
-  this._isHoverPopup = false;
-  this._hoverTarget = null;
-  clearTimeout(this._hoverAutoCloseTimer);
-  clearTimeout(this._hoverFadeTimeout);
-  // Remove hover styling
-  popup.classList.remove('profile-popup-hover', 'profile-popup-fading');
-  popup.style.pointerEvents = '';
-  // Show close button
-  const closeBtn = popup.querySelector('.profile-popup-close');
-  if (closeBtn) closeBtn.style.display = '';
-  // Show action buttons
-  const actions = popup.querySelector('.profile-popup-actions');
-  if (actions) actions.style.display = '';
-  // Re-run entrance animation for the full card
-  popup.style.animation = 'none';
-  popup.offsetHeight; // force reflow
-  popup.style.animation = '';
-  // Add close-on-outside-click handler
+  // Close on outside click (delay to avoid instant close)
   setTimeout(() => {
     this._profilePopupOutsideHandler = (e) => {
       if (!popup.contains(e.target)) this._closeProfilePopup();
@@ -1145,19 +1096,6 @@ _closeProfilePopup() {
     document.removeEventListener('click', this._profilePopupOutsideHandler);
     this._profilePopupOutsideHandler = null;
   }
-  if (this._hoverMousemoveHandler) {
-    document.removeEventListener('mousemove', this._hoverMousemoveHandler);
-    this._hoverMousemoveHandler = null;
-  }
-  // NOTE: do NOT reset _isHoverPopup here.  It is only cleared by
-  // explicit user actions (click, promote, context-menu).  Resetting it
-  // on close caused a race: hover request in-flight → mouseout closes
-  // popup/resets flag → stale server response arrives with
-  // _isHoverPopup=false → guard fails → permanent popup appears.
-  this._hoverTarget = null;
-  clearTimeout(this._hoverCloseTimer);
-  clearTimeout(this._hoverAutoCloseTimer);
-  clearTimeout(this._hoverFadeTimeout);
 },
 
 _openEditProfileModal(profile) {

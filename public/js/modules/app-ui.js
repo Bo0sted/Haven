@@ -2917,18 +2917,6 @@ _setupUI() {
     if (!msgEl) return;
     const userId = parseInt(msgEl.dataset.userId);
     if (!isNaN(userId)) {
-      clearTimeout(this._hoverProfileTimer);
-      clearTimeout(this._hoverCloseTimer);
-      clearTimeout(this._hoverAutoCloseTimer);
-      clearTimeout(this._hoverFadeTimeout);
-      // If a hover popup is already open, promote it to permanent (no re-fetch)
-      const existingPopup = document.getElementById('profile-popup');
-      if (existingPopup && this._isHoverPopup) {
-        this._promoteHoverPopup(existingPopup);
-        return;
-      }
-      this._isHoverPopup = false;
-      this._hoverTarget = null;
       this._profilePopupAnchor = e.target;
       this.socket.emit('get-user-profile', { userId });
     }
@@ -2942,18 +2930,6 @@ _setupUI() {
     if (!userItem) return;
     const userId = parseInt(userItem.dataset.userId);
     if (!isNaN(userId)) {
-      clearTimeout(this._hoverProfileTimer);
-      clearTimeout(this._hoverCloseTimer);
-      clearTimeout(this._hoverAutoCloseTimer);
-      clearTimeout(this._hoverFadeTimeout);
-      // If a hover popup is already open, promote it to permanent (no re-fetch)
-      const existingPopup = document.getElementById('profile-popup');
-      if (existingPopup && this._isHoverPopup) {
-        this._promoteHoverPopup(existingPopup);
-        return;
-      }
-      this._isHoverPopup = false;
-      this._hoverTarget = null;
       this._profilePopupAnchor = userItem;
       this.socket.emit('get-user-profile', { userId });
     }
@@ -2977,77 +2953,6 @@ _setupUI() {
     if (isNaN(userId) || userId === this.user.id) return;
     e.preventDefault();
     this._showUserContextMenu(e, userId);
-  });
-
-  // ── Profile popup: hover-over on usernames/avatars (translucent preview) ──
-  const setupHoverProfile = (container, getInfo) => {
-    container.addEventListener('mouseover', (e) => {
-      const trigger = getInfo(e);
-      if (!trigger) {
-        // Mouse moved to a non-trigger element — cancel any pending hover
-        clearTimeout(this._hoverProfileTimer);
-        this._hoverTarget = null;
-        // Close hover popup INSTANTLY
-        if (this._isHoverPopup) {
-          clearTimeout(this._hoverCloseTimer);
-          clearTimeout(this._hoverAutoCloseTimer);
-          clearTimeout(this._hoverFadeTimeout);
-          this._closeProfilePopup();
-        }
-        return;
-      }
-      if (trigger.el === this._hoverTarget) return;
-      // Switching to a different trigger — close old hover popup instantly
-      if (this._isHoverPopup) {
-        clearTimeout(this._hoverFadeTimeout);
-        this._closeProfilePopup();
-      }
-      clearTimeout(this._hoverProfileTimer);
-      clearTimeout(this._hoverCloseTimer);
-      clearTimeout(this._hoverAutoCloseTimer);
-      this._hoverTarget = trigger.el;
-
-      // Don't show hover popup if a click-based popup is already open
-      if (document.getElementById('profile-popup') && !this._isHoverPopup) return;
-
-      this._hoverProfileTimer = setTimeout(() => {
-        // Verify the mouse is still over this trigger element
-        if (this._hoverTarget !== trigger.el) return;
-        if (!isNaN(trigger.userId)) {
-          this._profilePopupAnchor = trigger.el;
-          this._isHoverPopup = true;
-          this.socket.emit('get-user-profile', { userId: trigger.userId });
-        }
-      }, 350);
-    });
-
-    container.addEventListener('mouseleave', () => {
-      clearTimeout(this._hoverProfileTimer);
-      clearTimeout(this._hoverAutoCloseTimer);
-      clearTimeout(this._hoverFadeTimeout);
-      this._hoverTarget = null;
-      // Close hover popup INSTANTLY on leaving the container
-      if (this._isHoverPopup) {
-        this._closeProfilePopup();
-      }
-    });
-  };
-
-  setupHoverProfile(document.getElementById('messages'), (e) => {
-    const author = e.target.closest('.message-author');
-    const avatar = e.target.closest('.message-avatar, .message-avatar-img');
-    if (!author && !avatar) return null;
-    if (e.target.closest('.msg-toolbar')) return null;
-    const msgEl = (author || avatar).closest('.message, .message-compact');
-    if (!msgEl) return null;
-    return { el: author || avatar, userId: parseInt(msgEl.dataset.userId) };
-  });
-
-  setupHoverProfile(document.getElementById('online-users'), (e) => {
-    if (e.target.closest('.user-action-btn') || e.target.closest('.user-admin-actions')) return null;
-    const userItem = e.target.closest('.user-item');
-    if (!userItem) return null;
-    return { el: userItem, userId: parseInt(userItem.dataset.userId) };
   });
 
   document.getElementById('cancel-rename-btn').addEventListener('click', () => {

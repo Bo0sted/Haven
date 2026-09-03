@@ -1905,13 +1905,6 @@ _setupSocketListeners() {
   });
 
   // ── User profile popup data ─────────────────────
-  this._isHoverPopup = false;
-  this._hoverProfileTimer = null;
-  this._hoverCloseTimer = null;
-  this._hoverAutoCloseTimer = null;
-  this._hoverFadeTimeout = null;
-  this._hoverTarget = null;
-
   this.socket.on('user-profile', (profile) => {
     this._showProfilePopup(profile);
   });

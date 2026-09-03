@@ -25,7 +25,6 @@ _showUserContextMenu(e, targetUserId) {
   profileBtn.innerHTML = `👤 ${t('context.view_profile')}`;
   profileBtn.addEventListener('click', () => {
     this._hideUserContextMenu();
-    this._isHoverPopup = false;
     this._profilePopupAnchor = e.target.closest('.user-item') || e.target;
     this.socket.emit('get-user-profile', { userId: targetUserId });
   });

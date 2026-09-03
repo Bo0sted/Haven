@@ -5606,51 +5606,17 @@ details.sound-section:not([open]) .sound-section-label::before {
      uses for exactly this reason (#5462). */
   z-index: 100010;
   width: 20rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
-  overflow: hidden;
-  animation: profile-popup-in 0.18s ease-out;
-  opacity: 1;
-  backdrop-filter: none;
-}
-
-/* Hover-over variant: translucent tooltip, non-interactive */
-.profile-popup-hover {
+  /* Translucent, theme-aware glass — colours come from CSS vars so it tracks
+     the active theme in both light and dark. */
   background: color-mix(in srgb, var(--bg-secondary) 65%, transparent);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border-color: color-mix(in srgb, var(--border-light) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-light) 50%, transparent);
+  border-radius: var(--radius);
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  animation: profile-popup-hover-in 0.15s ease-out;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  pointer-events: none;  /* can't be interacted with — it's a tooltip */
-}
-.profile-popup-hover .profile-popup-banner {
-  opacity: 0.7;
-}
-.profile-popup-hover .profile-popup-close {
-  display: none;  /* no X button on tooltip */
-}
-.profile-popup-hover .profile-popup-body {
-  background: transparent;
-}
-.profile-popup-hover .profile-popup-actions {
-  display: none;
-}
-
-/* Fade-out for hover popups */
-.profile-popup-fading {
-  opacity: 0 !important;
-  transform: translateY(4px) !important;
-  pointer-events: none !important;
-  transition: opacity 0.2s ease, transform 0.2s ease !important;
-}
-
-@keyframes profile-popup-hover-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  overflow: hidden;
+  animation: profile-popup-in 0.18s ease-out;
+  opacity: 1;
 }
 
 @keyframes profile-popup-in {
@@ -5717,7 +5683,7 @@ details.sound-section:not([open]) .sound-section-label::before {
 
 .profile-popup-body {
   padding: 0.625rem 1rem 1rem;
-  background: var(--bg-secondary);
+  background: transparent;
 }
 
 .profile-popup-names {
