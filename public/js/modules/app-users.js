@@ -1070,18 +1070,17 @@ _positionProfilePopup(popup) {
   const ph = popup.offsetHeight;
   const margin = 8;
 
-  let left = rect.left + rect.width / 2 - pw / 2;
-  let top = rect.bottom + margin;
-
-  // Clamp horizontally within the viewport.
-  left = Math.max(margin, Math.min(left, window.innerWidth - pw - margin));
-
-  // Flip above the anchor if it overflows the bottom; if it fits neither way
-  // (very short viewport) clamp so the top edge stays on-screen.
-  if (top + ph > window.innerHeight - margin) {
-    const above = rect.top - ph - margin;
-    top = above >= margin ? above : Math.max(margin, window.innerHeight - ph - margin);
+  // Place the card to the right of the clicked element (the icon or the name).
+  // Flip to the left side only if it would overflow the right viewport edge.
+  let left = rect.right + margin;
+  if (left + pw > window.innerWidth - margin) {
+    const leftSide = rect.left - pw - margin;
+    left = leftSide >= margin ? leftSide : Math.max(margin, window.innerWidth - pw - margin);
   }
+
+  // Vertically align the top of the card with the clicked element, then clamp
+  // so it stays fully on-screen in short viewports.
+  let top = Math.max(margin, Math.min(rect.top, window.innerHeight - ph - margin));
 
   popup.style.left = left + 'px';
   popup.style.top = top + 'px';
