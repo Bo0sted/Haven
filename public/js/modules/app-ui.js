@@ -2940,11 +2940,24 @@ _setupUI() {
     if (!msgEl) return;
     const userId = parseInt(msgEl.dataset.userId);
     if (!isNaN(userId)) {
+      clearTimeout(this._hoverProfileTimer);
+      clearTimeout(this._hoverCloseTimer);
+      clearTimeout(this._hoverAutoCloseTimer);
+      clearTimeout(this._hoverFadeTimeout);
+      const existingPopup = document.getElementById('profile-popup');
+      // A hover preview is already up: promote it to the full card in place
+      // instead of re-fetching.
+      if (existingPopup && this._isHoverPopup) {
+        this._promoteHoverPopup(existingPopup);
+        return;
+      }
       // Toggle: clicking the same user whose card is open closes it.
-      if (this._openProfileUserId === userId && document.getElementById('profile-popup')) {
+      if (this._openProfileUserId === userId && existingPopup) {
         this._closeProfilePopup();
         return;
       }
+      this._isHoverPopup = false;
+      this._hoverTarget = null;
       this._profilePopupAnchor = e.target;
       this.socket.emit('get-user-profile', { userId });
     }
@@ -2958,11 +2971,24 @@ _setupUI() {
     if (!userItem) return;
     const userId = parseInt(userItem.dataset.userId);
     if (!isNaN(userId)) {
+      clearTimeout(this._hoverProfileTimer);
+      clearTimeout(this._hoverCloseTimer);
+      clearTimeout(this._hoverAutoCloseTimer);
+      clearTimeout(this._hoverFadeTimeout);
+      const existingPopup = document.getElementById('profile-popup');
+      // A hover preview is already up: promote it to the full card in place
+      // instead of re-fetching.
+      if (existingPopup && this._isHoverPopup) {
+        this._promoteHoverPopup(existingPopup);
+        return;
+      }
       // Toggle: clicking the same user whose card is open closes it.
-      if (this._openProfileUserId === userId && document.getElementById('profile-popup')) {
+      if (this._openProfileUserId === userId && existingPopup) {
         this._closeProfilePopup();
         return;
       }
+      this._isHoverPopup = false;
+      this._hoverTarget = null;
       this._profilePopupAnchor = userItem;
       this.socket.emit('get-user-profile', { userId });
     }
@@ -2986,6 +3012,81 @@ _setupUI() {
     if (isNaN(userId) || userId === this.user.id) return;
     e.preventDefault();
     this._showUserContextMenu(e, userId);
+  });
+
+  // ── Profile popup: hover-over on usernames/avatars (translucent preview) ──
+  // The off switch is Settings → Chat → "Show profile card on hover". It is
+  // read live so flipping it takes effect without a reload.
+  const hoverCardEnabled = () => localStorage.getItem('haven_hover_profile_card') !== 'false';
+  const setupHoverProfile = (container, getInfo) => {
+    container.addEventListener('mouseover', (e) => {
+      if (!hoverCardEnabled()) return;
+      const trigger = getInfo(e);
+      if (!trigger) {
+        // Mouse moved to a non-trigger element: cancel any pending hover
+        clearTimeout(this._hoverProfileTimer);
+        this._hoverTarget = null;
+        // Close hover popup instantly
+        if (this._isHoverPopup) {
+          clearTimeout(this._hoverCloseTimer);
+          clearTimeout(this._hoverAutoCloseTimer);
+          clearTimeout(this._hoverFadeTimeout);
+          this._closeProfilePopup();
+        }
+        return;
+      }
+      if (trigger.el === this._hoverTarget) return;
+      // Switching to a different trigger: close the old hover popup instantly
+      if (this._isHoverPopup) {
+        clearTimeout(this._hoverFadeTimeout);
+        this._closeProfilePopup();
+      }
+      clearTimeout(this._hoverProfileTimer);
+      clearTimeout(this._hoverCloseTimer);
+      clearTimeout(this._hoverAutoCloseTimer);
+      this._hoverTarget = trigger.el;
+
+      // Don't show a hover popup while a click-based card is open
+      if (document.getElementById('profile-popup') && !this._isHoverPopup) return;
+
+      this._hoverProfileTimer = setTimeout(() => {
+        // Verify the mouse is still over this trigger element
+        if (this._hoverTarget !== trigger.el) return;
+        if (!isNaN(trigger.userId)) {
+          this._profilePopupAnchor = trigger.el;
+          this._isHoverPopup = true;
+          this.socket.emit('get-user-profile', { userId: trigger.userId });
+        }
+      }, 350);
+    });
+
+    container.addEventListener('mouseleave', () => {
+      clearTimeout(this._hoverProfileTimer);
+      clearTimeout(this._hoverAutoCloseTimer);
+      clearTimeout(this._hoverFadeTimeout);
+      this._hoverTarget = null;
+      // Close hover popup instantly on leaving the container
+      if (this._isHoverPopup) {
+        this._closeProfilePopup();
+      }
+    });
+  };
+
+  setupHoverProfile(document.getElementById('messages'), (e) => {
+    const author = e.target.closest('.message-author');
+    const avatar = e.target.closest('.message-avatar, .message-avatar-img');
+    if (!author && !avatar) return null;
+    if (e.target.closest('.msg-toolbar')) return null;
+    const msgEl = (author || avatar).closest('.message, .message-compact');
+    if (!msgEl) return null;
+    return { el: author || avatar, userId: parseInt(msgEl.dataset.userId) };
+  });
+
+  setupHoverProfile(document.getElementById('online-users'), (e) => {
+    if (e.target.closest('.user-action-btn') || e.target.closest('.user-admin-actions')) return null;
+    const userItem = e.target.closest('.user-item');
+    if (!userItem) return null;
+    return { el: userItem, userId: parseInt(userItem.dataset.userId) };
   });
 
   document.getElementById('cancel-rename-btn').addEventListener('click', () => {

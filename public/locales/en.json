@@ -1471,7 +1471,9 @@
       "up_arrow_edit": "Up Arrow Edits Last Message",
       "up_arrow_edit_hint": "Press the Up arrow key on an empty input to quickly edit your last message.",
       "dm_fullscreen": "Open DMs in fullscreen on single click",
-      "dm_fullscreen_hint": "Single-click a DM to open it in the full pane instead of a floating PiP. Double-click opens the PiP."
+      "dm_fullscreen_hint": "Single-click a DM to open it in the full pane instead of a floating PiP. Double-click opens the PiP.",
+      "hover_profile_card": "Show profile card on hover",
+      "hover_profile_card_hint": "Hovering over a name or avatar shows a quick profile preview. Clicking opens the full card either way."
     },
     "status_bar_section": {
       "title": "Status Bar",

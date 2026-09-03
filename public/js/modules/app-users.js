@@ -74,6 +74,14 @@ _renderOnlineUsers(users) {
 
   el.innerHTML = html;
 
+  // Bind gear buttons: same unified menu as right-click, anchored to the gear
+  el.querySelectorAll('.user-gear-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openUserMenuFromButton(btn, parseInt(btn.dataset.uid), btn.dataset.uname);
+    });
+  });
+
   // Bind DM buttons
   el.querySelectorAll('.user-dm-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -216,10 +224,20 @@ _renderUserItem(u, scoreLookup) {
     ? `<button class="user-action-btn user-dm-btn" data-dm-uid="${u.id}" title="${t('users.notes_to_self_hint')}">📝</button>`
     : `<button class="user-action-btn user-dm-btn" data-dm-uid="${u.id}" title="${t('users.direct_message')}">💬</button>`;
 
-  // Mod actions moved to the unified right-click context menu; the sidebar row
-  // keeps just the DM shortcut.
-  const modBtns = dmBtn
-    ? `<div class="user-admin-actions">${dmBtn}</div>`
+  // DM + gear. The gear opens the same unified menu as right-click (mod actions
+  // sit behind a divider there); it stays visible so touch and keyboard users
+  // still have a discoverable way in.
+  const canModThis = (this.user.isAdmin || this._canModerate()) && u.id !== this.user.id;
+  const canPromote = this._hasPerm('promote_user') && u.id !== this.user.id;
+  // A moderator whose role grants ban_user but who sits below the level-25
+  // _canModerate() threshold still needs the gear to appear. (v3.43.0)
+  const canBanThis = this._hasPerm('ban_user') && u.id !== this.user.id;
+  const hasGear = canModThis || canPromote || canBanThis;
+  const gearBtn = hasGear
+    ? `<button class="user-action-btn user-gear-btn" data-uid="${u.id}" data-uname="${this._escapeHtml(u.username)}" title="${t('users.more_actions')}">⚙️</button>`
+    : '';
+  const modBtns = (dmBtn || gearBtn)
+    ? `<div class="user-admin-actions">${dmBtn}${gearBtn}</div>`
     : '';
   // The name gets a line to itself. Everything used to sit on one row, so a
   // custom status and an activity together squeezed the username down to a
@@ -768,7 +786,24 @@ _profileActivityHtml(activity) {
 
 // ── Profile Popup (Discord-style mini profile) ────────
 
+// Open the unified user menu (the one right-click shows) from a gear button,
+// positioned under the button rather than at the pointer so keyboard and touch
+// activation land it in the right place too.
+_openUserMenuFromButton(btn, userId, username) {
+  const rect = btn.getBoundingClientRect();
+  this._showUserContextMenu({
+    clientX: rect.left,
+    clientY: rect.bottom + 4,
+    target: btn,
+    preventDefault() {},
+    stopPropagation() {},
+  }, userId, username);
+},
+
 _showProfilePopup(profile) {
+  // If this was a hover-triggered popup but the mouse already left, abort
+  if (this._isHoverPopup && !this._hoverTarget) return;
+
   this._closeProfilePopup();
 
   const isSelf = profile.id === this.user.id;
@@ -809,10 +844,18 @@ _showProfilePopup(profile) {
   // Join date
   const joinDate = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
-  // Action buttons (nickname lives in the right-click context menu now)
+  // Action buttons. Nickname lives in the unified menu; the gear opens that
+  // menu for anyone with mod powers over this user.
+  const canMod = this.user.isAdmin || this._canModerate();
+  const canPromote = this._hasPerm('promote_user');
+  const canBan = this.user.isAdmin || this._hasPerm('ban_user');
+  const gearVisible = !isSelf && (canMod || canPromote || canBan);
+  const gearBtnHtml = gearVisible
+    ? `<button class="profile-popup-action-btn profile-gear-btn" title="${this._escapeHtml(t('users.more_actions'))}">⚙️ ${t('users.more_actions')}</button>`
+    : '';
   const actionsHtml = isSelf
     ? `<button class="profile-popup-action-btn profile-edit-btn" id="profile-popup-edit-btn">✏️ ${t('users.edit_profile')}</button><button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}" title="${t('users.notes_to_self')}">📝 ${t('users.notes_to_self')}</button>`
-    : `<button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}">💬 ${t('users.message_btn')}</button>`;
+    : `<button class="profile-popup-action-btn profile-dm-btn" data-dm-uid="${profile.id}">💬 ${t('users.message_btn')}</button>${gearBtnHtml}`;
 
   const popup = document.createElement('div');
   popup.id = 'profile-popup';
@@ -842,6 +885,9 @@ _showProfilePopup(profile) {
     </div>
   `;
 
+  // Hover mode: translucent, non-interactive preview (pointer-events:none via CSS)
+  if (this._isHoverPopup) popup.classList.add('profile-popup-hover');
+
   document.body.appendChild(popup);
 
   // Opening the profile card is a trigger context: flag the card so the freeze
@@ -858,8 +904,25 @@ _showProfilePopup(profile) {
   this._openProfileActivityKey = JSON.stringify(profile.activity || null);
   this._startActivityProgress(popup);
 
+  // Hover mode is closed by the mouseover/mouseleave handlers; this is a safety
+  // net in case one of them misses.
+  if (this._isHoverPopup) {
+    this._hoverAutoCloseTimer = setTimeout(() => {
+      if (this._isHoverPopup) this._closeProfilePopup();
+    }, 3000);
+  }
+
   // Close button
   popup.querySelector('.profile-popup-close').addEventListener('click', () => this._closeProfilePopup());
+
+  // Gear: the unified user menu, same as right-click, anchored to the button
+  const gearBtnEl = popup.querySelector('.profile-gear-btn');
+  if (gearBtnEl) {
+    gearBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._openUserMenuFromButton(gearBtnEl, profile.id, profile.username);
+    });
+  }
 
   // Avatar → open the full-resolution image in the lightbox. Only real avatars
   // are clickable; the letter fallback (a div) isn't an <img> so it's skipped.
@@ -913,9 +976,15 @@ _showProfilePopup(profile) {
     });
   }
 
-  // Close on outside click (delay to avoid instant close). Clicks on the image
-  // lightbox (opened by clicking the avatar) are ignored so dismissing the
-  // lightbox leaves the card open.
+  // Close on outside click. Skipped for hover previews, which close on
+  // mouse-out instead.
+  if (!this._isHoverPopup) this._bindProfilePopupOutsideClose(popup);
+},
+
+// Outside-click close (delayed to avoid an instant close). Clicks on the image
+// lightbox (opened by clicking the avatar) are ignored so dismissing the
+// lightbox leaves the card open.
+_bindProfilePopupOutsideClose(popup) {
   setTimeout(() => {
     this._profilePopupOutsideHandler = (e) => {
       const lightbox = document.getElementById('image-lightbox');
@@ -924,6 +993,21 @@ _showProfilePopup(profile) {
     };
     document.addEventListener('click', this._profilePopupOutsideHandler);
   }, 50);
+},
+
+// Convert a hover preview into the full click card in place (no re-fetch)
+_promoteHoverPopup(popup) {
+  this._isHoverPopup = false;
+  this._hoverTarget = null;
+  clearTimeout(this._hoverAutoCloseTimer);
+  clearTimeout(this._hoverFadeTimeout);
+  popup.classList.remove('profile-popup-hover', 'profile-popup-fading');
+  popup.style.pointerEvents = '';
+  // Re-run the entrance animation for the full card
+  popup.style.animation = 'none';
+  popup.offsetHeight; // force reflow
+  popup.style.animation = '';
+  this._bindProfilePopupOutsideClose(popup);
 },
 
 _positionProfilePopup(popup) {
@@ -968,6 +1052,14 @@ _closeProfilePopup() {
     document.removeEventListener('click', this._profilePopupOutsideHandler);
     this._profilePopupOutsideHandler = null;
   }
+  // NOTE: _isHoverPopup is deliberately NOT reset here. It is only cleared by
+  // explicit user actions (click, promote, context menu). Resetting it on close
+  // raced an in-flight hover request: mouse-out closed the popup, the stale
+  // response then arrived with the flag off and rendered a permanent card.
+  this._hoverTarget = null;
+  clearTimeout(this._hoverCloseTimer);
+  clearTimeout(this._hoverAutoCloseTimer);
+  clearTimeout(this._hoverFadeTimeout);
 },
 
 _openEditProfileModal(profile) {

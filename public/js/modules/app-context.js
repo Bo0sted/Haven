@@ -40,6 +40,7 @@ _showUserContextMenu(e, targetUserId, targetNameOverride) {
   // View Profile
   addBtn(`👤 ${t('context.view_profile')}`, () => {
     this._hideUserContextMenu();
+    this._isHoverPopup = false;
     this._profilePopupAnchor = e.target.closest('.user-item') || e.target;
     this.socket.emit('get-user-profile', { userId: targetUserId });
   });
@@ -453,6 +454,16 @@ _setupNotifications() {
     upArrowEditToggle.checked = localStorage.getItem('haven_up_arrow_edit') !== 'false';
     upArrowEditToggle.addEventListener('change', () => {
       localStorage.setItem('haven_up_arrow_edit', String(upArrowEditToggle.checked));
+    });
+  }
+
+  // Profile card on hover (on by default). The hover handler reads the flag
+  // live, so no reload is needed.
+  const hoverCardToggle = document.getElementById('hover-profile-card');
+  if (hoverCardToggle) {
+    hoverCardToggle.checked = localStorage.getItem('haven_hover_profile_card') !== 'false';
+    hoverCardToggle.addEventListener('change', () => {
+      localStorage.setItem('haven_hover_profile_card', String(hoverCardToggle.checked));
     });
   }
 
