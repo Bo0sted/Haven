@@ -146,9 +146,12 @@ class HavenApp {
     // permission added in one place cannot be missed in the others. (#5470:
     // invite_users was in the nav but not in the tab gate, so holders saw an
     // Admin tab that did nothing when clicked.)
+    // Mirrors the access table in _syncSettingsNav (app-admin.js): anyone who
+    // can see at least one admin section must also be allowed onto the tab.
     this._hasAnyAdminSettingsAccess = () => this.user.isAdmin || [
       'manage_emojis', 'manage_stickers', 'manage_soundboard', 'manage_roles',
-      'manage_server', 'manage_webhooks', 'view_audit_log', 'invite_users'
+      'manage_server', 'manage_webhooks', 'view_audit_log', 'invite_users',
+      'ban_user', 'kick_user', 'view_all_members'
     ].some(p => this._hasPerm(p));
     // Global-only variant: excludes permissions granted via a channel-scoped
     // role assignment, for gating UI that always performs a server-wide

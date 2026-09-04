@@ -749,7 +749,10 @@ _syncSettingsNav() {
     'section-update':       [],
     'section-branding':     ['manage_server'],
     'section-members':      ['manage_server'],
-    'section-moderation':   [],
+    // Idle-online oversight (v3.46.0): moderators who can act on it see it too,
+    // the same bar the server enforces. Keep this list in step with
+    // _hasAnyAdminSettingsAccess in app.js, which gates the Admin tab switch.
+    'section-moderation':   ['view_audit_log', 'ban_user', 'kick_user', 'view_all_members'],
     'section-security':     [],
     'section-automod':      [],
     'section-whitelist':    ['manage_server'],
@@ -869,6 +872,10 @@ _syncSettingsNav() {
       subSection.style.display = sectionAccess.includes(subSection.id) ? '' : 'none';
     });
   });
+  // With the server-config blocks above it hidden, the invite-links divider has
+  // nothing to divide. (#5470)
+  document.getElementById('invite-links-block')
+    ?.classList.toggle('invite-links-flush', Array.isArray(getSectionAccess('section-invite')));
 
   const adminTab = document.querySelector('.settings-tab-admin');
   if (adminTab) {
