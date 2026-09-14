@@ -526,6 +526,11 @@ _openTimezoneModal({ firstRun = false, onClose = null } = {}) {
   }
 
   this._updateTimezonePreview();
+  // When opened from the settings panel, close it first so this modal is not
+  // stacked behind it (both share the same modal-overlay z-index). Harmless on
+  // the first-run path, where settings is already closed.
+  const settings = document.getElementById('settings-modal');
+  if (settings) settings.style.display = 'none';
   modal.style.display = 'flex';
 },
 
