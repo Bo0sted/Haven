@@ -23,7 +23,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
   correctly for each timestamp. On the first login after the update the modal
   offers Skip (never ask again), Remind later (ask again next launch), or
   Confirm. Anyone who skips or has not chosen keeps the old behaviour, where
-  times follow the browser. Guests are not prompted.
+  times follow the browser. Guests are not prompted. Once a timezone is saved,
+  reopening the modal from settings offers Erase, which clears it and returns
+  to the browser default.
 - **Send later shortcuts (#5657).** Ctrl+Enter in the message box opens Send
   later with your text, and the Send later box takes the same formatting
   shortcuts and link paste as the composer. Thanks to @birdcrazy.

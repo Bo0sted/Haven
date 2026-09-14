@@ -2509,6 +2509,7 @@
       "format_24": "24-hour (military)",
       "preview_label": "This is how times will look",
       "skip": "Skip",
+      "erase": "Erase",
       "later": "Remind later",
       "confirm": "Confirm"
     },

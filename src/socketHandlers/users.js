@@ -607,6 +607,19 @@ module.exports = function register(socket, ctx) {
     }
   });
 
+  // Clear a preference back to unset. Only the localization keys are erasable
+  // (the Erase button in the timezone modal), which returns the account to the
+  // browser-default behaviour. set-preference never writes empty values, so a
+  // dedicated delete is the way to remove a row.
+  socket.on('delete-preference', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const key = typeof data.key === 'string' ? data.key.trim() : '';
+    const deletableKeys = ['timezone', 'time_format'];
+    if (!deletableKeys.includes(key)) return;
+    db.prepare('DELETE FROM user_preferences WHERE user_id = ? AND key = ?').run(socket.user.id, key);
+    socket.emit('preference-deleted', { key });
+  });
+
   // ── Recovery-codes notice gating ────────────────────────
   // The client asks whether to surface the one-time "generate recovery codes"
   // notice; the decision is made entirely server-side. Skip it when the account

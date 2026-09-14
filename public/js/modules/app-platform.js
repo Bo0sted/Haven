@@ -513,12 +513,22 @@ _openTimezoneModal({ firstRun = false, onClose = null } = {}) {
 
   this._tzModalOnClose = typeof onClose === 'function' ? onClose : null;
 
+  // Once a timezone is saved, Skip (a "never ask again" for the unconfigured
+  // state) makes no sense, so it is swapped for Erase, which clears the saved
+  // zone and returns the account to the browser default.
+  const hasTz = !!(this._userPrefs && this._userPrefs.timezone);
+  const skipBtn = document.getElementById('timezone-skip-btn');
+  const eraseBtn = document.getElementById('timezone-erase-btn');
+  if (skipBtn) skipBtn.style.display = hasTz ? 'none' : '';
+  if (eraseBtn) eraseBtn.style.display = hasTz ? '' : 'none';
+
   if (!this._tzModalWired) {
     this._tzModalWired = true;
     const live = () => this._updateTimezonePreview();
     tzSel?.addEventListener('change', live);
     fmtSel?.addEventListener('change', live);
     document.getElementById('timezone-skip-btn')?.addEventListener('click', () => this._resolveTimezoneModal('skip'));
+    document.getElementById('timezone-erase-btn')?.addEventListener('click', () => this._resolveTimezoneModal('erase'));
     document.getElementById('timezone-later-btn')?.addEventListener('click', () => this._resolveTimezoneModal('later'));
     document.getElementById('timezone-confirm-btn')?.addEventListener('click', () => this._resolveTimezoneModal('confirm'));
     // A click on the backdrop is a plain, session-only close = Remind later.
@@ -564,6 +574,12 @@ _resolveTimezoneModal(action) {
     this._saveTimezonePrefs(tz, fmt);
     return;
   }
+  if (action === 'erase') {
+    // Clear the saved zone/format and reload so every timestamp reverts to the
+    // browser default. onClose is not run — the reload re-evaluates cleanly.
+    this._eraseTimezonePrefs();
+    return;
+  }
   if (action === 'skip') {
     // Persist the skip so the modal is never auto-shown again. Nothing about
     // the displayed times changes: unset = the old browser-default behaviour.
@@ -574,6 +590,31 @@ _resolveTimezoneModal(action) {
   }
   // 'later' persists nothing — the modal returns on the next launch.
   if (onClose) onClose();
+},
+
+/** Delete the saved timezone/format, mark the prompt skipped so it does not
+ *  re-nag after an explicit erase, then reload once the server confirms. */
+_eraseTimezonePrefs() {
+  this._userPrefs = this._userPrefs || {};
+  delete this._userPrefs.timezone;
+  delete this._userPrefs.time_format;
+  this._userPrefs.tz_prompt = 'skipped';
+  this._updateTimezoneSummary?.();
+
+  const reload = () => { try { location.reload(); } catch { /* non-browser */ } };
+  if (!this.socket) { reload(); return; }
+
+  // Persist the skip first (so it is durable before the socket tears down),
+  // then delete both rows and reload once their deletions are acknowledged.
+  this.socket.emit('set-preference', { key: 'tz_prompt', value: 'skipped' });
+  const pending = new Set(['timezone', 'time_format']);
+  let timer = null;
+  const finish = () => { this.socket.off('preference-deleted', onDeleted); clearTimeout(timer); reload(); };
+  const onDeleted = ({ key } = {}) => { pending.delete(key); if (!pending.size) finish(); };
+  this.socket.on('preference-deleted', onDeleted);
+  timer = setTimeout(finish, 1500);
+  this.socket.emit('delete-preference', { key: 'timezone' });
+  this.socket.emit('delete-preference', { key: 'time_format' });
 },
 
 /** Persist timezone + format, wait for the server to confirm, then reload. */
