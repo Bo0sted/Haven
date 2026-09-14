@@ -3536,6 +3536,12 @@ _setupUI() {
   });
   this._buildLanguagePicker();
 
+  // ── Timezone (Configure Time) ────────────────────────
+  document.getElementById('configure-time-btn')?.addEventListener('click', () => {
+    this._openTimezoneModal({ firstRun: false });
+  });
+  this._updateTimezoneSummary?.();
+
   // ── Password change ──────────────────────────────────
   document.getElementById('change-password-btn').addEventListener('click', async () => {
     const cur  = document.getElementById('current-password').value;
@@ -4253,7 +4259,7 @@ _setupUI() {
       }
       listEl.innerHTML = files.map(f => {
         const safeName = f.name.replace(/[<>"&]/g, c => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;' }[c]));
-        const when = new Date(f.mtime).toLocaleString();
+        const when = this._fmtDateTime(f.mtime);
         return `<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;border:1px solid var(--border);padding:6px 8px;border-radius:4px">
           <div style="min-width:0;flex:1">
             <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;font-size:0.85em">${safeName}</div>
@@ -4747,7 +4753,7 @@ _setupUI() {
           : 'settings.admin.invite_links.channel_other', { count: ic.channels.length }
       );
       const uses = ic.max_uses > 0 ? `${ic.use_count} / ${ic.max_uses}` : `${ic.use_count}`;
-      const expiry = ic.expires_at ? new Date(ic.expires_at).toLocaleString() : t('settings.admin.invite_links.never');
+      const expiry = ic.expires_at ? this._fmtDateTime(ic.expires_at) : t('settings.admin.invite_links.never');
       const label = ic.label ? this._escapeHtml(ic.label) : `<em style="opacity:.6">${t('settings.admin.invite_links.no_label')}</em>`;
       const editorChannels = _inviteChannelChecks('invite-edit-channel-cb', new Set(ic.channels || []));
       return `<div class="invite-code-card" data-id="${ic.id}" style="border:1px solid var(--border);border-radius:8px;padding:10px">
@@ -5037,7 +5043,7 @@ async _copyInviteCard(card) {
 
   if (invite?.expires_at) {
     const expiryDate = new Date(invite.expires_at);
-    if (!Number.isNaN(expiryDate.getTime())) expiryText = expiryDate.toLocaleString();
+    if (!Number.isNaN(expiryDate.getTime())) expiryText = this._fmtDateTime(expiryDate);
   }
 
   const invitedText = t('settings.admin.invite_links.card_invited', { server: brandText });
@@ -6584,7 +6590,7 @@ _renderScheduledList(items) {
   }
   list.innerHTML = items.map(it => `<div class="schedule-item" data-id="${it.id}">
     <div class="schedule-item-main">
-      <span class="schedule-item-when">${this._escapeHtml(new Date(it.sendAt).toLocaleString())}</span>
+      <span class="schedule-item-when">${this._escapeHtml(this._fmtDateTime(it.sendAt))}</span>
       <span class="schedule-item-chan">#${this._escapeHtml(it.channelName || '')}</span>
       <div class="schedule-item-text">${this._escapeHtml(it.content)}</div>
     </div>
@@ -6617,7 +6623,7 @@ _submitSchedule() {
   const editing = this._scheduleEditingId;
   const done = (r) => {
     if (!r || r.error) { this._showToast((r && r.error) || t('toasts.role_server_no_response'), 'error'); return; }
-    this._showToast(t(editing ? 'modals.schedule.updated' : 'modals.schedule.scheduled', { when: at.toLocaleString() }), 'success');
+    this._showToast(t(editing ? 'modals.schedule.updated' : 'modals.schedule.scheduled', { when: this._fmtDateTime(at) }), 'success');
     if (!editing) {
       const input = document.getElementById('message-input');
       if (input && input.value.trim() === content) { input.value = ''; input.style.height = 'auto'; }
@@ -6639,6 +6645,10 @@ _submitSchedule() {
 /** True when the reader's locale keeps a 24-hour clock. Falls back to 24-hour
  *  when the browser cannot report an hour cycle, per the feature's default. */
 _tsm24hDefault() {
+  // A confirmed clock preference wins over the locale probe.
+  const h12 = this._userHour12?.();
+  if (h12 === true) return false;
+  if (h12 === false) return true;
   try {
     const hc = new Intl.DateTimeFormat(this._timeLocale?.(), { hour: 'numeric' })
       .resolvedOptions().hourCycle;
@@ -7430,7 +7440,7 @@ _renderMediaGalleryTab(tab) {
     try {
       const d = new Date(iso);
       if (isNaN(d)) return '';
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      return this._fmtDate(d, { year: 'numeric', month: 'short', day: 'numeric' });
     } catch { return ''; }
   };
   const esc = (s) => this._escapeHtml ? this._escapeHtml(s) : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

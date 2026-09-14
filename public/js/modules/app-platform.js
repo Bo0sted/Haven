@@ -305,6 +305,20 @@ _initWelcomePopups() {
     }
   } catch { /* storage unavailable: nothing to carry over */ }
 
+  // The first-run localisation prompt takes precedence over the app promos so
+  // two modals never fight for the screen. When it closes (Skip / Remind
+  // later) the promo queue runs; Confirm reloads the page, after which the
+  // prompt no longer qualifies and the promos evaluate normally.
+  if (this._shouldShowTzPrompt && this._shouldShowTzPrompt()) {
+    this._openTimezoneModal({ firstRun: true, onClose: () => this._runWelcomePromoQueue() });
+    return;
+  }
+  this._runWelcomePromoQueue();
+},
+
+/** The app-promo sequencer, split out of _initWelcomePopups so the first-run
+ *  localisation prompt can run ahead of it and hand control back on close. */
+_runWelcomePromoQueue() {
   // ── Build the queue ──
   // Each entry: { id, modalId, prefKey, checkboxId, shouldShow }. A popup is
   // filtered out only if its persisted "Don't show again" pref is set.
@@ -416,6 +430,184 @@ _initWelcomePopups() {
 
   // Defer initial show so the app shell finishes painting first.
   setTimeout(showCurrent, 1200);
+},
+
+// ── Persisted timezone / time-format prompt ─────────────────────────────
+// Storage (server-side user_preferences): `timezone` is an IANA zone id, so
+// Intl resolves DST per-instant rather than freezing an offset; `time_format`
+// is '12' or '24'; `tz_prompt` is 'skipped' once the user dismisses the modal
+// with Skip. A confirmed timezone or a 'skipped' flag both stop the auto-show;
+// "Remind later" writes nothing, so the modal returns on the next launch.
+
+/** Should the first-run modal auto-show? Registered accounts only (guests have
+ *  nowhere to persist), once prefs have loaded, and only while the user has
+ *  neither confirmed a timezone nor skipped. */
+_shouldShowTzPrompt() {
+  if (this._tzPromptResolvedThisSession) return false;
+  if (!this.user || this.user.isGuest) return false;
+  if (!this._userPrefs) return false;
+  if (this._userPrefs.timezone) return false;
+  if (this._userPrefs.tz_prompt === 'skipped') return false;
+  return true;
+},
+
+/** Common IANA zones for the rare engine without Intl.supportedValuesOf. */
+_fallbackTimezones() {
+  return [
+    'UTC', 'America/Los_Angeles', 'America/Denver', 'America/Chicago',
+    'America/New_York', 'America/Sao_Paulo', 'Europe/London', 'Europe/Paris',
+    'Europe/Berlin', 'Europe/Moscow', 'Africa/Johannesburg', 'Asia/Dubai',
+    'Asia/Kolkata', 'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney',
+    'Pacific/Auckland',
+  ];
+},
+
+/** Fill the timezone dropdown once from the full IANA list (or the fallback),
+ *  always including the device's own zone and UTC. */
+_buildTimezoneSelect() {
+  const sel = document.getElementById('timezone-select');
+  if (!sel || sel.dataset.built === '1') return;
+  let zones = [];
+  try { zones = (typeof Intl.supportedValuesOf === 'function') ? Intl.supportedValuesOf('timeZone') : []; } catch { zones = []; }
+  if (!zones.length) zones = this._fallbackTimezones();
+  let browserTz = 'UTC';
+  try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { /* keep UTC */ }
+  if (browserTz && !zones.includes(browserTz)) zones = [browserTz, ...zones];
+  if (!zones.includes('UTC')) zones = ['UTC', ...zones];
+  const frag = document.createDocumentFragment();
+  for (const z of zones) {
+    const o = document.createElement('option');
+    o.value = z;
+    o.textContent = z.replace(/_/g, ' ');
+    frag.appendChild(o);
+  }
+  sel.innerHTML = '';
+  sel.appendChild(frag);
+  sel.dataset.built = '1';
+},
+
+/** Open the modal. `firstRun` is informational; the buttons behave the same
+ *  whether it was opened automatically or from settings. `onClose` runs after
+ *  Skip / Remind later (Confirm reloads instead). */
+_openTimezoneModal({ firstRun = false, onClose = null } = {}) {
+  const modal = document.getElementById('timezone-modal');
+  if (!modal) { if (onClose) onClose(); return; }
+  this._buildTimezoneSelect();
+  const tzSel = document.getElementById('timezone-select');
+  const fmtSel = document.getElementById('timeformat-select');
+
+  // Seed from the saved prefs, else the browser's current zone / clock.
+  let browserTz = 'UTC';
+  try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { /* keep UTC */ }
+  const wantTz = (this._userPrefs && this._userPrefs.timezone) || browserTz;
+  if (tzSel) {
+    tzSel.value = wantTz;
+    if (tzSel.value !== wantTz) { // zone not in the list: add and select it
+      const o = document.createElement('option');
+      o.value = wantTz; o.textContent = wantTz.replace(/_/g, ' ');
+      tzSel.appendChild(o); tzSel.value = wantTz;
+    }
+  }
+  const wantFmt = (this._userPrefs && this._userPrefs.time_format) || (this._tsm24hDefault?.() ? '24' : '12');
+  if (fmtSel) fmtSel.value = wantFmt;
+
+  this._tzModalOnClose = typeof onClose === 'function' ? onClose : null;
+
+  if (!this._tzModalWired) {
+    this._tzModalWired = true;
+    const live = () => this._updateTimezonePreview();
+    tzSel?.addEventListener('change', live);
+    fmtSel?.addEventListener('change', live);
+    document.getElementById('timezone-skip-btn')?.addEventListener('click', () => this._resolveTimezoneModal('skip'));
+    document.getElementById('timezone-later-btn')?.addEventListener('click', () => this._resolveTimezoneModal('later'));
+    document.getElementById('timezone-confirm-btn')?.addEventListener('click', () => this._resolveTimezoneModal('confirm'));
+    // A click on the backdrop is a plain, session-only close = Remind later.
+    modal.addEventListener('click', (e) => { if (e.target === modal) this._resolveTimezoneModal('later'); });
+  }
+
+  this._updateTimezonePreview();
+  modal.style.display = 'flex';
+},
+
+/** Live sample of the chosen zone + format, refreshed on every change. */
+_updateTimezonePreview() {
+  const el = document.getElementById('timezone-preview');
+  if (!el) return;
+  const tz = document.getElementById('timezone-select')?.value;
+  const fmt = document.getElementById('timeformat-select')?.value;
+  const opts = { dateStyle: 'full', timeStyle: 'medium' };
+  if (tz) opts.timeZone = tz;
+  if (fmt === '12') opts.hour12 = true;
+  else if (fmt === '24') opts.hour12 = false;
+  try { el.textContent = new Date().toLocaleString(this._timeLocale?.(), opts); }
+  catch { el.textContent = new Date().toLocaleString(); }
+},
+
+/** Handle one of the three buttons. */
+_resolveTimezoneModal(action) {
+  const modal = document.getElementById('timezone-modal');
+  const tz = document.getElementById('timezone-select')?.value;
+  const fmt = document.getElementById('timeformat-select')?.value === '24' ? '24' : '12';
+  const onClose = this._tzModalOnClose; this._tzModalOnClose = null;
+  this._tzPromptResolvedThisSession = true;
+  if (modal) modal.style.display = 'none';
+
+  if (action === 'confirm') {
+    // Saves both prefs, then reloads so every already-rendered timestamp picks
+    // up the new zone/format. onClose (the promo queue) is intentionally not
+    // run — the reload re-evaluates it cleanly afterwards.
+    this._saveTimezonePrefs(tz, fmt);
+    return;
+  }
+  if (action === 'skip') {
+    // Persist the skip so the modal is never auto-shown again. Nothing about
+    // the displayed times changes: unset = the old browser-default behaviour.
+    this._userPrefs = this._userPrefs || {};
+    this._userPrefs.tz_prompt = 'skipped';
+    this.socket?.emit('set-preference', { key: 'tz_prompt', value: 'skipped' });
+    this._updateTimezoneSummary?.();
+  }
+  // 'later' persists nothing — the modal returns on the next launch.
+  if (onClose) onClose();
+},
+
+/** Persist timezone + format, wait for the server to confirm, then reload. */
+_saveTimezonePrefs(tz, fmt) {
+  const zone = (typeof tz === 'string' && tz) ? tz : null;
+  const format = fmt === '24' ? '24' : '12';
+  this._userPrefs = this._userPrefs || {};
+  if (zone) this._userPrefs.timezone = zone;
+  this._userPrefs.time_format = format;
+  this._updateTimezoneSummary?.();
+
+  const reload = () => { try { location.reload(); } catch { /* non-browser */ } };
+  if (!this.socket || !zone) { reload(); return; }
+
+  // Reload only once the writes are acknowledged, so a fresh get-preferences
+  // after the reload is guaranteed to return them. A short timeout guards
+  // against a dropped ack so we never hang on this screen.
+  const pending = new Set(['timezone', 'time_format']);
+  let timer = null;
+  const finish = () => { this.socket.off('preference-saved', onSaved); clearTimeout(timer); reload(); };
+  const onSaved = ({ key } = {}) => { pending.delete(key); if (!pending.size) finish(); };
+  this.socket.on('preference-saved', onSaved);
+  timer = setTimeout(finish, 1500);
+  this.socket.emit('set-preference', { key: 'timezone', value: zone });
+  this.socket.emit('set-preference', { key: 'time_format', value: format });
+},
+
+/** Reflect the saved (or unset) state in the settings row. */
+_updateTimezoneSummary() {
+  const el = document.getElementById('timezone-current-summary');
+  if (!el) return;
+  const tz = this._userPrefs && this._userPrefs.timezone;
+  const fmt = this._userPrefs && this._userPrefs.time_format;
+  if (tz) {
+    const fmtLabel = fmt ? ` · ${t(fmt === '24' ? 'settings.timezone_section.fmt_24' : 'settings.timezone_section.fmt_12')}` : '';
+    el.textContent = tz.replace(/_/g, ' ') + fmtLabel;
+  } else {
+    el.textContent = t('settings.timezone_section.not_set');
+  }
 },
 
 async _setupDesktopShortcuts() {
@@ -720,7 +912,7 @@ async _initE2E() {
       // If keys were auto-reset during init (backup unwrap failed), notify
       if (this.e2e.keysWereReset) {
         setTimeout(() => {
-          this._appendE2ENotice(t('platform.e2e.keys_regenerated', { date: new Date().toLocaleString() }));
+          this._appendE2ENotice(t('platform.e2e.keys_regenerated', { date: this._fmtDateTime(new Date()) }));
         }, 500);
       }
     } else {
@@ -828,7 +1020,7 @@ async _e2eSetupListeners() {
       // Store it so it survives the message re-render triggered by _retryDecryptForUser.
       const ch = this.channels.find(c => c.code === this.currentChannel);
       if (ch && ch.is_dm && ch.dm_target && ch.dm_target.id === data.userId) {
-        this._pendingE2ENotice = t('platform.e2e.partner_keys_changed', { name: ch.dm_target.username, date: new Date().toLocaleString() });
+        this._pendingE2ENotice = t('platform.e2e.partner_keys_changed', { name: ch.dm_target.username, date: this._fmtDateTime(new Date()) });
       }
     }
 
@@ -913,7 +1105,7 @@ async _recoverE2EFromBackup() {
   if (synced.ok) {
     await this.e2e.publishKey(this.socket);
     this._dmPublicKeys = {};
-    this._appendE2ENotice(t('platform.e2e.keys_recovered_notice', { date: new Date().toLocaleString() }));
+    this._appendE2ENotice(t('platform.e2e.keys_recovered_notice', { date: this._fmtDateTime(new Date()) }));
     this._showToast(t('platform.e2e.keys_recovered'), 'success');
 
     // Re-fetch messages if currently in a DM so they attempt decryption again.
@@ -1379,7 +1571,7 @@ async _performE2EKeyReset() {
     this._dmPublicKeys = {};
 
     // Post a timestamped notice in the current chat
-    this._appendE2ENotice(t('platform.e2e.keys_reset_notice', { date: new Date().toLocaleString() }));
+    this._appendE2ENotice(t('platform.e2e.keys_reset_notice', { date: this._fmtDateTime(new Date()) }));
 
     this._showToast(t('platform.e2e.keys_reset'), 'success');
     console.log('[E2E] Keys reset by user');

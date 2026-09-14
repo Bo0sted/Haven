@@ -1112,6 +1112,34 @@
     </div>
   </div>
 
+  <!-- Timezone / Time Format Modal -->
+  <div class="modal-overlay" id="timezone-modal" style="display:none">
+    <div class="modal">
+      <h3>🌎 <span data-i18n="modals.timezone.title">Time &amp; Timezone</span></h3>
+      <p class="modal-desc" data-i18n="modals.timezone.desc">Set your preferred timezone and formatting here. These settings will be persisted to your account and will be used across all your devices. Your timezone is never revealed to any user.</p>
+      <div class="form-group">
+        <label data-i18n="modals.timezone.zone_label">Timezone</label>
+        <select id="timezone-select" class="form-select" style="width:100%"></select>
+      </div>
+      <div class="form-group">
+        <label data-i18n="modals.timezone.format_label">Time format</label>
+        <select id="timeformat-select" class="form-select" style="width:100%">
+          <option value="12" data-i18n="modals.timezone.format_12">12-hour</option>
+          <option value="24" data-i18n="modals.timezone.format_24">24-hour (military)</option>
+        </select>
+      </div>
+      <div class="tz-preview" style="margin:4px 0 12px;padding:12px;border:1px solid var(--border, rgba(255,255,255,0.08));border-radius:8px;text-align:center">
+        <small class="muted-text" style="display:block;opacity:0.6;margin-bottom:4px" data-i18n="modals.timezone.preview_label">This is how times will look</small>
+        <div id="timezone-preview" style="font-size:1.05rem;font-weight:600">—</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-sm" id="timezone-skip-btn" data-i18n="modals.timezone.skip">Skip</button>
+        <button type="button" class="btn-sm" id="timezone-later-btn" data-i18n="modals.timezone.later">Remind later</button>
+        <button type="button" class="btn-sm btn-accent" id="timezone-confirm-btn" data-i18n="modals.timezone.confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Rename / Profile Modal -->
   <div class="modal-overlay" id="rename-modal" style="display:none">
     <div class="modal">
@@ -1336,7 +1364,7 @@
                past it, which is how Activity ended up effectively hidden. -->
           <div class="settings-nav-user">
           <div class="settings-nav-group-label" data-i18n="settings.nav.group_appearance">Appearance</div>
-          <div class="settings-nav-item active" data-target="section-language">🗣️ <span data-i18n="settings.nav.language">Language</span></div>
+          <div class="settings-nav-item active" data-target="section-language">🗣️ <span data-i18n="settings.nav.localization">Localization</span></div>
           <div class="settings-nav-item" data-target="section-layout">📐 <span data-i18n="settings.nav.layout">Layout &amp; Density</span></div>
           <div class="settings-nav-item" data-target="section-zoom">🔍 <span data-i18n="settings.nav.zoom">Zoom</span></div>
           <div class="settings-nav-item" data-target="section-reaction-size">😀 <span data-i18n="settings.nav.reaction_size">Reaction Size</span></div>
@@ -1409,9 +1437,9 @@
         </nav>
         <div class="settings-body" id="settings-body-user">
 
-      <!-- Language Section -->
+      <!-- Localization Section -->
       <div class="settings-section" id="section-language">
-        <h5 class="settings-section-title">🗣️ <span data-i18n="settings.language_section.title">Language</span></h5>
+        <h5 class="settings-section-title">🗣️ <span data-i18n="settings.localization_section.title">Localization</span></h5>
         <label class="select-row">
           <span data-i18n="settings.language_section.label">Language</span>
           <select id="language-select" class="settings-select">
@@ -1427,6 +1455,15 @@
           </select>
         </label>
         <small class="settings-hint" data-i18n="settings.language_section.hint">Changes apply immediately</small>
+
+        <div class="settings-subsection" id="timezone-subsection">
+          <small class="settings-group-label">🌎 <span data-i18n="settings.timezone_section.title">Timezone</span></small>
+          <div class="select-row">
+            <span id="timezone-current-summary" data-i18n="settings.timezone_section.not_set">Using this device's timezone</span>
+            <button type="button" class="btn-sm" id="configure-time-btn" data-i18n="settings.timezone_section.configure">Configure Time</button>
+          </div>
+          <small class="settings-hint" data-i18n="settings.timezone_section.hint">Saved to your account and used on every device</small>
+        </div>
       </div>
 
       <div class="settings-section" id="section-layout">
@@ -4474,7 +4511,7 @@
   <!-- Shared with the server (src/automod.js requires the same file) so both
        sides reach identical verdicts on a link. Must load before app.js. -->
   <script src="/js/automod-rules.js?v=3.44.0"></script>
-  <script type="module" src="/js/app.js?v=4.8.1"></script>
+  <script type="module" src="/js/app.js?v=4.8.2"></script>
   <script src="/js/plugin-loader.js?v=4.6.10"></script>
   <script src="/js/modules/stream-debug.js?v=3.16.15"></script>
   <script src="/js/password-eye.js?v=3.17.1"></script>

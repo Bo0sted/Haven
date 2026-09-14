@@ -1639,10 +1639,10 @@ _renderBanList(bans) {
       <div class="ban-info">
         <strong>${this._escapeHtml(b.username)}</strong>
         <span class="ban-reason">${b.reason ? this._escapeHtml(b.reason) : t('settings.admin.no_reason')}</span>
-        <span class="ban-date">${new Date(b.created_at).toLocaleDateString()}</span>
+        <span class="ban-date">${this._fmtDate(b.created_at)}</span>
         ${b.appeal ? `
         <div class="ban-appeal">
-          <span class="ban-appeal-label">📝 ${t('settings.admin.ban_appeal_label')}${b.appeal_at ? ' · ' + new Date(b.appeal_at).toLocaleDateString() : ''}</span>
+          <span class="ban-appeal-label">📝 ${t('settings.admin.ban_appeal_label')}${b.appeal_at ? ' · ' + this._fmtDate(b.appeal_at) : ''}</span>
           <span class="ban-appeal-text">${this._escapeHtml(b.appeal)}</span>
         </div>` : ''}
       </div>
@@ -1688,7 +1688,7 @@ _renderIpBanList(bans) {
       <div class="ban-info">
         <strong>${this._escapeHtml(b.ip)}</strong>
         <span class="ban-reason">${b.reason ? this._escapeHtml(b.reason) : t('settings.admin.no_reason')}</span>
-        <span class="ban-date">${new Date(b.created_at).toLocaleDateString()}${b.banned_by_name ? ` — ${this._escapeHtml(b.banned_by_name)}` : ''}</span>
+        <span class="ban-date">${this._fmtDate(b.created_at)}${b.banned_by_name ? ` — ${this._escapeHtml(b.banned_by_name)}` : ''}</span>
       </div>
       <div class="ban-actions">
         <button class="btn-sm btn-unban" data-ip="${this._escapeHtml(b.ip)}">${t('settings.admin.unban_btn')}</button>
@@ -1715,7 +1715,7 @@ _renderDeletedUsersList(entries) {
         <strong>${this._escapeHtml(e.display_name || e.username)}</strong>
         ${e.display_name ? `<span class="ban-reason">@${this._escapeHtml(e.username)}</span>` : ''}
         <span class="ban-reason">${e.reason ? this._escapeHtml(e.reason) : t('settings.admin.no_reason')}</span>
-        <span class="ban-date">${new Date(e.deleted_at).toLocaleDateString()}${e.deleted_by_name ? ` ${t('settings.admin.deleted_by', { name: this._escapeHtml(e.deleted_by_name) })}` : ''}</span>
+        <span class="ban-date">${this._fmtDate(e.deleted_at)}${e.deleted_by_name ? ` ${t('settings.admin.deleted_by', { name: this._escapeHtml(e.deleted_by_name) })}` : ''}</span>
       </div>
     </div>
   `).join('');
@@ -1988,7 +1988,7 @@ _renderAllMembers(members) {
     const bannedBadge = m.banned ? `<span class="aml-banned-badge">${t('settings.admin.badge_banned')}</span>` : '';
     const onlineDot = m.online && !m.banned ? 'aml-online' : 'aml-offline';
     const created = m.createdAt ? new Date(m.createdAt.endsWith('Z') ? m.createdAt : m.createdAt + 'Z') : null;
-    const joinedStr = created ? created.toLocaleDateString() : '';
+    const joinedStr = created ? this._fmtDate(created) : '';
     const isNew = created && (Date.now() - created.getTime()) < 7 * 24 * 60 * 60 * 1000;
     const newBadge = isNew ? `<span class="aml-new-badge">${t('settings.admin.badge_new')}</span>` : '';
 
@@ -6159,7 +6159,7 @@ _setupAuditLog() {
     if (!iso) return '';
     try {
       const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
-      return d.toLocaleString();
+      return this._fmtDateTime(d);
     } catch { return iso; }
   };
 

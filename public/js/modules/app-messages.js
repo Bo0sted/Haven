@@ -919,7 +919,7 @@ _createMessageEl(msg, prevMsg) {
   const threadHtml = isDmContext ? ''
     : (msg.thread ? this._renderThreadPreview(msg.id, msg.thread, { forum: isForum })
       : (isForum ? this._renderThreadPreview(msg.id, { count: 0 }, { forum: true }) : ''));
-  const editedHtml = msg.edited_at ? `<span class="edited-tag" title="${t('app.messages.edited_at', { date: new Date(msg.edited_at).toLocaleString() })}">${t('app.messages.edited')}</span>` : '';
+  const editedHtml = msg.edited_at ? `<span class="edited-tag" title="${t('app.messages.edited_at', { date: this._fmtDateTime(msg.edited_at) })}">${t('app.messages.edited')}</span>` : '';
   const pinnedTag = msg.pinned ? `<span class="pinned-tag" title="${t('app.messages.pinned')}">📌</span>` : '';
   const archivedTag = msg.is_archived ? `<span class="archived-tag" title="${t('app.messages.protected')}">🛡️</span>` : '';
   const ephemeralTag = msg.ephemeral ? `<span class="ephemeral-tag" title="${t('app.messages.only_visible_to_you')}">${t('app.messages.only_visible_to_you')}</span>` : '';
@@ -1028,7 +1028,7 @@ _createMessageEl(msg, prevMsg) {
     el.dataset.userId = msg.user_id;
     el.dataset.username = msg.username;
     el.dataset.time = msg.created_at;
-    el.dataset.timeShort = new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    el.dataset.timeShort = this._fmtTime(msg.created_at);
     if (Number.isInteger(msg.id) && msg.id > 0) el.dataset.msgId = msg.id;
     el.dataset.rawContent = msg.content;
     if (msg.persona_id) el.dataset.personaId = String(msg.persona_id);
@@ -1053,7 +1053,7 @@ _createMessageEl(msg, prevMsg) {
     if (msg.borderTransform) el.dataset.borderTransform = JSON.stringify(msg.borderTransform);
     if (msg.animateProfile) el.dataset.animateProfile = msg.animateProfile;
     el.innerHTML = `
-      <span class="compact-time">${new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="compact-time">${this._fmtTime(msg.created_at)}</span>
       <div class="message-body">
         <div class="message-content">${pinnedTag}${archivedTag}${ephemeralTag}${this._formatContent(msg.content)}${editedHtml}${statusSlotHtml}</div>
         ${pollHtml}${roleMenuHtml}
@@ -1153,7 +1153,7 @@ _createMessageEl(msg, prevMsg) {
   el.dataset.userId = msg.user_id;
   el.dataset.username = msg.username;
   el.dataset.time = msg.created_at;
-  el.dataset.timeShort = new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  el.dataset.timeShort = this._fmtTime(msg.created_at);
   if (Number.isInteger(msg.id) && msg.id > 0) el.dataset.msgId = msg.id;
   el.dataset.rawContent = msg.content;
   if (msg.persona_id) el.dataset.personaId = String(msg.persona_id);

@@ -578,6 +578,13 @@ module.exports = function register(socket, ctx) {
       'promo_seen_desktop', 'promo_seen_android', 'recovery_notice_seen',
       // The top-bar Android banner, closed once (#5594).
       'android_banner_seen',
+      // Persisted localization. timezone is an IANA zone id (e.g.
+      // "America/New_York") so DST is resolved per-instant by Intl, never a
+      // frozen offset. time_format is '12' or '24'. tz_prompt records that the
+      // user dismissed the first-run modal with Skip ('skipped') so it is never
+      // auto-shown again; "Remind later" persists nothing, so the modal returns
+      // on the next launch until they confirm or skip.
+      'timezone', 'time_format', 'tz_prompt',
     ];
     // 'effects' is a JSON array of effect ids, longer than the other values.
     const maxLen = key === 'effects' ? 400 : 50;

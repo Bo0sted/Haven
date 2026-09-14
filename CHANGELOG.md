@@ -14,6 +14,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 ## [Unreleased]
 
 ### Added
+- **Persisted timezone and time format.** Settings has a new Localization
+  section (the old Language section, renamed) with a Configure Time button. It
+  opens a modal where you pick your timezone from the full IANA list and choose
+  12 or 24 hour time, with a live preview. The choice is saved to your account,
+  so every device shows times your way, and it is never shown to other users.
+  Timezones are stored as IANA zone ids, so daylight saving is always applied
+  correctly for each timestamp. On the first login after the update the modal
+  offers Skip (never ask again), Remind later (ask again next launch), or
+  Confirm. Anyone who skips or has not chosen keeps the old behaviour, where
+  times follow the browser. Guests are not prompted.
 - **Send later shortcuts (#5657).** Ctrl+Enter in the message box opens Send
   later with your text, and the Send later box takes the same formatting
   shortcuts and link paste as the composer. Thanks to @birdcrazy.

@@ -1346,11 +1346,22 @@ _startStatusBar() {
 },
 
 _updateClock() {
+  const el = document.getElementById('status-clock');
+  if (!el) return;
   const now = new Date();
+  // Honour a confirmed timezone / clock preference. With nothing confirmed the
+  // clock keeps its original device-local 24-hour HH:MM:SS look, so Skip and
+  // "Remind later" change nothing here.
+  if (this._userTimeZone?.() || this._userHour12?.() !== undefined) {
+    try {
+      el.textContent = this._fmtTime(now, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return;
+    } catch { /* fall through to the device-local default */ }
+  }
   const h = now.getHours().toString().padStart(2, '0');
   const m = now.getMinutes().toString().padStart(2, '0');
   const s = now.getSeconds().toString().padStart(2, '0');
-  document.getElementById('status-clock').textContent = `${h}:${m}:${s}`;
+  el.textContent = `${h}:${m}:${s}`;
 },
 
 /**

@@ -1321,6 +1321,7 @@
     "nav": {
       "user_group": "User",
       "language": "Language",
+      "localization": "Localization",
       "layout": "Layout",
       "sounds": "Sounds",
       "push": "Push",
@@ -1382,11 +1383,22 @@
       "backup": "Backup",
       "audit_log": "Audit Log"
     },
+    "localization_section": {
+      "title": "Localization"
+    },
     "language_section": {
       "title": "Language",
       "label": "Language",
       "auto": "Automatic",
       "hint": "Changes apply immediately"
+    },
+    "timezone_section": {
+      "title": "Timezone",
+      "configure": "Configure Time",
+      "hint": "Saved to your account and used on every device",
+      "not_set": "Using this device's timezone",
+      "fmt_12": "12-hour",
+      "fmt_24": "24-hour"
     },
     "layout": {
       "title": "Layout",
@@ -2488,6 +2500,18 @@
     "search_placeholder": "Search settings (Ctrl+F)"
   },
   "modals": {
+    "timezone": {
+      "title": "Time & Timezone",
+      "desc": "Set your preferred timezone and formatting here. These settings will be persisted to your account and will be used across all your devices. Your timezone is never revealed to any user.",
+      "zone_label": "Timezone",
+      "format_label": "Time format",
+      "format_12": "12-hour",
+      "format_24": "24-hour (military)",
+      "preview_label": "This is how times will look",
+      "skip": "Skip",
+      "later": "Remind later",
+      "confirm": "Confirm"
+    },
     "common": {
       "cancel": "Cancel",
       "save": "Save",

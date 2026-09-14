@@ -817,7 +817,7 @@ _showProfilePopup(profile) {
     : (isSelf ? `<div class="profile-popup-bio profile-bio-empty">${t('users.no_bio')}</div>` : '');
 
   // Join date
-  const joinDate = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+  const joinDate = profile.createdAt ? this._fmtDate(profile.createdAt, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
   // Action buttons. Nickname lives in the unified menu; the gear opens that
   // menu for anyone with mod powers over this user.

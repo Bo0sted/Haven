@@ -316,7 +316,7 @@ _createForumTopicEl(msg) {
       <div class="forum-topic-meta">
         <span class="message-author forum-topic-author">${this._escapeHtml(msg.username || '')}</span>
         <span class="forum-topic-replies" data-thread-parent="${msg.id}">${count ? `💬 ${t('forum.replies', { count })}` : t('thread_runtime.reply_to_topic')}</span>
-        <span class="forum-topic-when" title="${when.toLocaleString()}">${this._forumAgo(when)}</span>
+        <span class="forum-topic-when" title="${this._fmtDateTime(when)}">${this._forumAgo(when)}</span>
         ${canEdit ? `<button type="button" class="forum-topic-edit" title="${t('forum.edit_post')}">✎</button>` : ''}
       </div>
     </div>`;
@@ -438,7 +438,7 @@ _forumAgo(date) {
   if (s < 3600) return t('forum.minutes_ago', { n: Math.floor(s / 60) });
   if (s < 86400) return t('forum.hours_ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('forum.days_ago', { n: Math.floor(s / 86400) });
-  return date.toLocaleDateString();
+  return this._fmtDate(date);
 },
 
 // A new top-level message in a forum is a new topic: it goes on top.

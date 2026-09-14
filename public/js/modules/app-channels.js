@@ -1964,7 +1964,7 @@ _renderChannels() {
     if (_mutedList.includes(ch.code)) _badges.push(`<span class="ch-disabled-badge" title="${t('channels.muted_unsubscribed')}">🔕</span>`);
     const indicators = _badges.length ? `<span class="channel-indicators" style="margin-left:auto;display:flex;gap:2px;align-items:center;flex-shrink:0">${_badges.join('')}</span>` : '';
 
-    const expiryTitle = isTemporary ? ` title="${t('channels.temporary_expires', { date: new Date(ch.expires_at).toLocaleString() })}"` : '';
+    const expiryTitle = isTemporary ? ` title="${t('channels.temporary_expires', { date: this._fmtDateTime(ch.expires_at) })}"` : '';
     el.innerHTML = `
       ${hasSubs ? `<span class="channel-collapse-arrow${isCollapsed ? ' collapsed' : ''}" title="${t('channels.expand_collapse')}">▾</span>` : ''}
       <span class="channel-hash"${expiryTitle}>${hashIcon}</span>

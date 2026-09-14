@@ -2083,7 +2083,7 @@ _setupSocketListeners() {
         if (!editedTag) {
           editedTag = document.createElement('span');
           editedTag.className = 'edited-tag';
-          editedTag.title = t('header.messages.edited_at', { date: new Date(data.editedAt).toLocaleString() });
+          editedTag.title = t('header.messages.edited_at', { date: this._fmtDateTime(data.editedAt) });
           editedTag.textContent = t('header.messages.edited');
           contentEl.appendChild(editedTag);
         }
@@ -2485,6 +2485,10 @@ _setupSocketListeners() {
     // Activity toggles live entirely server-side (other clients must honour
     // them), so the UI can only be correct once prefs land.
     this._syncActivityUI?.();
+    // Reflect any saved timezone/format in the settings row now that prefs are
+    // known. The first-run modal itself is gated separately via the welcome
+    // popup sequencer (_shouldShowTzPrompt).
+    this._updateTimezoneSummary?.();
   });
 
   // Server's verdict on the recovery-codes notice (see the connect handler's
