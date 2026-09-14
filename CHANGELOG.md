@@ -41,6 +41,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
   the whole message while editing. Reported by @quakeman00.
 
 ### Changed
+- **Send later reads the time in your configured timezone.** The Send at
+  field now uses the same wall-clock picker as the /time command instead of a
+  native datetime-local input, so the moment you pick is anchored to your
+  configured timezone rather than whatever the browser reports. A hardened
+  browser that reports a false zone no longer schedules the message at the
+  wrong real-world time. With no timezone configured it falls back to the
+  browser as before.
 - **Links are underlined in chat (#5661).** A thin underline, so a link reads
   as one on any palette rather than by colour alone; a colour span around a
   link leaves the link its own colour. Asked for by @quakeman00 and
