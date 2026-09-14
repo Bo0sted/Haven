@@ -3084,10 +3084,12 @@ _setupUI() {
       const di = document.getElementById('tsm-cal-input');
       if (!di) return;
       const cur = this._tsmBuildDate();
-      // Seed the native picker with the fields' current date so it opens there.
+      // Seed the native picker with the fields' current date so it opens there,
+      // decomposed in the same zone the wall-clock fields are read in.
       if (cur) {
         const p = n => String(n).padStart(2, '0');
-        di.value = `${cur.getFullYear()}-${p(cur.getMonth() + 1)}-${p(cur.getDate())}`;
+        const parts = this._zonedParts(cur);
+        di.value = `${parts.year}-${p(parts.monthIndex + 1)}-${p(parts.day)}`;
       }
       try { di.showPicker(); } catch { di.focus(); di.click(); }
     });
@@ -6663,16 +6665,18 @@ _tsm24hDefault() {
 _openTimeModal() {
   const modal = document.getElementById('time-modal');
   if (!modal) return;
-  const now = new Date();
+  // Seed "now" in the reader's confirmed zone (device zone when none is set),
+  // so a privacy browser reporting a false clock does not preset the wrong time.
+  const now = this._nowZonedParts();
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  set('tsm-year', now.getFullYear());
-  set('tsm-month', now.getMonth() + 1);
-  set('tsm-day', now.getDate());
-  set('tsm-minute', now.getMinutes());
-  set('tsm-second', now.getSeconds());
+  set('tsm-year', now.year);
+  set('tsm-month', now.monthIndex + 1);
+  set('tsm-day', now.day);
+  set('tsm-minute', now.minute);
+  set('tsm-second', now.second);
   // Default the clock mode to the reader's own convention, then seed the hour
   // field in whatever units that mode expects.
-  this._tsmSetMeridiem(this._tsm24hDefault() ? '24' : (now.getHours() < 12 ? 'AM' : 'PM'), now.getHours());
+  this._tsmSetMeridiem(this._tsm24hDefault() ? '24' : (now.hour < 12 ? 'AM' : 'PM'), now.hour);
   this._tsmRenderStyles();
   this._tsmUpdatePreview();
   modal.style.display = 'flex';
@@ -6721,9 +6725,13 @@ _tsmBuildDate() {
   if (![y, mo, d, mi, se, h24].every(Number.isFinite)) return null;
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
   if (h24 < 0 || h24 > 23 || mi < 0 || mi > 59 || se < 0 || se > 59) return null;
-  const when = new Date(y, mo - 1, d, h24, mi, se, 0);
-  // Reject dates JS silently rolls forward (e.g. 2026-02-31 → March).
-  if (when.getFullYear() !== y || when.getMonth() !== mo - 1 || when.getDate() !== d) return null;
+  // Interpret the entered wall-clock in the reader's confirmed zone (device
+  // zone when none is set), so the instant matches what the person meant.
+  const when = this._wallToInstant(y, mo - 1, d, h24, mi, se);
+  // Reject dates JS silently rolls forward (e.g. 2026-02-31 → March), checked
+  // in the same zone the wall-clock was read in.
+  const back = this._zonedParts(when);
+  if (back.year !== y || back.monthIndex !== mo - 1 || back.day !== d) return null;
   return when;
 },
 

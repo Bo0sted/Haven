@@ -565,6 +565,59 @@ _fmtDateTime(value, opts = {}, locale) {
   return d.toLocaleString(locale, this._dtOpts(opts));
 },
 
+// ── Wall-clock <-> instant in the reader's confirmed zone ───────────────
+// The formatters above render an instant; these go the other way, for the
+// features that let someone type a wall-clock time (the /time command and its
+// modal). With no timezone confirmed they fall back to the device zone, so the
+// behaviour is unchanged; with one set the entered time is anchored to that
+// zone instead of whatever the browser reports, which is the whole point on a
+// privacy browser that lies about the system clock.
+
+/** The wall-clock parts of an instant in the confirmed zone (or the device
+ *  zone when none is set). monthIndex is 0-based to match the Date API. */
+_zonedParts(date, tz = this._userTimeZone()) {
+  const d = (date instanceof Date) ? date : new Date(date);
+  if (!tz) {
+    return { year: d.getFullYear(), monthIndex: d.getMonth(), day: d.getDate(),
+             hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds() };
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(d);
+  const m = {};
+  for (const p of parts) if (p.type !== 'literal') m[p.type] = p.value;
+  let hour = Number(m.hour);
+  if (hour === 24) hour = 0; // some engines report midnight as 24
+  return { year: Number(m.year), monthIndex: Number(m.month) - 1, day: Number(m.day),
+           hour, minute: Number(m.minute), second: Number(m.second) };
+},
+
+/** Milliseconds that `tz` is ahead of UTC at instant `ts` (negative if behind). */
+_zoneOffsetMs(tz, ts) {
+  const p = this._zonedParts(new Date(ts), tz);
+  const asUTC = Date.UTC(p.year, p.monthIndex, p.day, p.hour, p.minute, p.second);
+  return asUTC - ts;
+},
+
+/** Turn a wall-clock (year, 0-based month, day, hour, minute, second) read in
+ *  the confirmed zone into the matching instant. With no zone set this is
+ *  exactly new Date(y, mo, d, ...) in the device zone, so the fallback path is
+ *  byte-for-byte the old behaviour. */
+_wallToInstant(y, moIndex, d, h, mi, s, tz = this._userTimeZone()) {
+  if (!tz) return new Date(y, moIndex, d, h, mi, s, 0);
+  const naive = Date.UTC(y, moIndex, d, h, mi, s);
+  // One correction, then a second pass so a DST boundary resolves correctly.
+  let inst = naive - this._zoneOffsetMs(tz, naive);
+  inst = naive - this._zoneOffsetMs(tz, inst);
+  return new Date(inst);
+},
+
+/** "Now" decomposed into the confirmed zone's wall-clock, for seeding pickers. */
+_nowZonedParts() {
+  return this._zonedParts(new Date());
+},
+
 /** "in 5 minutes" / "3 hours ago", in the largest unit that still reads well. */
 _relativeTimestamp(ms, locale) {
   const diff = ms - Date.now();
@@ -678,11 +731,14 @@ _parseTimeExpression(input, now = new Date()) {
   let when;
   if (ymd) {
     const y = Number(ymd[1]), mo = Number(ymd[2]) - 1, d = Number(ymd[3]);
-    when = new Date(y, mo, d, hour, mi, 0, 0);
-    // Reject dates that do not exist (JS rolls 2026-02-31 into March).
-    if (when.getFullYear() !== y || when.getMonth() !== mo || when.getDate() !== d) return null;
+    when = this._wallToInstant(y, mo, d, hour, mi, 0);
+    // Reject dates that do not exist (JS rolls 2026-02-31 into March), checked
+    // in the same zone the wall-clock was read in.
+    const back = this._zonedParts(when);
+    if (back.year !== y || back.monthIndex !== mo || back.day !== d) return null;
   } else {
-    when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (dayShift || 0), hour, mi, 0, 0);
+    const nowP = this._zonedParts(now);
+    when = this._wallToInstant(nowP.year, nowP.monthIndex, nowP.day + (dayShift || 0), hour, mi, 0);
     // A bare time that already went by today means the next one. Someone
     // saying "8pm" at nine in the evening is scheduling, not reminiscing.
     if (dayShift === null && when.getTime() <= now.getTime()) when = new Date(when.getTime() + 86400000);
