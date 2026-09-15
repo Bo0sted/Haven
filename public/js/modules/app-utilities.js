@@ -4181,6 +4181,17 @@ _startEditMessage(msgEl, msgId) {
   textarea.addEventListener('keydown', (e) => {
     e.stopPropagation();
 
+    // Ctrl/Cmd+E toggles the emoji picker for this edit. The global shortcut
+    // in app-ui.js can't fire here because we stopPropagation above, so it's
+    // re-handled locally; _activeEditTextarea (set above) routes the pick into
+    // this textarea rather than the main composer.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === 'e') {
+      e.preventDefault();
+      this._activeEditTextarea = textarea;
+      this._toggleEmojiPicker();
+      return;
+    }
+
     // Handle @mention and :emoji dropdown navigation in edit mode
     const mentionDd = document.getElementById('mention-dropdown');
     if (mentionDd && mentionDd.style.display !== 'none') {
