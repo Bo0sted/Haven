@@ -83,6 +83,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
   now; the uploads folder is only replaced when the backup has one.
   Reported by @birdcrazy.
 - **Forum modal header and toolbar styling (#5652).** Thanks to @birdcrazy.
+- **Ctrl+E opens the emoji picker while editing a message (#5668).** The
+  edit box swallowed the shortcut. Thanks to @Bo0sted.
+- **The Banner Display entry in Settings is hidden when the server has no
+  banner (#5669).** The section already was; the entry in the list was not.
+  Thanks to @birdcrazy.
 
 ## [4.8.0] - 2026-09-12
 
