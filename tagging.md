@@ -13,6 +13,19 @@ Phases:
 3. **Gallery + filters** (LATER) — surface tags in the channel media gallery and let it filter by tag.
 4. **Admin settings** (LATER) — make the two hardcoded limits admin-configurable.
 
+## Run locally
+Environment-specific to the current dev box; adjust paths on another machine. This box has no `node` on PATH, only a vendored one, and the demo server data lives in `~/.haven` (admin login admin/admin, its own DB, already seeded).
+
+```
+export PATH="$PWD/.local-node/node-v22.23.2-linux-x64/bin:$PATH"
+FORCE_HTTP=true PORT=3000 node server.js
+```
+
+`FORCE_HTTP=true` lets a local browser load it over plain http. Server changes need a restart (no hot reload); client changes need a hard refresh. Run the tests with `node --test --test-concurrency=1` (expect 306 pass / 11 fail: the 11 are pre-existing, unrelated to tagging). Inspect stored tags directly:
+```
+sqlite3 ~/.haven/haven.db "SELECT m.id, ut.name FROM attachment_tags at JOIN upload_tags ut ON ut.id=at.tag_id JOIN messages m ON m.id=at.message_id ORDER BY m.id DESC LIMIT 20;"
+```
+
 ## Decisions (locked with the user)
 - **Global vocabulary**, one shared tag list server-wide. Not per-channel.
 - **Apply vs create split:** applying an existing tag is open to any uploader; minting a NEW tag needs the `manage_tags` permission. Enforced server-side, not just in the UI.
