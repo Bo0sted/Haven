@@ -54,7 +54,7 @@ Defaults live in `src/uploadTags.js`, mirrored client-side in `app-media.js` (`_
 
 Normalization (`normalizeTagName`): trim, collapse inner whitespace, reject empty / over-length, allow `\p{L}\p{N}` plus space, hyphen, underscore (blocks control chars, punctuation, emoji). Display keeps casing; `name_norm` is `toLocaleLowerCase`.
 
-## Phase 1 — as built (DONE, not committed)
+## Phase 1 — as built (DONE, committed ace5d00)
 ### Server
 - `src/uploadTags.js` (NEW) — constants, `normalizeTagName`, `extractUploadPath` (first `/uploads/...` in content), `searchTags` (empty = browse-all, else prefix; capped), `applyTagsToMessage` (dedupe + cap, get-or-create gated by `canCreate`, `INSERT OR IGNORE` links, one transaction, returns applied names, tolerant).
 - `src/database.js` — creates both tables next to `upload_ownership`; adds `manage_tags` to the seeded Server Mod role (fresh DBs only; existing DBs grant it in the role editor, and admins bypass the check anyway).
@@ -86,7 +86,7 @@ sqlite3 ~/.haven/haven.db "SELECT m.id, ut.name, at.rel_path FROM attachment_tag
 ```
 Note: messages sent BEFORE this feature have no tags, so only new tagged uploads show a footer.
 
-## Phase 2 — search (`tag:` token) + clickable tags (DONE, not committed)
+## Phase 2 — search (`tag:` token) + clickable tags (DONE, committed ace5d00)
 The search handler parses filters at `messages.js` (~450) and AND-s SQL conditions onto a channel-scoped, permission-checked query. `tag:` slotted into the same mold.
 ### Server (`messages.js`)
 - Parse: `filters.tag`, captured by `/\btag:"([^"]+)"|\btag:(\S+)/gi` so quoted multi-word values work (`tag:"hello world"`). Added to the `anyFilter` guard so a lone `tag:` is valid.
@@ -132,7 +132,8 @@ Client: `public/app.html`, `public/js/modules/app-media.js`, `public/js/modules/
 
 ## Done
 - Agreed the model and all Phase 1 design decisions with the user.
-- Built Phase 1 (compose + store + display), verified via unit-level DB tests + static checks + clean boot. Not committed.
+- Built Phase 1 (compose + store + display), verified via unit-level DB tests + static checks + clean boot.
 - Added the "Add tag" popup browse-all-on-open behavior and the message Tags footer as a follow-up within Phase 1.
-- Built Phase 2 (non-strict `tag:` prefix search, filter-popover picker, clickable message/result tag chips, tags on search results). Locked the soft-delete decision for Phase 4. Verified via DB tests + static checks + clean boot. Not committed.
-- NOTHING committed yet across any phase (per the user's workflow).
+- Built Phase 2 (non-strict `tag:` prefix search, filter-popover picker, clickable message/result tag chips, tags on search results). Locked the soft-delete decision for Phase 4. Verified via DB tests + static checks + clean boot.
+- **Phases 1 and 2 committed together as `ace5d00`** on branch `tagging` ("still work in progress"). Not pushed. Nothing after that commit is committed yet.
+- Phases 3 and 4 not started.
