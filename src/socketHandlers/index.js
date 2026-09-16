@@ -51,6 +51,7 @@ const registerRoles      = require('./roles');
 const registerAdmin      = require('./admin');
 const registerFerry      = require('./ferry');
 const registerGroupE2E   = require('./groupE2E');
+const registerTags       = require('./tags');
 const {
   NATIVE_SCREEN_SIGNAL_EVENTS,
   clearNativeScreenOfferWindows,
@@ -1902,6 +1903,10 @@ function setupSocketHandlers(io, db, opts = {}) {
       // 10s of use (refine + a run of pagination + a sort or two); the input
       // is debounced 400ms so typing can't spam it. (search-overhaul)
       search:  { max: 10, windowMs: 10000 },
+      // The composer's tag picker hits the DB per keystroke. The input is
+      // debounced, but a scripted client could still hammer it, so it gets its
+      // own per-account cap on top of the shared event budget. (#tagging)
+      tagSearch: { max: 20, windowMs: 10000 },
       // A Ferry member lookup is not a local query: each one fans out to up to
       // five Discord REST calls. Discord bans tokens that generate a burst of
       // 429s, so this is the cap that protects the bot, not the database. The
@@ -2269,6 +2274,7 @@ function setupSocketHandlers(io, db, opts = {}) {
     registerAdmin(socket, ctx);
     registerFerry(socket, ctx);
     registerGroupE2E(socket, ctx);
+    registerTags(socket, ctx);
 
     // ── Disconnect handler ────────────────────────────────
     // Socket.IO hands us why the socket went away, and throwing that away made

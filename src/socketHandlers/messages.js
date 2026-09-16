@@ -4,6 +4,7 @@ const path = require('path');
 const fs   = require('fs');
 const { utcStamp, isString, isInt, sanitizeText, parseBorderTransform, toReplyContext, stripRoleMentions } = require('./helpers');
 const { getActiveTokenizer, minQueryChars, buildMatchQuery } = require('../searchIndex');
+const { applyTagsToMessage, normalizeTagName, escapeLike } = require('../uploadTags');
 
 module.exports = function register(socket, ctx) {
   const { io, db, state, userHasPermission, getUserEffectiveLevel, getChannelRoleChain,
@@ -227,6 +228,7 @@ module.exports = function register(socket, ctx) {
     const reactionMap = new Map();
     const pollVoteMap = new Map();
     const roleMenuMap = new Map();
+    const attachmentTagMap = new Map();
     let pinnedSet = null;
     if (msgIds.length > 0) {
       const ph = msgIds.map(() => '?').join(',');
@@ -254,6 +256,18 @@ module.exports = function register(socket, ctx) {
       `).all(...msgIds).forEach(v => {
         if (!pollVoteMap.has(v.message_id)) pollVoteMap.set(v.message_id, []);
         pollVoteMap.get(v.message_id).push(v);
+      });
+
+      // Attachment tags (#tagging): every tag across a message's attachments,
+      // folded into one deduped list per message for the message footer.
+      db.prepare(`
+        SELECT at.message_id, ut.name
+        FROM attachment_tags at JOIN upload_tags ut ON ut.id = at.tag_id
+        WHERE at.message_id IN (${ph}) ORDER BY ut.name_norm
+      `).all(...msgIds).forEach(r => {
+        if (!attachmentTagMap.has(r.message_id)) attachmentTagMap.set(r.message_id, []);
+        const arr = attachmentTagMap.get(r.message_id);
+        if (!arr.includes(r.name)) arr.push(r.name);
       });
     }
 
@@ -344,6 +358,8 @@ module.exports = function register(socket, ctx) {
         obj.thread = tinfo;
       }
       if ('tags' in m) obj.tags = parseTags(m.tags);
+      const atags = attachmentTagMap.get(m.id);
+      if (atags && atags.length) obj.attachmentTags = atags;
       if ('closed' in m) obj.closed = !!m.closed;
       if ('nsfw' in m) obj.nsfw = !!m.nsfw;
       if (m.poll_data) {
@@ -431,8 +447,11 @@ module.exports = function register(socket, ctx) {
     const token = data.token;
 
     // ── Parse filters out of the query text ──
-    const filters = { from: null, in: null, has: null, pinned: null, before: null, after: null, during: null };
+    const filters = { from: null, in: null, has: null, pinned: null, before: null, after: null, during: null, tag: null };
     query = query.replace(/\bfrom:(\S+)/gi, (_, v) => { filters.from = v; return ''; });
+    // tag: supports a quoted value so multi-word tags work (tags allow spaces);
+    // the filter picker and clickable message tags append the quoted form.
+    query = query.replace(/\btag:"([^"]+)"|\btag:(\S+)/gi, (_, quoted, bare) => { filters.tag = quoted || bare; return ''; });
     // A leading # means "this is a channel code" (unambiguous, what the filter
     // picker appends); without it, in: is treated as a channel name.
     query = query.replace(/\bin:(#?)(\S+)/gi, (_, hash, v) => { filters.in = v; filters.inIsCode = !!hash; return ''; });
@@ -461,7 +480,7 @@ module.exports = function register(socket, ctx) {
 
     // Never dump the whole corpus: require free text or at least one filter.
     const anyFilter = filters.from || filters.has || filters.in || filters.pinned ||
-                      filters.before || filters.after || filters.during;
+                      filters.before || filters.after || filters.during || filters.tag;
     if (!usesFts && !anyFilter) {
       return socket.emit('search-results', empty);
     }
@@ -519,6 +538,17 @@ module.exports = function register(socket, ctx) {
       conditions.push('m.id IN (SELECT message_id FROM pinned_messages)');
     }
 
+    // ── tag: filter (non-strict, case-folded PREFIX match on an attachment
+    // tag) ── The value need not be a confirmed vocabulary tag; a typed prefix
+    // like "do" matches "dog", so partial queries still surface results. A
+    // message matches if any of its attachment tags starts with the value.
+    if (filters.tag) {
+      const norm = normalizeTagName(filters.tag);
+      if (!norm) return socket.emit('search-results', empty);
+      conditions.push("m.id IN (SELECT at.message_id FROM attachment_tags at JOIN upload_tags ut ON ut.id = at.tag_id WHERE ut.name_norm LIKE ? ESCAPE '\\')");
+      params.push(escapeLike(norm.norm) + '%');
+    }
+
     // ── date filters (created_at). during: is the whole named day. ──
     if (filters.after)  { conditions.push('m.created_at >= ?'); params.push(filters.after); }
     if (filters.before) { conditions.push('m.created_at < ?');  params.push(filters.before); }
@@ -570,6 +600,20 @@ module.exports = function register(socket, ctx) {
       ).all(...resultIds);
       const countMap = new Map(counts.map(c => [c.thread_id, c.n]));
       results.forEach(r => { r.thread_count = countMap.get(r.id) || 0; });
+
+      // Attachment tags for this page, so results render the same Tags footer as
+      // the channel view (and its chips are clickable). One deduped list per row.
+      const tagMap = new Map();
+      db.prepare(`
+        SELECT at.message_id, ut.name
+        FROM attachment_tags at JOIN upload_tags ut ON ut.id = at.tag_id
+        WHERE at.message_id IN (${ph}) ORDER BY ut.name_norm
+      `).all(...resultIds).forEach(row => {
+        if (!tagMap.has(row.message_id)) tagMap.set(row.message_id, []);
+        const arr = tagMap.get(row.message_id);
+        if (!arr.includes(row.name)) arr.push(row.name);
+      });
+      results.forEach(r => { const tg = tagMap.get(r.id); if (tg && tg.length) r.attachmentTags = tg; });
     }
 
     socket.emit('search-results', { results, total, page, query: data.query, filters, token });
@@ -1174,6 +1218,25 @@ module.exports = function register(socket, ctx) {
         'INSERT INTO messages (channel_id, user_id, content, reply_to, burn_seconds, persona_id, persona_username, persona_avatar, break_chain, ferry_target, title, tags, nsfw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(channel.id, socket.user.id, finalContent, replyTo, burnSeconds, personaId, personaUsername, personaAvatar, breakChain, ferryLabel, topicTitle, topicTags, topicNsfw);
 
+      // Attachment tags (#tagging): the composer sends `attachmentTags` alongside
+      // an upload's URL. Global vocabulary, applied to the file this message
+      // carries. Not on E2E DMs (server never sees their plaintext). Minting a
+      // new tag needs manage_tags; applying an existing one is open to uploaders.
+      // Tagging is non-critical — a failure here never sinks the message.
+      let appliedTags = [];
+      if (!channel.is_dm && Array.isArray(data.attachmentTags) && data.attachmentTags.length) {
+        try {
+          const canCreate = socket.user.isAdmin || userHasPermission(socket.user.id, 'manage_tags', null);
+          appliedTags = applyTagsToMessage(db, {
+            messageId: result.lastInsertRowid,
+            content: finalContent,
+            tagNames: data.attachmentTags,
+            userId: socket.user.id,
+            canCreate,
+          }) || [];
+        } catch (e) { /* tags are best-effort */ }
+      }
+
       const message = {
         id: result.lastInsertRowid,
         content: finalContent,
@@ -1200,6 +1263,7 @@ module.exports = function register(socket, ctx) {
         real_username: personaId ? socket.user.displayName : undefined,
         break_chain: breakChain || undefined,
         ferry_target: ferryLabel || undefined,
+        attachmentTags: appliedTags.length ? appliedTags : undefined,
       };
 
       if (replyTo) {
