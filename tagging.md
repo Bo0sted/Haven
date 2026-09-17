@@ -37,7 +37,7 @@ sqlite3 ~/.haven/haven.db "SELECT m.id, ut.name FROM attachment_tags at JOIN upl
 - **`tag:` search is non-strict (PREFIX match), not exact.** A typed partial like `tag:do` matches `dog`/`dogs`/`doghouse`; the value need not be a confirmed vocabulary tag. Clicking a message tag also runs a prefix search of that tag's name (in practice that is just that tag unless a longer tag shares its prefix). Substring instead of prefix would be a one-line change if wanted broader.
 - **Retroactive editing: who can edit whose tags.** Editing tags on your OWN message is always allowed (applying existing tags is open; minting a new one still needs `manage_tags`, same ladder as the composer). Editing SOMEONE ELSE'S message needs `manage_tags` (chosen over `delete_message` so tag curation is not coupled to a destructive moderation power). Admin does everything. One unified editor, gated by permission, not two separate views.
 - **The "Edit tags" entry appears on any message with an attachment you can tag**, not only already-tagged ones (so you can add a first tag retroactively). Gate: non-DM, has an upload, and (own OR `manage_tags` OR admin). It is a context-menu entry (shared right-click / ⋯ dots menu), not a toolbar button.
-- **Deleting a tag is a SOFT delete (Phase 4).** Removing a tag from the vocabulary must NOT retroactively strip it from attachments, so already-tagged files stay searchable (tag "dog", tag many photos, later delete "dog" -> the photos keep the tag). The managerial phase implements delete as hide-from-picker (keep the row + its `attachment_tags`), never a hard `DELETE`. The schema's `ON DELETE CASCADE` on `attachment_tags.tag_id` stays as a safety net; policy is simply "never hard-delete a used tag".
+- **Deleting a tag is a HARD delete (Phase 4).** ~~Soft delete~~ was REVERSED by the user during Phase 4 ("it becomes confusing for people"). Delete now removes the `upload_tags` row and every `attachment_tags` association, so it disappears from the files that used it. Rename is likewise hard and propagates to every attachment. Both are destructive and non-reversible, and the UI gates each behind a danger confirm that says so. See Phase 4 as-built.
 
 ## Data model
 No attachments table exists in Haven: an upload is a `messages` row whose `content` is the URL markdown (`![alt](/uploads/x)` for images, `[file:Name](/uploads/x|size)` for files). One upload is normally its own message, but a message can carry more than one URL. Tags therefore key on `(message_id, rel_path)`.
@@ -165,12 +165,29 @@ Two gallery-tile polish fixes on top of 3b, in `public/js/modules/app-ui.js` + `
 - **Tags never showed on photo/video tiles.** The `.media-tile-tags` div rendered in normal flow after the 100%-height `<img>`, so the tile's `aspect-ratio` + `overflow:hidden` clipped it off-tile. Fix: wrap the tags + date in a `.media-grid-meta` bottom overlay (absolute, `pointer-events:none`, flex-column, gradient moved onto the wrapper). Tags now sit above the date over the image. List tiles (audio/files) were unaffected (their tags are in `.media-list-info` flow) and untouched. Note: the `.media-grid-jump` (↗) button has the same clipping (static, no CSS) and is still not shown — pre-existing, out of scope, left alone.
 - **Toolbar buttons taller than the dropdowns.** The `.btn-sm` buttons (Tags, Select, and the select-mode ones) rendered ~4px taller than the adjacent Sort/Size `select`s, so they bulged above the row (every box was already vertically centered — verified live under the cyberpunk theme, all `cy` equal — the buttons were just a different height). Fix: `.media-gallery-toolbar .btn-sm { padding:0.25rem 0.625rem; font-size:0.8rem }` so all toolbar controls share one height (buttons ≈26px, sort select 27px). Verified live: Tags and Select both drop to 26 and line up with the dropdowns.
 
-## Phase 4 — admin settings + tag management — PLAN (rough)
-- Swap the hardcoded limits for `server_settings` reads: max tags per attachment (clamp to `MAX_TAGS_CEIL`), tag length (clamp to `MAX_TAG_LEN_CEIL`).
-- Surface in the Uploads & Limits admin section (near `max_attachments`, database.js ~437 / the admin UI).
-- Client reads them the way `_maxAttachments` already reads `serverSettings`.
-- Tag-management view (rename/merge/delete vocabulary entries), gated by `manage_tags`.
-  - **Delete is a SOFT delete** (locked decision): hide the tag from the picker and from create-suggestions, but keep the `upload_tags` row and every `attachment_tags` link so old files stay tagged and searchable. Likely add an `active`/`deleted_at` column to `upload_tags`; the composer picker and `searchTags` filter to active, but the `tag:` search filter and the message/gallery footers keep resolving inactive tags so existing associations still match. Never hard-`DELETE` a used tag.
+## Phase 4 — admin settings + tag management (DONE, uncommitted)
+Two things: admin-configurable limits, and an admin Tags panel to add/rename/delete the vocabulary. Delete is HARD (soft delete was dropped, see Decisions). Also folds in the earlier gallery-toolbar grouping CSS fix (still uncommitted).
+### Decisions (locked with the user this session)
+- **HARD delete + hard rename, no soft delete.** Rename and delete propagate to every attachment and are non-reversible; each is gated behind a danger `_showConfirmModal`. Merge fallback: a rename whose normalized name collides with another tag repoints that tag's associations onto the survivor (deduped) and drops the renamed row — no duplicate vocab entry.
+- **Admin Tags panel gated by `manage_tags`** (admins always in), matching the existing curation permission. Section id `section-tags-admin`, listed in `settingsSectionsAccess`.
+- **Limits are `server_settings`** (`max_tags_per_attachment` 1–10 default 3, `max_tag_len` 1–50 default 20), clamped to the `MAX_*_CEIL` ceilings both server- and client-side.
+### Server
+- `src/uploadTags.js` — `normalizeTagName(raw, maxLen)` and `pickTags(names, {maxTags,maxLen})` now take the effective limits; `applyTagsToMessage`/`setMessageTags` thread them through. NEW `effectiveLimits(db)` (reads the two settings, clamped, defaults on any failure). NEW admin ops: `listAllTags` (with per-tag usage count), `createTag` (get-or-create), `renameTag` (hard; merge-on-collision), `deleteTag` (hard, clears associations), and the shared `messageTargetsForTag(db, tagId)` that both mutators use to gather affected `{messageId, channelCode}` for live rebroadcast.
+- `src/socketHandlers/tags.js` — NEW `admin-list-tags` / `admin-create-tag` / `admin-rename-tag` / `admin-delete-tag`, gated `isAdmin || manage_tags`, writes on the `tagEdit` flood bucket. A shared `rebroadcastTargets` recomputes and emits `message-tags-updated` per affected message so open footers/gallery repaint live (verified: renaming a 2-use tag fired 4 broadcasts across its two messages).
+- `src/socketHandlers/messages.js` — the three tag-write paths (send, set-message-tags, bulk) read `effectiveLimits(db)` and pass `maxTags`/`maxLen`.
+- `src/socketHandlers/admin.js` — `max_tags_per_attachment` + `max_tag_len` added to `allowedKeys` with numeric validation (1–10, 1–50).
+- `src/database.js` — seeds both keys (INSERT OR IGNORE, so existing DBs pick them up on next boot).
+### Client
+- `public/app.html` — two number inputs in the Limits (`section-uploads`) block; a NEW `🏷️ Tags` admin nav item + `#section-tags-admin` (add input+button, `#tag-admin-list`).
+- `public/js/modules/app-admin.js` — `settingsSectionsAccess['section-tags-admin'] = ['manage_tags']`; load/snapshot/save/revert wiring for the two limits (mirrors `max_attachments`); NEW `_loadAdminTags`/`_renderAdminTagList`/`_ensureAdminTagsBound`/`_adminTagAdd`/`_adminTagStartRename`/`_adminTagSaveRename`/`_adminTagDelete` (inline rename editor, danger confirms, re-fetch after each change).
+- `public/js/modules/app-ui.js` — nav-click hook loads the tag list when `section-tags-admin` opens.
+- `public/js/modules/app-media.js` — `_maxTagsPerAttachment`/`_maxTagLen` now read `serverSettings`, clamped to the ceilings (default 3/20).
+- `public/locales/en.json` — `settings.nav.tags`, `settings.admin.max_tags_per_attachment(_hint)`, `max_tag_len(_hint)`, and the `settings.admin.tags_*` panel strings.
+- `public/css/style.css` — `.tag-admin-*` list/row/editor styles; plus the earlier gallery-toolbar grouping fix (flex-start + `margin-left:auto` on the tile-label so Tags stops floating in the middle).
+### Verified (live, logged-in admin on ~/.haven)
+- Server via the live socket: create, pure rename, merge-on-collision (row count drops, survivor kept), hard delete, usage counts, length limit (21 chars → `invalid` at maxLen 20), case-insensitive dedup (`Pokemon` → `exists`). DB left at its original 4 tags, no residue.
+- Rename propagation: renaming a 2-use tag preserved both associations and broadcast the recomputed footer to both affected messages; restored cleanly.
+- UI: Tags section renders the list (name + "N in use" + Rename/Delete), limit inputs show seeded 3/20, add clears input and refreshes, delete + rename both show the destructive danger confirm with the correct warning; cancel is a no-op. No console errors.
 
 ## Technical considerations / limitations
 - **E2E DMs are permanently out.** The server never sees DM plaintext, so it cannot store or index a tag for one. Tag bar is hidden there.
@@ -205,8 +222,10 @@ Phase 3b: `src/socketHandlers/messages.js`; `public/app.html`, `public/js/module
 - Phases 1 + 2 built and committed (`ace5d00`).
 - Phase 3a (retroactive tag editing via context menu, `manage_tags`-gated for others' messages, live footer updates) — committed (`1b06d7f`).
 - Phase 3b (gallery: tag chips on items, AND/exact Tags filter, manage_tags-gated bulk Append/Replace in select mode with confirm + replace-empty warning) — committed (`1b06d7f`), plus the three live-QA fixes (popup z-index, bottom-message editor flip, restart clarity).
+- Gallery tile tags + toolbar alignment fixes — committed (`fbc8ead`); the follow-up toolbar-grouping CSS is uncommitted and rides with Phase 4.
+- Phase 4 (admin-configurable limits + admin Tags panel with add/rename/**hard**-delete) — built and live-verified, UNCOMMITTED.
 
 ## Next agent — start here
-- Everything through Phase 3b is committed on branch `tagging` (`1b06d7f`). The only tagging change that may be uncommitted is this doc's own next-agent prep (a `tagging.md`-only edit). Any untracked `.claude/`, `.local-node/`, `neutron.theme.css`, `gba_roms/`, `search-overhaul.md`, `themes/neutron/` are UNRELATED — do not commit them.
-- Only work left is **Phase 4** (admin-configurable limits + tag-management view with SOFT delete) — see the plan section above; the soft-delete decision is locked.
-- Before coding: re-read the Decisions and the Phase 4 plan; verify file:line citations (they drift); restart the server after any `src/` edit.
+- All four phases are built. Phases 1–3b committed (`ace5d00`, `1b06d7f`); the tile/alignment fix is `fbc8ead`. **Phase 4 + the toolbar-grouping CSS are uncommitted** in the working tree, verified live — commit them (no Co-Authored-By). Any untracked `.claude/`, `.local-node/`, `neutron.theme.css`, `gba_roms/`, `search-overhaul.md`, `themes/neutron/` are UNRELATED — do not commit them.
+- Feature is functionally complete. Possible follow-ups only: other-locale translations (EN added), and wider live QA across themes/roles.
+- Before coding: verify file:line citations (they drift); restart the server after any `src/` edit (no hot reload).
