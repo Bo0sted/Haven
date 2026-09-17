@@ -159,10 +159,16 @@ _renderImageQueue() {
 // read them without extra state. Applying an existing tag is open to any
 // uploader; minting a new one needs manage_tags and is committed on send.
 
-// Phase 1 hardcodes the limits (an admin setting swaps these in a later pass).
-// Kept in sync with the hard ceilings in src/uploadTags.js.
-_maxTagsPerAttachment() { return 3; },
-_maxTagLen() { return 20; },
+// Admin-configurable (server_settings), clamped to the same hard ceilings the
+// server enforces in src/uploadTags.js; falls back to the defaults.
+_maxTagsPerAttachment() {
+  const n = parseInt(this.serverSettings?.max_tags_per_attachment, 10);
+  return Number.isFinite(n) ? Math.max(1, Math.min(10, n)) : 3;
+},
+_maxTagLen() {
+  const n = parseInt(this.serverSettings?.max_tag_len, 10);
+  return Number.isFinite(n) ? Math.max(1, Math.min(50, n)) : 20;
+},
 
 // Every queued attachment, images first, in the order they appear in the bar.
 _composerAttachments() {

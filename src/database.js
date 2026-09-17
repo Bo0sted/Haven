@@ -456,6 +456,8 @@ function initDatabase() {
   insertSetting.run('max_invite_uses', '0');            // the maximum uses each non-admin/manage-server invite link can accept
   insertSetting.run('max_upload_mb', '25');             // max file upload size in MB
   insertSetting.run('max_attachments', '10');           // files one message may queue, images and other files together (1-50) (#5561)
+  insertSetting.run('max_tags_per_attachment', '3');    // upload tags allowed on one attachment (1-10) (#tagging phase 4)
+  insertSetting.run('max_tag_len', '20');               // max characters in an upload tag name (1-50) (#tagging phase 4)
   insertSetting.run('max_poll_options', '10');            // max poll answer options (2–25)
   insertSetting.run('max_message_chars', '2000');         // max characters per message (200–100000)
   insertSetting.run('max_sound_kb', '1024');              // max soundboard file size in KB (256–10240)

@@ -484,6 +484,14 @@ _applyServerSettings() {
     if (maxAttach) {
       maxAttach.value = this.serverSettings.max_attachments || '10';
     }
+    const maxTagsPer = document.getElementById('max-tags-per-attachment');
+    if (maxTagsPer) {
+      maxTagsPer.value = this.serverSettings.max_tags_per_attachment || '3';
+    }
+    const maxTagLen = document.getElementById('max-tag-len');
+    if (maxTagLen) {
+      maxTagLen.value = this.serverSettings.max_tag_len || '20';
+    }
     const maxSoundKb = document.getElementById('max-sound-kb');
     if (maxSoundKb) {
       maxSoundKb.value = this.serverSettings.max_sound_kb || '1024';
@@ -772,6 +780,7 @@ _syncSettingsNav() {
     'section-cleanup':      ['manage_server'],
     'section-backup':       ['manage_server'],
     'section-uploads':      ['manage_server'],
+    'section-tags-admin':   ['manage_tags'],
     'section-connectivity': [],
     'section-tunnel':       ['manage_server'],
     'section-bots':         ['manage_server', 'manage_webhooks'],
@@ -920,6 +929,8 @@ _snapshotAdminSettings() {
     whitelist_enabled: this.serverSettings.whitelist_enabled || 'false',
     max_upload_mb: this.serverSettings.max_upload_mb || '25',
     max_attachments: this.serverSettings.max_attachments || '10',
+    max_tags_per_attachment: this.serverSettings.max_tags_per_attachment || '3',
+    max_tag_len: this.serverSettings.max_tag_len || '20',
     max_sound_kb: this.serverSettings.max_sound_kb || '1024',
     max_emoji_kb: this.serverSettings.max_emoji_kb || '256',
     max_sticker_kb: this.serverSettings.max_sticker_kb || '1024',
@@ -1068,6 +1079,18 @@ _saveAdminSettings() {
   const maxAttach = String(Math.max(1, Math.min(50, parseInt(document.getElementById('max-attachments')?.value) || 10)));
   if (maxAttach !== (snap.max_attachments || '10')) {
     this.socket.emit('update-server-setting', { key: 'max_attachments', value: maxAttach });
+    changed = true;
+  }
+
+  const maxTagsPer = String(Math.max(1, Math.min(10, parseInt(document.getElementById('max-tags-per-attachment')?.value) || 3)));
+  if (maxTagsPer !== (snap.max_tags_per_attachment || '3')) {
+    this.socket.emit('update-server-setting', { key: 'max_tags_per_attachment', value: maxTagsPer });
+    changed = true;
+  }
+
+  const maxTagLen = String(Math.max(1, Math.min(50, parseInt(document.getElementById('max-tag-len')?.value) || 20)));
+  if (maxTagLen !== (snap.max_tag_len || '20')) {
+    this.socket.emit('update-server-setting', { key: 'max_tag_len', value: maxTagLen });
     changed = true;
   }
 
@@ -1277,6 +1300,10 @@ _cancelAdminSettings() {
     if (mu) mu.value = snap.max_upload_mb || '25';
     const ma = document.getElementById('max-attachments');
     if (ma) ma.value = snap.max_attachments || '10';
+    const mtpa = document.getElementById('max-tags-per-attachment');
+    if (mtpa) mtpa.value = snap.max_tags_per_attachment || '3';
+    const mtl = document.getElementById('max-tag-len');
+    if (mtl) mtl.value = snap.max_tag_len || '20';
     const msk = document.getElementById('max-sound-kb');
     if (msk) msk.value = snap.max_sound_kb || '1024';
     const mek = document.getElementById('max-emoji-kb');
@@ -6569,6 +6596,143 @@ _renderAutomodLog(data) {
       </span>
     </div>
   `).join('');
+},
+
+// ── Admin Tags panel (#tagging phase 4) ────────────────
+// Manage the upload-tag vocabulary: add, rename, delete. Rename and delete are
+// destructive and non-reversible (they propagate to every attachment), so both
+// go through a danger confirm. Bound once; the list re-fetches after each change.
+_ensureAdminTagsBound() {
+  if (this._adminTagsBound) return;
+  this._adminTagsBound = true;
+  const addBtn = document.getElementById('tag-admin-add-btn');
+  const input = document.getElementById('tag-admin-new');
+  addBtn?.addEventListener('click', () => this._adminTagAdd());
+  input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this._adminTagAdd(); } });
+  const list = document.getElementById('tag-admin-list');
+  list?.addEventListener('click', (e) => {
+    const row = e.target.closest('.tag-admin-row');
+    if (!row) return;
+    if (e.target.closest('.tag-admin-rename')) this._adminTagStartRename(row);
+    else if (e.target.closest('.tag-admin-delete')) this._adminTagDelete(row);
+    else if (e.target.closest('.tag-admin-save')) this._adminTagSaveRename(row);
+    else if (e.target.closest('.tag-admin-cancel')) this._renderAdminTagList(this._adminTags || []);
+  });
+  list?.addEventListener('keydown', (e) => {
+    if (!e.target.classList?.contains('tag-admin-edit-input')) return;
+    if (e.key === 'Enter') { e.preventDefault(); this._adminTagSaveRename(e.target.closest('.tag-admin-row')); }
+    else if (e.key === 'Escape') this._renderAdminTagList(this._adminTags || []);
+  });
+},
+
+_loadAdminTags() {
+  this._ensureAdminTagsBound();
+  const input = document.getElementById('tag-admin-new');
+  if (input) input.maxLength = this._maxTagLen();
+  this.socket.emit('admin-list-tags', {}, (res) => {
+    const list = document.getElementById('tag-admin-list');
+    if (!res || res.error) {
+      if (list) list.innerHTML = `<p class="muted-text">${t('settings.admin.tags_error')}</p>`;
+      return;
+    }
+    this._adminTags = res.tags || [];
+    this._renderAdminTagList(this._adminTags);
+  });
+},
+
+_renderAdminTagList(tags) {
+  const list = document.getElementById('tag-admin-list');
+  if (!list) return;
+  if (!tags.length) {
+    list.innerHTML = `<p class="muted-text">${t('settings.admin.tags_none')}</p>`;
+    return;
+  }
+  const esc = (s) => this._escapeHtml(s);
+  list.innerHTML = tags.map(tg => `
+    <div class="tag-admin-row" data-tag-id="${tg.id}">
+      <span class="tag-admin-name">${esc(tg.name)}</span>
+      <span class="tag-admin-uses">${t('settings.admin.tags_uses', { n: tg.uses || 0 })}</span>
+      <span class="tag-admin-row-actions">
+        <button class="btn-sm tag-admin-rename">${t('settings.admin.tags_rename_btn')}</button>
+        <button class="btn-sm btn-danger-fill tag-admin-delete">${t('settings.admin.tags_delete_btn')}</button>
+      </span>
+    </div>`).join('');
+},
+
+_adminTagAdd() {
+  const input = document.getElementById('tag-admin-new');
+  const name = (input?.value || '').trim();
+  if (!name) return;
+  this.socket.emit('admin-create-tag', { name }, (res) => {
+    if (res && res.ok) {
+      if (input) input.value = '';
+      this._showToast?.(t('settings.admin.tags_added', { name: res.tag.name }), 'info');
+      this._loadAdminTags();
+    } else if (res && res.error === 'exists') {
+      this._showToast?.(t('settings.admin.tags_exists'), 'error');
+    } else if (res && res.error === 'invalid') {
+      this._showToast?.(t('settings.admin.tags_invalid'), 'error');
+    } else {
+      this._showToast?.(t('settings.admin.tags_error'), 'error');
+    }
+  });
+},
+
+_adminTagStartRename(row) {
+  const name = row.querySelector('.tag-admin-name')?.textContent || '';
+  row.innerHTML = `
+    <input type="text" class="tag-admin-edit-input settings-text-input" maxlength="${this._maxTagLen()}" value="${this._escapeHtml(name)}" autocomplete="off">
+    <span class="tag-admin-row-actions">
+      <button class="btn-sm btn-accent tag-admin-save">${t('settings.admin.tags_save_btn')}</button>
+      <button class="btn-sm tag-admin-cancel">${t('modals.common.cancel')}</button>
+    </span>`;
+  const input = row.querySelector('.tag-admin-edit-input');
+  input.dataset.orig = name;
+  input.focus();
+  input.select();
+},
+
+async _adminTagSaveRename(row) {
+  if (!row) return;
+  const id = parseInt(row.dataset.tagId, 10);
+  const input = row.querySelector('.tag-admin-edit-input');
+  const newName = (input?.value || '').trim();
+  const orig = input?.dataset.orig || '';
+  if (!newName || newName === orig) { this._renderAdminTagList(this._adminTags || []); return; }
+  const ok = await this._showConfirmModal(
+    t('settings.admin.tags_rename_title'),
+    t('settings.admin.tags_rename_body', { from: orig, to: newName }),
+    { danger: true, confirmLabel: t('settings.admin.tags_rename_confirm') }
+  );
+  if (!ok) { this._renderAdminTagList(this._adminTags || []); return; }
+  this.socket.emit('admin-rename-tag', { tagId: id, newName }, (res) => {
+    if (res && res.ok) {
+      this._showToast?.(t('settings.admin.tags_renamed'), 'info');
+    } else if (res && res.error === 'invalid') {
+      this._showToast?.(t('settings.admin.tags_invalid'), 'error');
+    } else {
+      this._showToast?.(t('settings.admin.tags_error'), 'error');
+    }
+    this._loadAdminTags();
+  });
+},
+
+async _adminTagDelete(row) {
+  const id = parseInt(row.dataset.tagId, 10);
+  const name = row.querySelector('.tag-admin-name')?.textContent || '';
+  const tag = (this._adminTags || []).find(x => x.id === id);
+  const uses = tag ? (tag.uses || 0) : 0;
+  const ok = await this._showConfirmModal(
+    t('settings.admin.tags_delete_title'),
+    t('settings.admin.tags_delete_body', { name, n: uses }),
+    { danger: true, confirmLabel: t('settings.admin.tags_delete_confirm') }
+  );
+  if (!ok) return;
+  this.socket.emit('admin-delete-tag', { tagId: id }, (res) => {
+    if (res && res.ok) this._showToast?.(t('settings.admin.tags_deleted'), 'info');
+    else this._showToast?.(t('settings.admin.tags_error'), 'error');
+    this._loadAdminTags();
+  });
 },
 
 // ═══════════════════════════════════════════════════════

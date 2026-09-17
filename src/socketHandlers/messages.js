@@ -4,7 +4,7 @@ const path = require('path');
 const fs   = require('fs');
 const { utcStamp, isString, isInt, sanitizeText, parseBorderTransform, toReplyContext, stripRoleMentions } = require('./helpers');
 const { getActiveTokenizer, minQueryChars, buildMatchQuery } = require('../searchIndex');
-const { applyTagsToMessage, setMessageTags, normalizeTagName, escapeLike, extractUploadPath } = require('../uploadTags');
+const { applyTagsToMessage, setMessageTags, normalizeTagName, escapeLike, extractUploadPath, effectiveLimits } = require('../uploadTags');
 
 module.exports = function register(socket, ctx) {
   const { io, db, state, userHasPermission, getUserEffectiveLevel, getChannelRoleChain,
@@ -1252,12 +1252,15 @@ module.exports = function register(socket, ctx) {
       if (!channel.is_dm && Array.isArray(data.attachmentTags) && data.attachmentTags.length) {
         try {
           const canCreate = socket.user.isAdmin || userHasPermission(socket.user.id, 'manage_tags', null);
+          const { maxTags, maxLen } = effectiveLimits(db);
           appliedTags = applyTagsToMessage(db, {
             messageId: result.lastInsertRowid,
             content: finalContent,
             tagNames: data.attachmentTags,
             userId: socket.user.id,
             canCreate,
+            maxTags,
+            maxLen,
           }) || [];
         } catch (e) { /* tags are best-effort */ }
       }
@@ -1358,12 +1361,15 @@ module.exports = function register(socket, ctx) {
     if (!isOwn && !canManage) return socket.emit('error-msg', 'You cannot edit tags on this message');
 
     try {
+      const { maxTags, maxLen } = effectiveLimits(db);
       const applied = setMessageTags(db, {
         messageId: msg.id,
         content: msg.content,
         tagNames: data.tags,
         userId: socket.user.id,
         canCreate: canManage,   // creating a new tag always needs manage_tags
+        maxTags,
+        maxLen,
       });
       io.to(`channel:${channel.code}`).emit('message-tags-updated', {
         channelCode: channel.code,
@@ -1416,12 +1422,13 @@ module.exports = function register(socket, ctx) {
         WHERE at.message_id = ? ORDER BY ut.name_norm`
     );
     const results = [];
+    const { maxTags, maxLen } = effectiveLimits(db);
     try {
       for (const id of messageIds) {
         const msg = db.prepare('SELECT id, content, channel_id FROM messages WHERE id = ?').get(id);
         if (!msg || msg.channel_id !== channel.id) continue;
         if (!extractUploadPath(msg.content)) continue;
-        const args = { messageId: msg.id, content: msg.content, tagNames: data.tags, userId: socket.user.id, canCreate: true };
+        const args = { messageId: msg.id, content: msg.content, tagNames: data.tags, userId: socket.user.id, canCreate: true, maxTags, maxLen };
         if (mode === 'replace') setMessageTags(db, args);
         else applyTagsToMessage(db, args);
         // Read the full current set (append's return is only the new names).
