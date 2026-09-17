@@ -10,8 +10,8 @@ Let users attach optional tags to file/image uploads, then find those files fast
 Phases:
 1. **Compose + store + display** (DONE) — tag UI in the composer, the two tables, the `manage_tags` permission, a rate-limited vocab lookup, and a Tags footer on sent messages.
 2. **Search** (DONE) — a non-strict `tag:` prefix token, a dropdown picker, and clickable message/result tag chips that run a tag search.
-3. **Gallery + filters** (LATER) — surface tags in the channel media gallery and let it filter by tag.
-4. **Admin settings** (LATER) — make the two hardcoded limits admin-configurable.
+3. **Retroactive editing + gallery** (DONE) — retroactive tag editing on already-sent messages (Phase 3a) and the media-gallery tag surfacing/filter/bulk-management (Phase 3b) are both built.
+4. **Admin settings** (LATER) — make the two hardcoded limits admin-configurable, and a tag-management view (soft delete).
 
 ## Run locally
 Environment-specific to the current dev box; adjust paths on another machine. This box has no `node` on PATH, only a vendored one, and the demo server data lives in `~/.haven` (admin login admin/admin, its own DB, already seeded).
@@ -35,6 +35,8 @@ sqlite3 ~/.haven/haven.db "SELECT m.id, ut.name FROM attachment_tags at JOIN upl
 - **Payload key is `attachmentTags`**, NOT `tags` — `data.tags` on `send-message` is already taken by forum topic tags.
 - **Composer tag bar is gated to non-DM, non-forum channels.** DMs are E2E (the server never sees the bytes, so it cannot index a tag); forum channels have their own topic-tag UI in the composer that this would visually collide with.
 - **`tag:` search is non-strict (PREFIX match), not exact.** A typed partial like `tag:do` matches `dog`/`dogs`/`doghouse`; the value need not be a confirmed vocabulary tag. Clicking a message tag also runs a prefix search of that tag's name (in practice that is just that tag unless a longer tag shares its prefix). Substring instead of prefix would be a one-line change if wanted broader.
+- **Retroactive editing: who can edit whose tags.** Editing tags on your OWN message is always allowed (applying existing tags is open; minting a new one still needs `manage_tags`, same ladder as the composer). Editing SOMEONE ELSE'S message needs `manage_tags` (chosen over `delete_message` so tag curation is not coupled to a destructive moderation power). Admin does everything. One unified editor, gated by permission, not two separate views.
+- **The "Edit tags" entry appears on any message with an attachment you can tag**, not only already-tagged ones (so you can add a first tag retroactively). Gate: non-DM, has an upload, and (own OR `manage_tags` OR admin). It is a context-menu entry (shared right-click / ⋯ dots menu), not a toolbar button.
 - **Deleting a tag is a SOFT delete (Phase 4).** Removing a tag from the vocabulary must NOT retroactively strip it from attachments, so already-tagged files stay searchable (tag "dog", tag many photos, later delete "dog" -> the photos keep the tag). The managerial phase implements delete as hide-from-picker (keep the row + its `attachment_tags`), never a hard `DELETE`. The schema's `ON DELETE CASCADE` on `attachment_tags.tag_id` stays as a safety net; policy is simply "never hard-delete a used tag".
 
 ## Data model
@@ -118,10 +120,44 @@ The search handler parses filters at `messages.js` (~450) and AND-s SQL conditio
 - NOT done: live authenticated in-app QA (user side).
 - Inherits channel-scope + the search cache-invalidation model, so tag search is permission-safe with no new access plumbing.
 
-## Phase 3 — gallery + filters — PLAN (rough)
-- Surface tags in the channel media gallery (the photos/videos/files browser in `messages.js` ~604 that regex-parses content). Join `attachment_tags` there.
-- Let the gallery filter by tag.
-- This is also the natural home for **re-tagging already-sent attachments** (deferred from Phase 1): an edit path guarded by `manage_tags`, writing/removing `attachment_tags` rows on existing messages, broadcast so clients update.
+## Phase 3a — retroactive tag editing (DONE, not committed)
+Edit the tag set on an already-sent message that carries an upload, from a context-menu entry, with live updates for everyone.
+### Server
+- `src/uploadTags.js` — refactored the apply loop into `pickTags` (normalize+dedupe+cap) and `linkPickedTags` (resolve/mint/link, caller owns the transaction). `applyTagsToMessage` (additive, send-time) now uses them; NEW `setMessageTags` (replace-semantics: deletes the message's existing `attachment_tags` then relinks, so an empty list clears all). Both exported.
+- `src/socketHandlers/messages.js` — NEW `set-message-tags { messageId, tags[] }` handler. Loads the message, requires an upload path, rejects DMs, checks membership, authorizes `isOwn || isAdmin || manage_tags`, sets `canCreate = isAdmin || manage_tags`, calls `setMessageTags`, and broadcasts `message-tags-updated { channelCode, messageId, tags }` to the channel room. Guarded by the new `tagEdit` flood bucket. Imports `setMessageTags` + `extractUploadPath`.
+- `src/socketHandlers/index.js` — `tagEdit: { max: 20, windowMs: 10000 }` flood bucket.
+### Client
+- `public/js/modules/app-messages.js` — context menu (`_showMessageContextMenu`) gains an "Edit tags" (🏷️) item, gated `canEditTags = !isDm && hasAttachment && (isOwn || admin || manage_tags)` where `hasAttachment` = `_getMessageAttachments(msgId).length > 0`. Dispatcher action `edit-tags` opens the editor. NEW editor: `_openMessageTagEditor(msgId, msgEl)` (seeds the working set from the message's footer chips), `_closeMessageTagEditor`, `_msgTagEditorRenderChips`, `_msgTagEditorSearch` (debounced `search-upload-tags`), `_msgTagEditorRenderList` (existing tags + a create row for `manage_tags`), `_msgTagEditorAdd`/`_msgTagEditorRemove`, `_msgTagEditorSave` (emits `set-message-tags` with the full set on every change). NEW `_updateMessageTagsFooter(msgId, tags)` repaints the footer on every rendered copy (`[data-msg-id]`: main list, search results, thread, PiP) and syncs `_lastRenderedMessages`.
+- `public/js/modules/app-socket.js` — `message-tags-updated` listener calls `_updateMessageTagsFooter`. Fires cross-channel (users are in all their channel rooms), so search results update wherever shown.
+- `public/locales/en.json` — `tags.edit`.
+- `public/css/style.css` — `.tag-editor-popup` and friends; reuses `.tag-popup-*` / `.tag-chip*` from Phase 1.
+### Notes / edges
+- The editor emits the FULL set on each add/remove; the server replaces and broadcasts, so no explicit Save button. Editor popup is body-level, so the footer repaint never disturbs it.
+- Non-`manage_tags` users can only pick EXISTING tags (create row hidden), so they cannot introduce unknown names. If one ever submitted only-unknown names the server would drop them (and, because set-semantics clear first, that would empty the set) — the UI prevents this.
+- One upload = one message in practice, so message-level editing == attachment-level. Tags key on the first `/uploads/` path (via `extractUploadPath`), consistent with Phase 1.
+### Verified
+- `setMessageTags` add/remove/clear + unknown-tag-drop for non-creators — in-memory DB. Full suite 306/11 (baseline). Syntax + en.json + boot clean. NOT done: live in-app QA (user side).
+
+## Phase 3b — gallery: tag chips + filter + bulk management (DONE, not committed)
+Three additions to the Files & Media gallery: tag chips on each item, a Tags filter, and a bulk Manage-tags action in select mode.
+### Decisions (locked with the user)
+- **Bulk Manage-tags is gated to `manage_tags` (or admin)** — the curation permission, which also lets it mint tags. Such users can now enter select mode **even without delete rights**; the Delete button stays delete-gated, the Manage-tags dropdown is manage_tags-gated. Server enforces `manage_tags` at the handler.
+- **Filter is AND + exact** (not prefix): an item must carry EVERY selected tag, matched case-folded exact. (The picker itself still uses the prefix `search-upload-tags` to *find* tags to select; only the item filtering is exact.) Multiple tags narrow.
+- **Confirm-gated apply** (unlike Phase 3a's auto-save): the bulk picker collects a working set and applies only on **Confirm**; clicking away discards.
+- **Empty-set semantics:** append with no tags is a no-op; replace with no tags clears every tag on every selected item, and gets a SECOND `_showConfirmModal` warning after Confirm (danger). Server tolerates empty lists (`setMessageTags` clears, `applyTagsToMessage` returns `[]`).
+### Server (`messages.js`)
+- `get-channel-media` now batch-queries `attachment_tags` for the page's message ids and attaches `entry.tags` (keyed on `message_id|rel_path`; only non-empty). Links never get tags.
+- NEW `bulk-tag-messages { code, messageIds[], mode:'append'|'replace', tags[] }` (ack callback). Validates, `tagEdit` flood bucket, membership + DM reject, requires `manage_tags`/admin. Per unique message id: `setMessageTags` (replace) or `applyTagsToMessage` (append), `canCreate:true`; reads back the full set, pushes `{messageId,tags}` into `results`, and broadcasts `message-tags-updated` per message (so open footers repaint live). Returns `{ ok, updated, results }`. Dedupes message ids; skips ids outside the channel or without an upload path.
+### Client
+- `public/app.html` — a **Tags** filter button (+count badge) next to Sort by; a **Manage tags** dropdown (Append / Replace all) inside `#media-gallery-actions`.
+- `public/js/modules/app-ui.js` — `_canManageTags`; toolbar gating in `_refreshMediaGalleryToolbar` (select mode = canDelete OR canManageTags; Delete shown only for deleters; Manage shown only for managers with a selection). `_renderMediaGalleryTab` applies `_filterMediaItemsByTags` (AND/exact, links exempt) with a `filter_no_match` empty state and renders read-only `tileTags` chips on every item. Filter picker: `_openMediaTagFilter`/`_closeMediaTagFilter`/`_mediaTagFilterSearch`/`_mediaTagFilterRenderList` (multi-select toggle + Clear filter row, ✓ on active), `_toggleMediaTagFilter`, `_updateTagFilterBadge`, `_afterTagFilterChange`. Bulk picker: `_openMediaTagManage`/`_closeMediaTagManage` + chips/search/list/add/remove mirroring the message editor but **no auto-save**, plus `_mediaTagManageApply` (emits `bulk-tag-messages`, optimistically updates `_mediaGalleryData` item tags from `results`, keeps selection; replace-empty routes through the danger confirm). `_renderMediaGallery` resets the filter and tears down popups on fresh data.
+- `public/locales/en.json` — `media_gallery.filter_tags`, `filter_by_tag`, `filter_clear`, `filter_no_match`, `manage_tags`, `append_tags`, `replace_tags`, `tag_apply_append`, `tag_apply_replace`, `tag_apply_confirm`, `tags_updated`, `tags_update_failed`, `confirm_clear_title`, `confirm_clear_body`, `confirm_clear_ok`.
+- `public/css/style.css` — `.media-gallery-tagfilter(-count)`, `#…-tagfilter-btn.is-active`, `.tag-popup-item.is-active`, `.media-gallery-tagmanage` + `.media-tagmanage-menu`/`-opt`, `.tag-manage-actions`, `.media-tile-tags`/`.media-tile-tag`. Reuses `.tag-editor-popup`, `.tag-popup-*`, `.tag-chip*`. **Z-index gotcha:** the shared `.tag-editor-popup` is z-index 1000, but the gallery modal-overlay is 100001, so `#media-tag-filter-popup`/`#media-tag-manage-popup` are bumped to 100002 by id (below the 100002 confirm dialog, which wins on DOM order).
+### Notes / edges
+- Optimistic post-apply update keys by `message_id` (sets the same tags on every gallery item of that message). Consistent with the "one upload = one message" assumption; a full `get-channel-media` refetch keys precisely by `(message_id, url)` so only the first-path item would carry tags. Rare multi-attachment messages briefly over-show until the next open/refetch.
+- Bulk append caps the *incoming* pick at `MAX_TAGS_PER_ATTACHMENT` (3) via `pickTags`; it does not cap the per-attachment *total* (existing + appended), same latent behavior as Phase 1/3a append. Dedup is via `INSERT OR IGNORE`.
+### Verified
+- JS syntax (all touched files), `en.json` parses, referenced i18n keys resolve. Server boots clean on `~/.haven`. Running server serves the updated client assets. NOT done: live authenticated in-app QA (login-gated; admin/admin returned 401 on the running instance — creds differ from the note). **Server needs a restart** to pick up the `messages.js` changes.
 
 ## Phase 4 — admin settings + tag management — PLAN (rough)
 - Swap the hardcoded limits for `server_settings` reads: max tags per attachment (clamp to `MAX_TAGS_CEIL`), tag length (clamp to `MAX_TAG_LEN_CEIL`).
@@ -136,17 +172,30 @@ The search handler parses filters at `messages.js` (~450) and AND-s SQL conditio
 - **Multi-word tags + `\S+` filters:** `tag:` search must handle quoting (see Phase 2). Same latent limitation already affects `in:<name>` for multi-word channel names (they recommend `in:#code`).
 - **Search results footer:** results do not carry `attachmentTags` yet (different SELECT than history). Wire in Phase 2/3 if wanted.
 - **Pre-feature messages** have no tags; only new tagged uploads show footers.
-- **Tag rendering is display-only** in Phase 1; clicking a tag chip does nothing yet (could deep-link to a `tag:` search in Phase 2/3).
 - **Orphan vocabulary:** by design tags persist even if every attachment using them is deleted. A cleanup/merge tool is a Phase 4 nicety, not a requirement.
+- **Orphan risk on retro-edit by a non-creator:** `set-message-tags` clears then relinks; a non-`manage_tags` submitter's unknown tags are dropped. The UI prevents submitting unknown names (create row is gated), but keep this in mind if the editor is ever reused elsewhere.
 
-## Files touched (Phase 1)
-Server: `src/uploadTags.js` (new), `src/socketHandlers/tags.js` (new), `src/database.js`, `src/socketHandlers/helpers.js`, `src/socketHandlers/index.js`, `src/socketHandlers/messages.js`.
-Client: `public/app.html`, `public/js/modules/app-media.js`, `public/js/modules/app-ui.js`, `public/js/modules/app-admin.js`, `public/js/modules/app-messages.js`, `public/locales/en.json`, `public/css/style.css`.
+## Files touched
+Phase 1: `src/uploadTags.js` (new), `src/socketHandlers/tags.js` (new), `src/database.js`, `src/socketHandlers/helpers.js`, `src/socketHandlers/index.js`, `src/socketHandlers/messages.js`; `public/app.html`, `public/js/modules/app-media.js`, `public/js/modules/app-ui.js`, `public/js/modules/app-admin.js`, `public/js/modules/app-messages.js`, `public/locales/en.json`, `public/css/style.css`.
+Phase 2: `src/socketHandlers/messages.js`, `src/uploadTags.js`; `public/app.html`, `public/js/modules/app-search.js`, `public/js/modules/app-messages.js`, `public/js/modules/app-ui.js`, `public/locales/en.json`, `public/css/style.css`.
+Phase 3a: `src/uploadTags.js`, `src/socketHandlers/messages.js`, `src/socketHandlers/index.js`; `public/js/modules/app-messages.js`, `public/js/modules/app-socket.js`, `public/locales/en.json`, `public/css/style.css`.
+Phase 3b: `src/socketHandlers/messages.js`; `public/app.html`, `public/js/modules/app-ui.js`, `public/locales/en.json`, `public/css/style.css`. (No new server files; reuses `bulk`-style ack + existing `tagEdit` flood bucket.) Also `public/js/modules/app-messages.js` — a follow-up fix to the Phase 3a editor: `_openMessageTagEditor` now calls `_positionMessageTagEditor` (stores `_msgTagEditorAnchor`), which flips the popup ABOVE the message when it would overflow the viewport bottom (messages near the end of the list) and re-runs from `_msgTagEditorRenderList` as the async list height changes.
+
+## Socket events (tagging)
+- `search-upload-tags { query } -> { tags:[{id,name}] }` — vocab lookup (composer + both pickers). Flood bucket `tagSearch`.
+- `set-message-tags { messageId, tags[] }` — retroactive edit; broadcasts `message-tags-updated`. Flood bucket `tagEdit`.
+- `bulk-tag-messages { code, messageIds[], mode, tags[] } -> { ok, updated, results:[{messageId,tags}] }` — gallery bulk append/replace; manage_tags-gated; broadcasts `message-tags-updated` per message. Flood bucket `tagEdit`.
+- `channel-media` entries now include `tags[]` (non-empty only) for photos/videos/audios/files.
+- `message-tags-updated { channelCode, messageId, tags }` — server -> clients; repaint footers.
+- Send-time tags ride on `send-message` as `attachmentTags` (NOT `tags`).
+
+## Commit status
+- **Phases 1 and 2 committed as `ace5d00`** (branch `tagging`, "still work in progress"). Then `0205ed8` (doc sync) and `ee1b20f` (run-locally note) touch only `tagging.md`.
+- **Phase 3a (retroactive editing) and Phase 3b (gallery chips + filter + bulk manage) are BUILT but NOT committed.** So is this doc update.
+- Nothing pushed. At PR time the user wants clean per-phase commits (Phase 1+2 combined is fine); drop the two `tagging.md`-only noise commits; `tagging.md` itself can be its own trailing commit or excluded from the PR.
 
 ## Done
-- Agreed the model and all Phase 1 design decisions with the user.
-- Built Phase 1 (compose + store + display), verified via unit-level DB tests + static checks + clean boot.
-- Added the "Add tag" popup browse-all-on-open behavior and the message Tags footer as a follow-up within Phase 1.
-- Built Phase 2 (non-strict `tag:` prefix search, filter-popover picker, clickable message/result tag chips, tags on search results). Locked the soft-delete decision for Phase 4. Verified via DB tests + static checks + clean boot.
-- **Phases 1 and 2 committed together as `ace5d00`** on branch `tagging` ("still work in progress"). Not pushed. Nothing after that commit is committed yet.
-- Phases 3 and 4 not started.
+- Phases 1 + 2 built and committed (`ace5d00`).
+- Phase 3a (retroactive tag editing via context menu, `manage_tags`-gated for others' messages, live footer updates) built, verified via DB tests + static checks + clean boot. NOT committed. Live in-app QA pending (user side).
+- Phase 3b (gallery: tag chips on items, AND/exact Tags filter, manage_tags-gated bulk Append/Replace in select mode with confirm + replace-empty warning) built, static-checked, server boots clean. NOT committed. Live in-app QA pending (needs a server restart for the messages.js changes).
+- Next: Phase 4 (admin settings + soft-delete tag management).

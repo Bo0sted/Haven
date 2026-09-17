@@ -2133,6 +2133,14 @@ _setupSocketListeners() {
     this._searchRemoveResult?.(data.channelCode, data.messageId);
   });
 
+  // Attachment tags edited (#tagging phase 3). Repaint the Tags footer on every
+  // rendered copy of the message. Fires cross-channel (users are joined to all
+  // their channel rooms), so search results update too, wherever they're shown.
+  this.socket.on('message-tags-updated', (data) => {
+    if (!data || !data.messageId) return;
+    this._updateMessageTagsFooter?.(data.messageId, data.tags || []);
+  });
+
   // ── Low disk warning (admins only, #5505) ────────
   // The server only sends this to admins, and only when the state changes, so
   // there is nothing to filter here beyond reflecting whatever it last said.

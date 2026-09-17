@@ -2252,6 +2252,11 @@ _showMessageContextMenu(e, msgEl) {
   // Same level-vs-permission gap as the toolbar above (#5461).
   const canDelete    = isOwn || this.user?.isAdmin || this._canModerate() ||
                        this._hasPerm('delete_message');
+  // Retroactive tag editing (#tagging phase 3): only on non-DM messages that
+  // carry an upload. Your own always; anyone else's needs manage_tags.
+  const hasAttachment = (this._getMessageAttachments?.(msgId) || []).length > 0;
+  const canEditTags  = !isDm && hasAttachment &&
+                       (isOwn || this.user?.isAdmin || this._hasPerm('manage_tags'));
 
   // Layout: the actions defined first (Edit, Reply, Quote, Pin) — separator —
   // the remaining hover-toolbar actions (React, Thread, Copy Link, Protect) —
@@ -2282,6 +2287,7 @@ _showMessageContextMenu(e, msgEl) {
   const canEditRoleMenu = !!msgEl.querySelector('.role-menu-widget') &&
                           !!(this.user?.isAdmin || this._hasPerm('manage_roles') || this._hasPerm('promote_user'));
   if (canEditRoleMenu) items.push(`<button class="channel-ctx-item" data-action="edit-role-menu">🎭 <span>${t('settings.admin.role_menu.edit')}</span></button>`);
+  if (canEditTags) items.push(`<button class="channel-ctx-item" data-action="edit-tags">🏷️ <span>${t('tags.edit')}</span></button>`);
   // Separator right above Delete
   if (canDelete) {
     items.push('<hr class="channel-ctx-sep">');
@@ -2335,6 +2341,8 @@ _showMessageContextMenu(e, msgEl) {
       this.socket.emit('unarchive-message', { messageId: msgId });
     } else if (action === 'edit-role-menu') {
       this._openRoleMenuBuilder?.({ messageId: msgId });
+    } else if (action === 'edit-tags') {
+      this._openMessageTagEditor(msgId, msgEl);
     } else if (action === 'delete') {
       if (await this._showConfirmModal(t('confirm.delete_message'), '', { danger: true, confirmLabel: t('msg_toolbar.delete') })) {
         this.socket.emit('delete-message', { messageId: msgId, attachments: this._getMessageAttachments?.(msgId) });
@@ -2365,6 +2373,213 @@ _hideMessageContextMenu() {
     document.getElementById('messages')?.removeEventListener('scroll', this._msgCtxCloser, true);
     this._msgCtxCloser = null;
   }
+},
+
+// ── Retroactive tag editor (#tagging phase 3) ───────────────────────────────
+// A small popup, opened from the message context menu, that edits the tag set
+// on a message's attachment. Reuses the composer's tag primitives (server
+// lookup, normalize, limits) and the shared .tag-* styles. Each change emits
+// set-message-tags with the full set; the server replaces + broadcasts, and the
+// message-tags-updated handler repaints every footer, including this one.
+_openMessageTagEditor(msgId, msgEl) {
+  this._closeMessageTagEditor();
+  if (!msgId) return;
+  // Seed the working set from the message's current footer chips.
+  const current = Array.from(msgEl?.querySelectorAll('.message-tags .message-tag') || [])
+    .map(el => el.dataset.tag).filter(Boolean);
+  this._msgTagEditor = { msgId, tags: current };
+
+  const pop = document.createElement('div');
+  pop.id = 'message-tag-editor';
+  pop.className = 'tag-editor-popup';
+  pop.innerHTML = `
+    <div class="tag-editor-head">
+      <span class="tag-editor-title">${t('tags.edit')}</span>
+      <button type="button" class="tag-editor-close" aria-label="${t('media.remove')}">×</button>
+    </div>
+    <div class="tag-editor-chips" id="mte-chips"></div>
+    <input id="mte-input" class="tag-popup-input" type="text" autocomplete="off" spellcheck="false"
+           maxlength="${this._maxTagLen()}" placeholder="${this._escapeHtml(t('tags.search_placeholder'))}">
+    <div id="mte-list" class="tag-popup-list"></div>`;
+  document.body.appendChild(pop);
+
+  // Anchor near the message; positioned (and flipped above when there is no
+  // room below) once laid out, then re-clamped as async content changes height.
+  this._msgTagEditorAnchor = msgEl || null;
+  this._positionMessageTagEditor();
+
+  pop.querySelector('.tag-editor-close').addEventListener('click', () => this._closeMessageTagEditor());
+  const input = pop.querySelector('#mte-input');
+  input.addEventListener('input', () => {
+    clearTimeout(this._mteTimer);
+    const q = input.value;
+    this._mteTimer = setTimeout(() => this._msgTagEditorSearch(q), 250);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); this._closeMessageTagEditor(); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const first = pop.querySelector('#mte-list .tag-popup-item');
+      if (first) first.click();
+    }
+  });
+  // Outside-click closer (deferred so the opening click doesn't instantly close).
+  this._mteCloser = (ev) => { if (!pop.contains(ev.target)) this._closeMessageTagEditor(); };
+  setTimeout(() => document.addEventListener('click', this._mteCloser, true), 0);
+
+  this._msgTagEditorRenderChips();
+  this._msgTagEditorSearch('');
+  input.focus();
+},
+
+_closeMessageTagEditor() {
+  clearTimeout(this._mteTimer);
+  document.getElementById('message-tag-editor')?.remove();
+  if (this._mteCloser) { document.removeEventListener('click', this._mteCloser, true); this._mteCloser = null; }
+  this._msgTagEditor = null;
+  this._msgTagEditorAnchor = null;
+},
+
+// Place the editor below its anchor message, flipping above when the popup
+// would overflow the viewport bottom (messages near the bottom of the list),
+// and clamping horizontally. Re-run whenever the popup's height changes.
+_positionMessageTagEditor() {
+  const pop = document.getElementById('message-tag-editor');
+  if (!pop) return;
+  const anchor = this._msgTagEditorAnchor;
+  const rect = (anchor || document.body).getBoundingClientRect();
+  const margin = 8;
+  const h = pop.offsetHeight;
+  const w = pop.offsetWidth;
+  let top = rect.bottom + 4;
+  if (top + h > window.innerHeight - margin) {
+    const above = rect.top - h - 4;
+    top = above >= margin ? above : Math.max(margin, window.innerHeight - h - margin);
+  }
+  let left = Math.min(rect.left + 8, window.innerWidth - w - 12);
+  left = Math.max(margin, left);
+  pop.style.top = top + 'px';
+  pop.style.left = left + 'px';
+},
+
+_msgTagEditorRenderChips() {
+  const wrap = document.getElementById('mte-chips');
+  if (!wrap || !this._msgTagEditor) return;
+  wrap.innerHTML = '';
+  this._msgTagEditor.tags.forEach(name => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    const label = document.createElement('span');
+    label.className = 'tag-chip-label';
+    label.textContent = name;
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'tag-chip-remove';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => this._msgTagEditorRemove(name));
+    chip.appendChild(label);
+    chip.appendChild(rm);
+    wrap.appendChild(chip);
+  });
+},
+
+_msgTagEditorSearch(query) {
+  const input = document.getElementById('mte-input');
+  if (!input || !this.socket || !this._msgTagEditor) return;
+  const q = query;
+  this.socket.emit('search-upload-tags', { query: q }, (res) => {
+    if (!this._msgTagEditor || input.value !== q) return;
+    if (res && res.error === 'rate_limited') return;
+    this._msgTagEditorRenderList(q, (res && res.tags) || []);
+  });
+},
+
+_msgTagEditorRenderList(query, results) {
+  const list = document.getElementById('mte-list');
+  if (!list || !this._msgTagEditor) return;
+  list.innerHTML = '';
+  const applied = new Set(this._msgTagEditor.tags.map(x => x.toLocaleLowerCase()));
+  const norm = this._normalizeTag(query);
+  (results || []).filter(tg => !applied.has(String(tg.name).toLocaleLowerCase())).forEach(tg => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'tag-popup-item';
+    item.textContent = tg.name;
+    item.addEventListener('click', () => this._msgTagEditorAdd(tg.name));
+    list.appendChild(item);
+  });
+  const exact = norm && (applied.has(norm.norm) || (results || []).some(tg => String(tg.name).toLocaleLowerCase() === norm.norm));
+  if (norm && !exact && this._hasPerm && this._hasPerm('manage_tags')) {
+    const create = document.createElement('button');
+    create.type = 'button';
+    create.className = 'tag-popup-item tag-popup-create';
+    create.textContent = t('tags.add_new', { name: norm.name });
+    create.addEventListener('click', () => this._msgTagEditorAdd(norm.name));
+    list.appendChild(create);
+  }
+  if (!list.children.length) {
+    const empty = document.createElement('div');
+    empty.className = 'tag-popup-empty';
+    empty.textContent = norm ? t('tags.none_found') : t('tags.none_yet');
+    list.appendChild(empty);
+  }
+  // The list height just changed; re-anchor so a bottom message stays flipped.
+  this._positionMessageTagEditor();
+},
+
+_msgTagEditorAdd(rawName) {
+  if (!this._msgTagEditor) return;
+  const norm = this._normalizeTag(rawName);
+  if (!norm) return this._showToast(t('tags.invalid'), 'error');
+  const tags = this._msgTagEditor.tags;
+  if (tags.some(x => x.toLocaleLowerCase() === norm.norm)) return;
+  if (tags.length >= this._maxTagsPerAttachment()) {
+    return this._showToast(t('tags.limit_reached', { n: this._maxTagsPerAttachment() }), 'error');
+  }
+  tags.push(norm.name);
+  const input = document.getElementById('mte-input');
+  if (input) input.value = '';
+  this._msgTagEditorRenderChips();
+  this._msgTagEditorSearch('');
+  this._msgTagEditorSave();
+},
+
+_msgTagEditorRemove(name) {
+  if (!this._msgTagEditor) return;
+  this._msgTagEditor.tags = this._msgTagEditor.tags.filter(x => x !== name);
+  this._msgTagEditorRenderChips();
+  this._msgTagEditorSearch(document.getElementById('mte-input')?.value || '');
+  this._msgTagEditorSave();
+},
+
+// Push the full working set to the server. It replaces the message's tags and
+// broadcasts message-tags-updated, which repaints every footer for this id.
+_msgTagEditorSave() {
+  if (!this._msgTagEditor || !this.socket) return;
+  this.socket.emit('set-message-tags', { messageId: this._msgTagEditor.msgId, tags: this._msgTagEditor.tags });
+},
+
+// Repaint the Tags footer for every rendered copy of a message (main list,
+// search results, thread, PiP) after a live tag change. (#tagging phase 3)
+_updateMessageTagsFooter(msgId, tags) {
+  const list = Array.isArray(tags) ? tags : [];
+  document.querySelectorAll(`[data-msg-id="${msgId}"]`).forEach(el => {
+    const existing = el.querySelector('.message-tags');
+    if (existing) existing.remove();
+    if (!list.length) return;
+    const html = this._renderAttachmentTags(list);
+    if (!html) return;
+    const tmp = document.createElement('template');
+    tmp.innerHTML = html.trim();
+    const node = tmp.content.firstChild;
+    const anchor = el.querySelector('.reactions-row')
+      || el.querySelector('.message-content, .search-result-content');
+    if (anchor && anchor.parentNode) anchor.insertAdjacentElement('afterend', node);
+    else (el.querySelector('.message-body') || el).appendChild(node);
+  });
+  // Keep the render cache in sync so a scroll/re-render doesn't drop the change.
+  const cached = (this._lastRenderedMessages || []).find(m => m && m.id === msgId);
+  if (cached) cached.attachmentTags = list.length ? list : undefined;
 },
 
 };
