@@ -9417,6 +9417,10 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   font-weight: 600;
   justify-content: center;
 }
+/* Toolbar buttons share the Sort/Size select controls' height so the whole row
+   sits on one line. Default .btn-sm padding is taller and left the buttons
+   (Tags, Select, etc.) bulging above the dropdowns. */
+.media-gallery-toolbar .btn-sm { padding: 0.25rem 0.625rem; font-size: 0.8rem; }
 #media-gallery-tagfilter-btn.is-active { border-color: var(--accent); color: var(--accent); }
 .tag-popup-item.is-active { color: var(--accent); font-weight: 600; }
 
@@ -9459,7 +9463,7 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   gap: 0.25rem;
   margin-top: 0.25rem;
 }
-.media-grid-item .media-tile-tags { padding: 0 0.25rem 0.25rem; }
+.media-grid-item .media-grid-meta .media-tile-tags { margin: 0; padding: 0; }
 .media-tile-tag {
   display: inline-block;
   max-width: 8rem;
@@ -19701,16 +19705,25 @@ ul.chat-list { list-style-type: disc; }
   object-fit: cover;
   display: block;
 }
-.media-grid-item .media-grid-date {
+/* Bottom overlay holding the tags (top) and the date/size line (bottom). A
+   grid tile is a fixed aspect-ratio box with overflow:hidden and a 100%-height
+   image, so normal-flow children get clipped off the tile -- the meta must be
+   an absolute overlay to show over the image (#tagging phase 3b). */
+.media-grid-item .media-grid-meta {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 0.375rem 0.3125rem;
+  background: linear-gradient(to top, rgba(0,0,0,.78), transparent);
+  pointer-events: none;
+}
+.media-grid-item .media-grid-date {
   color: #fff;
   font-size: 0.68rem;
-  padding: 0.875rem 0.375rem 0.3125rem;
-  pointer-events: none;
   text-shadow: 0 1px 2px rgba(0,0,0,.6);
 }
 .media-grid-item .media-grid-play {

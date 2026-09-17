@@ -21,7 +21,7 @@ export PATH="$PWD/.local-node/node-v22.23.2-linux-x64/bin:$PATH"
 FORCE_HTTP=true PORT=3000 node server.js
 ```
 
-`FORCE_HTTP=true` lets a local browser load it over plain http. Server changes need a restart (no hot reload); client changes need a hard refresh. Run the tests with `node --test --test-concurrency=1` (expect 306 pass / 11 fail: the 11 are pre-existing, unrelated to tagging). Inspect stored tags directly:
+`FORCE_HTTP=true` lets a local browser load it over plain http. Server changes need a restart (no hot reload); client changes need a hard refresh. (Heads-up: the `admin/admin` login above is what the seeded `~/.haven` DB *should* have, but a running instance returned 401 in one session — the creds on a given box may differ, so live in-app QA can be login-gated to the user.) Run the tests with `node --test --test-concurrency=1` (expect 306 pass / 11 fail: the 11 are pre-existing, unrelated to tagging). Inspect stored tags directly:
 ```
 sqlite3 ~/.haven/haven.db "SELECT m.id, ut.name FROM attachment_tags at JOIN upload_tags ut ON ut.id=at.tag_id JOIN messages m ON m.id=at.message_id ORDER BY m.id DESC LIMIT 20;"
 ```
@@ -120,7 +120,7 @@ The search handler parses filters at `messages.js` (~450) and AND-s SQL conditio
 - NOT done: live authenticated in-app QA (user side).
 - Inherits channel-scope + the search cache-invalidation model, so tag search is permission-safe with no new access plumbing.
 
-## Phase 3a — retroactive tag editing (DONE, not committed)
+## Phase 3a — retroactive tag editing (DONE, committed 1b06d7f)
 Edit the tag set on an already-sent message that carries an upload, from a context-menu entry, with live updates for everyone.
 ### Server
 - `src/uploadTags.js` — refactored the apply loop into `pickTags` (normalize+dedupe+cap) and `linkPickedTags` (resolve/mint/link, caller owns the transaction). `applyTagsToMessage` (additive, send-time) now uses them; NEW `setMessageTags` (replace-semantics: deletes the message's existing `attachment_tags` then relinks, so an empty list clears all). Both exported.
@@ -138,7 +138,7 @@ Edit the tag set on an already-sent message that carries an upload, from a conte
 ### Verified
 - `setMessageTags` add/remove/clear + unknown-tag-drop for non-creators — in-memory DB. Full suite 306/11 (baseline). Syntax + en.json + boot clean. NOT done: live in-app QA (user side).
 
-## Phase 3b — gallery: tag chips + filter + bulk management (DONE, not committed)
+## Phase 3b — gallery: tag chips + filter + bulk management (DONE, committed 1b06d7f)
 Three additions to the Files & Media gallery: tag chips on each item, a Tags filter, and a bulk Manage-tags action in select mode.
 ### Decisions (locked with the user)
 - **Bulk Manage-tags is gated to `manage_tags` (or admin)** — the curation permission, which also lets it mint tags. Such users can now enter select mode **even without delete rights**; the Delete button stays delete-gated, the Manage-tags dropdown is manage_tags-gated. Server enforces `manage_tags` at the handler.
@@ -157,7 +157,13 @@ Three additions to the Files & Media gallery: tag chips on each item, a Tags fil
 - Optimistic post-apply update keys by `message_id` (sets the same tags on every gallery item of that message). Consistent with the "one upload = one message" assumption; a full `get-channel-media` refetch keys precisely by `(message_id, url)` so only the first-path item would carry tags. Rare multi-attachment messages briefly over-show until the next open/refetch.
 - Bulk append caps the *incoming* pick at `MAX_TAGS_PER_ATTACHMENT` (3) via `pickTags`; it does not cap the per-attachment *total* (existing + appended), same latent behavior as Phase 1/3a append. Dedup is via `INSERT OR IGNORE`.
 ### Verified
-- JS syntax (all touched files), `en.json` parses, referenced i18n keys resolve. Server boots clean on `~/.haven`. Running server serves the updated client assets. NOT done: live authenticated in-app QA (login-gated; admin/admin returned 401 on the running instance — creds differ from the note). **Server needs a restart** to pick up the `messages.js` changes.
+- JS syntax (all touched files), `en.json` parses, referenced i18n keys resolve. Server boots clean on `~/.haven`.
+- Live QA (user side) this session surfaced and fixed three things, all now committed: (1) the filter/manage popups rendered behind the gallery modal — fixed via the z-index bump above; (2) Confirm on append/replace "did nothing" — root cause was a **stale server process** (started before the `messages.js` edit) with no `bulk-tag-messages` handler, fixed by restarting; nothing wrong with the code; (3) the Phase 3a "Edit tags" popup could spawn off-screen for messages at the very bottom — fixed with the flip-above positioner (see Files touched → Phase 3b). Reminder for the next agent: **`src/` changes require a server restart** (no hot reload) or the new socket handlers silently 404 with no ack.
+- Remaining: a full fresh-eyes pass of the three fixes together (they were verified individually as they landed).
+### Follow-up fixes (uncommitted)
+Two gallery-tile polish fixes on top of 3b, in `public/js/modules/app-ui.js` + `public/css/style.css`:
+- **Tags never showed on photo/video tiles.** The `.media-tile-tags` div rendered in normal flow after the 100%-height `<img>`, so the tile's `aspect-ratio` + `overflow:hidden` clipped it off-tile. Fix: wrap the tags + date in a `.media-grid-meta` bottom overlay (absolute, `pointer-events:none`, flex-column, gradient moved onto the wrapper). Tags now sit above the date over the image. List tiles (audio/files) were unaffected (their tags are in `.media-list-info` flow) and untouched. Note: the `.media-grid-jump` (↗) button has the same clipping (static, no CSS) and is still not shown — pre-existing, out of scope, left alone.
+- **Tags filter button misaligned in the toolbar.** As a `.btn-sm` it rendered ~4px taller than the adjacent Sort/Size `select`s and bulged out of the row (boxes were centered; the button was just taller). Fix: `#media-gallery-tagfilter-btn { padding:0.25rem 0.625rem; font-size:0.8rem }` to match the select height. Verified geometrically against the live stylesheet (button h≈26 vs select 27, same top/bottom line).
 
 ## Phase 4 — admin settings + tag management — PLAN (rough)
 - Swap the hardcoded limits for `server_settings` reads: max tags per attachment (clamp to `MAX_TAGS_CEIL`), tag length (clamp to `MAX_TAG_LEN_CEIL`).
@@ -191,11 +197,16 @@ Phase 3b: `src/socketHandlers/messages.js`; `public/app.html`, `public/js/module
 
 ## Commit status
 - **Phases 1 and 2 committed as `ace5d00`** (branch `tagging`, "still work in progress"). Then `0205ed8` (doc sync) and `ee1b20f` (run-locally note) touch only `tagging.md`.
-- **Phase 3a (retroactive editing) and Phase 3b (gallery chips + filter + bulk manage) are BUILT but NOT committed.** So is this doc update.
-- Nothing pushed. At PR time the user wants clean per-phase commits (Phase 1+2 combined is fine); drop the two `tagging.md`-only noise commits; `tagging.md` itself can be its own trailing commit or excluded from the PR.
+- **Phase 3a + Phase 3b committed together as `1b06d7f`** (10 files; message "Retroactive tag editing and gallery tag chips, filter and bulk manage"). This includes the three live-QA fixes and the doc through Phase 3b. 3a and 3b were intentionally combined because they intermix within shared files (`uploadTags.js`, `messages.js`, `en.json`, `style.css`).
+- Nothing pushed. At PR time the user wants clean per-phase commits (Phase 1+2 combined is fine); drop the two `tagging.md`-only noise commits (`0205ed8`, `ee1b20f`); `tagging.md` itself can be its own trailing commit or excluded from the PR. Note `1b06d7f` bundles 3a+3b — if strict per-phase history is wanted, it would need an interactive rebase/split, but the user accepted the combined commit.
+- **No Co-Authored-By trailer** on tagging commits (user preference); keep it off future ones too.
 
 ## Done
 - Phases 1 + 2 built and committed (`ace5d00`).
-- Phase 3a (retroactive tag editing via context menu, `manage_tags`-gated for others' messages, live footer updates) built, verified via DB tests + static checks + clean boot. NOT committed. Live in-app QA pending (user side).
-- Phase 3b (gallery: tag chips on items, AND/exact Tags filter, manage_tags-gated bulk Append/Replace in select mode with confirm + replace-empty warning) built, static-checked, server boots clean. NOT committed. Live in-app QA pending (needs a server restart for the messages.js changes).
-- Next: Phase 4 (admin settings + soft-delete tag management).
+- Phase 3a (retroactive tag editing via context menu, `manage_tags`-gated for others' messages, live footer updates) — committed (`1b06d7f`).
+- Phase 3b (gallery: tag chips on items, AND/exact Tags filter, manage_tags-gated bulk Append/Replace in select mode with confirm + replace-empty warning) — committed (`1b06d7f`), plus the three live-QA fixes (popup z-index, bottom-message editor flip, restart clarity).
+
+## Next agent — start here
+- Everything through Phase 3b is committed on branch `tagging` (`1b06d7f`). The only tagging change that may be uncommitted is this doc's own next-agent prep (a `tagging.md`-only edit). Any untracked `.claude/`, `.local-node/`, `neutron.theme.css`, `gba_roms/`, `search-overhaul.md`, `themes/neutron/` are UNRELATED — do not commit them.
+- Only work left is **Phase 4** (admin-configurable limits + tag-management view with SOFT delete) — see the plan section above; the soft-delete decision is locked.
+- Before coding: re-read the Decisions and the Phase 4 plan; verify file:line citations (they drift); restart the server after any `src/` edit.

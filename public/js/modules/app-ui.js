@@ -7852,8 +7852,7 @@ _renderMediaGalleryTab(tab) {
         ${selBox(it)}
         <img src="${esc(it.url)}" loading="lazy" alt="">
         <button class="media-grid-jump" data-action="jump" data-msg-id="${it.message_id}" title="${t('app.actions.jump_to_message')}">↗</button>
-        <div class="media-grid-date">${esc(fmt(it.created_at))}${sizeBadge(it) ? ' • ' + sizeBadge(it) : ''}</div>
-        ${tileTags(it)}
+        <div class="media-grid-meta">${tileTags(it)}<div class="media-grid-date">${esc(fmt(it.created_at))}${sizeBadge(it) ? ' • ' + sizeBadge(it) : ''}</div></div>
       </div>`).join('')}</div>`;
   } else if (tab === 'videos') {
     body.innerHTML = `<div class="media-gallery-grid${selectMode ? ' select-mode' : ''}">${items.map(it => `
@@ -7862,8 +7861,7 @@ _renderMediaGalleryTab(tab) {
         <video src="${esc(it.url)}" preload="metadata" muted></video>
         <div class="media-grid-play">▶</div>
         <button class="media-grid-jump" data-action="jump" data-msg-id="${it.message_id}" title="${t('app.actions.jump_to_message')}">↗</button>
-        <div class="media-grid-date">${esc(fmt(it.created_at))}${sizeBadge(it) ? ' • ' + sizeBadge(it) : ''}</div>
-        ${tileTags(it)}
+        <div class="media-grid-meta">${tileTags(it)}<div class="media-grid-date">${esc(fmt(it.created_at))}${sizeBadge(it) ? ' • ' + sizeBadge(it) : ''}</div></div>
       </div>`).join('')}</div>`;
   } else if (tab === 'audios') {
     body.innerHTML = `<div class="media-list${selectMode ? ' select-mode' : ''}">${items.map(it => `
