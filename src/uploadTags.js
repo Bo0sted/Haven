@@ -76,40 +76,66 @@ function searchTags(db, query, limit = 50) {
 // names are skipped; the list is deduped and capped. One transaction; tolerant
 // by design — the caller treats tagging as non-critical and never fails a send
 // over it. Returns the applied tag names.
-function applyTagsToMessage(db, { messageId, content, tagNames, userId, canCreate }) {
-  const relPath = extractUploadPath(content);
-  if (!relPath || !Array.isArray(tagNames) || !tagNames.length) return [];
-
-  // Dedupe by normalized key, preserving first-seen order, then cap.
+// Normalize, dedupe (by case-folded key, first-seen order) and cap a raw tag
+// name list into [{ name, norm }]. Shared by the send-time and edit-time paths.
+function pickTags(tagNames) {
   const seen = new Set();
   const picked = [];
-  for (const raw of tagNames) {
+  for (const raw of Array.isArray(tagNames) ? tagNames : []) {
     const norm = normalizeTagName(raw);
     if (!norm || seen.has(norm.norm)) continue;
     seen.add(norm.norm);
     picked.push(norm);
     if (picked.length >= MAX_TAGS_PER_ATTACHMENT) break;
   }
-  if (!picked.length) return [];
+  return picked;
+}
 
+// Resolve `picked` tags to ids (minting unknown ones only when canCreate) and
+// link each to (messageId, relPath). Existing links are left alone (OR IGNORE).
+// Caller owns the transaction. Returns the applied display names.
+function linkPickedTags(db, { messageId, relPath, picked, userId, canCreate }) {
   const findTag   = db.prepare('SELECT id FROM upload_tags WHERE name_norm = ?');
   const insertTag = db.prepare('INSERT INTO upload_tags (name, name_norm, created_by) VALUES (?, ?, ?)');
   const linkTag   = db.prepare('INSERT OR IGNORE INTO attachment_tags (message_id, rel_path, tag_id) VALUES (?, ?, ?)');
-
   const applied = [];
-  const run = db.transaction(() => {
-    for (const { name, norm } of picked) {
-      let row = findTag.get(norm);
-      if (!row) {
-        if (!canCreate) continue;   // applying is open; creating needs manage_tags
-        const res = insertTag.run(name, norm, userId || null);
-        row = { id: res.lastInsertRowid };
-      }
-      linkTag.run(messageId, relPath, row.id);
-      applied.push(name);
+  for (const { name, norm } of picked) {
+    let row = findTag.get(norm);
+    if (!row) {
+      if (!canCreate) continue;   // applying is open; creating needs manage_tags
+      const res = insertTag.run(name, norm, userId || null);
+      row = { id: res.lastInsertRowid };
     }
-  });
-  run();
+    linkTag.run(messageId, relPath, row.id);
+    applied.push(name);
+  }
+  return applied;
+}
+
+function applyTagsToMessage(db, { messageId, content, tagNames, userId, canCreate }) {
+  const relPath = extractUploadPath(content);
+  if (!relPath || !Array.isArray(tagNames) || !tagNames.length) return [];
+  const picked = pickTags(tagNames);
+  if (!picked.length) return [];
+  let applied = [];
+  db.transaction(() => {
+    applied = linkPickedTags(db, { messageId, relPath, picked, userId, canCreate });
+  })();
+  return applied;
+}
+
+// Replace the full tag set on a message's attachment (retroactive edit). Unlike
+// applyTagsToMessage this is not additive: it clears the message's existing
+// links first, so an empty list removes every tag. Returns the applied names.
+function setMessageTags(db, { messageId, content, tagNames, userId, canCreate }) {
+  const relPath = extractUploadPath(content);
+  if (!relPath) return [];
+  const picked = pickTags(tagNames);
+  let applied = [];
+  db.transaction(() => {
+    db.prepare('DELETE FROM attachment_tags WHERE message_id = ?').run(messageId);
+    applied = linkPickedTags(db, { messageId, relPath, picked, userId, canCreate });
+  })();
   return applied;
 }
 
@@ -123,4 +149,5 @@ module.exports = {
   escapeLike,
   searchTags,
   applyTagsToMessage,
+  setMessageTags,
 };

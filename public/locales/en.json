@@ -691,6 +691,7 @@
     "none_yet": "No tags yet",
     "search_for": "Search for tag \"{{name}}\"",
     "search_removed": "Search removed tags",
+    "edit": "Edit tags",
     "limit_reached": "Up to {{n}} tags per attachment",
     "invalid": "That tag isn't valid"
   },
@@ -3476,7 +3477,22 @@
     "empty_audio": "No audio files in this channel yet",
     "empty_files": "No files in this channel yet",
     "empty_links": "No links in this channel yet",
-    "empty": "Nothing here yet"
+    "empty": "Nothing here yet",
+    "filter_tags": "Tags",
+    "filter_by_tag": "Filter by tag",
+    "filter_clear": "Clear filter",
+    "filter_no_match": "No items match the selected tags",
+    "manage_tags": "Manage tags",
+    "append_tags": "Append tags",
+    "replace_tags": "Replace all tags",
+    "tag_apply_append": "Append tags to {{count}} item(s)",
+    "tag_apply_replace": "Replace tags on {{count}} item(s)",
+    "tag_apply_confirm": "Confirm",
+    "tags_updated": "Updated tags on {{count}} item(s)",
+    "tags_update_failed": "Failed to update tags",
+    "confirm_clear_title": "Remove all tags?",
+    "confirm_clear_body": "This will remove every tag from all {{count}} selected item(s). This cannot be undone.",
+    "confirm_clear_ok": "Remove all tags"
   },
   "platform": {
     "welcome": {

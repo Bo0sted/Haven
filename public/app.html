@@ -4561,6 +4561,10 @@
             <option value="name-desc" data-i18n="media_gallery.sort_name_za">Name Z→A</option>
           </select>
         </label>
+        <div class="media-gallery-tagfilter" id="media-gallery-tagfilter-wrap">
+          <button class="btn-sm" id="media-gallery-tagfilter-btn" data-i18n="media_gallery.filter_tags">Tags</button>
+          <span class="media-gallery-tagfilter-count" id="media-gallery-tagfilter-count" style="display:none"></span>
+        </div>
         <label class="media-gallery-tile-label" id="media-gallery-tile-wrap">
           <span data-i18n="media_gallery.tile_size">Size</span>
           <input type="range" id="media-gallery-tile" min="72" max="360" step="8" value="150" data-i18n-aria-label="media_gallery.tile_size" aria-label="Size">
@@ -4570,6 +4574,13 @@
           <button class="btn-sm" id="media-gallery-select-toggle" data-i18n="media_gallery.select">Select</button>
           <span class="media-gallery-selection-info" id="media-gallery-selection-info" style="display:none"></span>
           <button class="btn-sm" id="media-gallery-select-all" style="display:none" data-i18n="media_gallery.select_all">Select all</button>
+          <div class="media-gallery-tagmanage" id="media-gallery-tagmanage" style="display:none">
+            <button class="btn-sm" id="media-gallery-tagmanage-btn" data-i18n="media_gallery.manage_tags">Manage tags</button>
+            <div class="media-tagmanage-menu" id="media-tagmanage-menu" style="display:none">
+              <button type="button" class="media-tagmanage-opt" data-mode="append" data-i18n="media_gallery.append_tags">Append tags</button>
+              <button type="button" class="media-tagmanage-opt" data-mode="replace" data-i18n="media_gallery.replace_tags">Replace all tags</button>
+            </div>
+          </div>
           <button class="btn-sm btn-danger-fill" id="media-gallery-delete" style="display:none" disabled data-i18n="media_gallery.delete_selected">Delete selected</button>
         </div>
       </div>

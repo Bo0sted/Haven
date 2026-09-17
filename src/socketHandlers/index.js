@@ -1907,6 +1907,9 @@ function setupSocketHandlers(io, db, opts = {}) {
       // debounced, but a scripted client could still hammer it, so it gets its
       // own per-account cap on top of the shared event budget. (#tagging)
       tagSearch: { max: 20, windowMs: 10000 },
+      // Retroactive tag edits write to the DB and broadcast; infrequent by
+      // nature, so a modest per-account cap is plenty. (#tagging phase 3)
+      tagEdit: { max: 20, windowMs: 10000 },
       // A Ferry member lookup is not a local query: each one fans out to up to
       // five Discord REST calls. Discord bans tokens that generate a burst of
       // 429s, so this is the cap that protects the bot, not the database. The
