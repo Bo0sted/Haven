@@ -11,6 +11,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Glyphs, a third look for the interface's icons (#5673).** Settings,
+  Interface Icons (the old Toolbar Icons) has Glyphs next to Monochrome and
+  Colorful Emoji. It redraws the icons across the whole interface with a
+  bundled Font Awesome font, through the new Haven Glyphs plugin, and leaves
+  message text, reactions and the pickers alone. The plugin and font are by
+  @bernardokcosta.
+- **The NSFW blur can be switched off (#5633).** Under Settings, next to
+  Hide NSFW channels, a switch that is on by default. Off, a topic marked
+  🔞 shows plainly with its tag still on it. Asked for by @quakeman00.
+- **A paperclip in the pop-out DM (#5663).** Pictures and files can be sent
+  from the pop-out DM with the button or by dropping them on it; paste was
+  the only way before. Middle-click opens a picture in a new tab there and
+  in a thread too. Reported by @quakeman00.
+
+### Fixed
+- **Caps Lock, Num Lock and Scroll Lock record as desktop shortcuts.** The
+  recorder sent them with the browser's spelling, which the desktop app's
+  shortcut system does not accept. Reported by Constooli on the desktop
+  tracker.
+- **Leaving the Braid layout brought back closed banners (#5671).** The
+  Update, Desktop app and Android pills came back at the top when switching
+  from Braid to another look, because the layout remembered a hidden banner
+  as visible. It remembers what it found now. Reported by @quakeman00.
+- **Picture poll thumbnails are no longer cropped (#5648).** A tall or wide
+  picture fits inside its square, and a poll in columns gets a wider box on
+  a big screen. Reported by @quakeman00.
+- **The edit box's drag bar is under the box (#5662).** It was above it,
+  where the first message in a channel had nowhere to drag up to. Dragging
+  down now makes the box taller. Reported by @quakeman00.
+- **"Discord relay failed: the resource is being rate limited."** When
+  Discord throttles a channel it says how long to wait; the bridge waited at
+  most ten seconds once and then gave up with Discord's own words, which read
+  as a fault. It now waits out anything up to thirty seconds, three times
+  over, with later messages queued behind, and when the wait is longer than
+  that the toast says so and how long. Reported by Andalishious.
+
 ## [4.9.0] - 2026-09-15
 
 A release built from the tracker. The message box grows a mic for voice

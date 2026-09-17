@@ -2186,8 +2186,8 @@ html.rgb-cycling *::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.625rem;
+  height: 2.625rem;
   flex-shrink: 0;
   border: 1px solid var(--border, rgba(255,255,255,0.1));
   border-radius: 0.5rem;
@@ -4005,6 +4005,12 @@ html.rgb-cycling *::after {
   align-items: center;
   justify-content: center;
   z-index: 2;
+}
+/* The edit box's bar sits under the box, in the flow, so dragging down grows it (#5662) */
+.pip-input-resizer.edit-resizer {
+  position: static;
+  height: 0.875rem;
+  margin: 0.1rem 0 0.15rem;
 }
 .pip-input-resizer::before {
   content: '';
@@ -17469,7 +17475,10 @@ ul.chat-list { list-style-type: disc; }
    screen instead of one tall scroll (#5648) */
 .poll-options.poll-grid { display: grid; grid-template-columns: repeat(var(--poll-cols, 2), minmax(0, 1fr)); gap: 0.4rem; }
 .poll-grid .poll-option { flex-direction: column; align-items: stretch; }
-.poll-grid .poll-option-img { aspect-ratio: 1 / 1; height: auto; max-height: none; }
+/* A picture of any shape fits inside its square instead of being cropped to
+   it, and a grid gets more room on a wide screen (#5648) */
+.poll-grid .poll-option-img { aspect-ratio: 1 / 1; height: auto; max-height: none; object-fit: contain; background: var(--bg-input, rgba(0,0,0,0.25)); }
+.poll-widget:has(.poll-grid) { max-width: min(100%, 42rem); }
 .poll-grid .poll-option-text { white-space: normal; }
 .poll-grid .poll-option-count { margin-left: 0; }
 .poll-option.poll-voted {

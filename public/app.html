@@ -486,7 +486,7 @@
               <div class="music-panel-header-left">
                 <button id="music-popout-btn" class="icon-btn small" data-i18n-title="media.music_popout" title="Pop out player">⧉</button>
                 <div class="music-panel-copy">
-                  <span id="music-panel-label">🎵 <span data-i18n="media.listening_together">Listening Together</span></span>
+                  <span id="music-panel-label">🎶 <span data-i18n="media.listening_together">Listening Together</span></span>
                   <span id="music-up-next" class="music-up-next" data-i18n="media.music_up_next_empty">Up next: Nothing queued</span>
                 </div>
               </div>
@@ -940,6 +940,8 @@
     <div id="dm-pip-image-queue-bar" class="image-queue-bar" style="display:none"></div>
     <div class="dm-pip-input-area">
       <div class="pip-input-resizer" aria-hidden="true"></div>
+      <button id="dm-pip-upload-btn" class="pip-input-emoji-btn" data-i18n-title="media.upload_file_title" title="Upload File"><span class="tb-icon tb-icon-emoji" aria-hidden="true">📎</span><span class="tb-icon tb-icon-mono" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span></button>
+      <input type="file" id="dm-pip-file-input" multiple style="display:none">
       <button id="dm-pip-emoji-btn" class="pip-input-emoji-btn" data-i18n-title="dm_runtime.emoji" title="Emoji"><span class="tb-icon tb-icon-emoji" aria-hidden="true">😀</span><span class="tb-icon tb-icon-mono" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.2" fill="currentColor" stroke="none"/></svg></span></button>
       <textarea id="dm-pip-input" class="dm-pip-input" data-i18n-placeholder="dm_runtime.reply_placeholder" placeholder="Reply…" rows="1"></textarea>
       <button id="dm-pip-send" class="dm-pip-send" data-i18n-title="dm_runtime.send" title="Send">
@@ -1414,7 +1416,7 @@
           <div class="settings-nav-item" data-target="section-zoom">🔍 <span data-i18n="settings.nav.zoom">Zoom</span></div>
           <div class="settings-nav-item" data-target="section-reaction-size">😀 <span data-i18n="settings.nav.reaction_size">Reaction Size</span></div>
           <div class="settings-nav-item" data-target="section-role-display">🎨 <span data-i18n="settings.nav.role_display">Role Display</span></div>
-          <div class="settings-nav-item" data-target="section-toolbar-icons">🧰 <span data-i18n="settings.nav.toolbar_icons">Toolbar Icons</span></div>
+          <div class="settings-nav-item" data-target="section-toolbar-icons">🧰 <span data-i18n="settings.nav.toolbar_icons">Interface Icons</span></div>
           <div class="settings-nav-item" data-target="section-image-display">🖼️ <span data-i18n="settings.nav.image_display">Image Display</span></div>
           <div class="settings-nav-item" data-target="section-embed-size">📺 <span data-i18n="settings.nav.embeds_media">Embeds &amp; Media</span></div>
           <div class="settings-nav-item" data-target="section-banner-display">🏞️ <span data-i18n="settings.nav.banner_display">Banner Display</span></div>
@@ -1612,7 +1614,7 @@
 
       <!-- Toolbar Icon Style -->
       <div class="settings-section" id="section-toolbar-icons" style="border-top: 1px solid var(--border-light); padding-top: 16px; margin-top: 8px;">
-        <h5 class="settings-section-title">🧰 <span data-i18n="settings.toolbar_icons.title">Toolbar Icons</span></h5>
+        <h5 class="settings-section-title">🧰 <span data-i18n="settings.toolbar_icons.title">Interface Icons</span></h5>
         <div class="density-picker" id="toolbar-icon-picker">
           <button type="button" class="density-btn active" data-toolbaricons="mono" title="Use sleek monochrome icons in message toolbars" data-i18n-title="settings.toolbar_icons.monochrome_hint">
             <span class="density-icon" aria-hidden="true">
@@ -1629,7 +1631,16 @@
             <span class="density-icon">😀</span>
             <span class="density-label" data-i18n="settings.toolbar_icons.colorful">Colorful Emoji</span>
           </button>
+          <button type="button" class="density-btn" data-toolbaricons="glyphs" title="Draw the whole interface's icons with the Haven Glyphs font instead of emoji" data-i18n-title="settings.toolbar_icons.glyphs_hint">
+            <span class="density-icon" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M12 2l2.9 6.2 6.8.8-5 4.7 1.3 6.7L12 17.1 5.9 20.4l1.3-6.7-5-4.7 6.8-.8z"/>
+              </svg>
+            </span>
+            <span class="density-label" data-i18n="settings.toolbar_icons.glyphs">Glyphs</span>
+          </button>
         </div>
+        <small class="settings-hint" style="display:block" data-i18n="settings.toolbar_icons.glyphs_note">Monochrome and Colorful Emoji change the message toolbars. Glyphs redraws icons across the whole interface with the bundled Haven Glyphs plugin; message text, reactions and pickers are left alone.</small>
         <label class="toolbar-slots-row" for="toolbar-visible-slots">
           <span data-i18n="settings.toolbar_icons.visible_slots">Visible toolbar slots before overflow</span>
           <input type="range" id="toolbar-visible-slots" min="1" max="7" step="1" value="3">
@@ -2060,6 +2071,11 @@
           <input type="checkbox" id="hide-nsfw-channels">
         </label>
         <small class="settings-hint" style="display:block;margin-bottom:6px" data-i18n="settings.nsfw.hide_hint">Channels an admin marked 🔞 leave your sidebar until you turn this off. Handy on a phone in public.</small>
+        <label class="toggle-row">
+          <span data-i18n="settings.nsfw.blur">Blur NSFW topics until clicked</span>
+          <input type="checkbox" id="blur-nsfw-topics" checked>
+        </label>
+        <small class="settings-hint" style="display:block;margin-bottom:6px" data-i18n="settings.nsfw.blur_hint">The picture and preview of a topic marked 🔞 sit behind a blur, like a spoiler. Turn this off to see them plainly.</small>
       </div>
 
       <!-- Password Change Section -->
@@ -3808,7 +3824,7 @@
   <!-- Music Share Modal -->
   <div class="modal-overlay" id="music-modal" style="display:none">
     <div class="modal">
-      <h3>🎵 <span data-i18n="modals.listen_together.title">Listen Together</span></h3>
+      <h3>🎶 <span data-i18n="modals.listen_together.title">Listen Together</span></h3>
       <p class="modal-desc" data-i18n="modals.listen_together.desc">Paste a link from Spotify, YouTube, or SoundCloud to share with everyone in voice</p>
       <div class="form-group">
         <label data-i18n="modals.listen_together.link_label">Music Link</label>
@@ -4639,7 +4655,7 @@
   <!-- Shared with the server (src/automod.js requires the same file) so both
        sides reach identical verdicts on a link. Must load before app.js. -->
   <script src="/js/automod-rules.js?v=3.44.0"></script>
-  <script type="module" src="/js/app.js?v=4.8.10"></script>
+  <script type="module" src="/js/app.js?v=4.9.5"></script>
   <script src="/js/plugin-loader.js?v=4.6.10"></script>
   <script src="/js/modules/stream-debug.js?v=3.16.15"></script>
   <script src="/js/password-eye.js?v=3.17.1"></script>

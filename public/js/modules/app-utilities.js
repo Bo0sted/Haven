@@ -277,7 +277,7 @@ _replaceBurnedMessage(el) {
   const content = el.querySelector('.message-content');
   if (!content) return;
   const doneText = t('messages.burn_done');
-  content.innerHTML = `<span class="muted-text" style="font-style:italic">🔥 ${this._escapeHtml(doneText)}</span>`;
+  content.innerHTML = `<span class="muted-text burn-complete-label" style="font-style:italic">🔥 ${this._escapeHtml(doneText)}</span>`;
   el.classList.remove('message-burn-pending');
   el.classList.add('message-burned');
 },
@@ -851,7 +851,7 @@ _formatContent(str) {
     const voiceDur = this._voiceMessageLength(fileName);
     if (voiceDur !== null) {
       return `<div class="file-attachment voice-message">
-        <div class="file-info">🎤 <span class="file-name">${t('app.messages.voice_message')}</span> <span class="file-size">(${voiceDur})</span></div>
+        <div class="file-info"><span class="file-type-icon" aria-hidden="true">🎤</span> <span class="file-name">${t('app.messages.voice_message')}</span> <span class="file-size">(${voiceDur})</span></div>
         <audio controls preload="metadata" src="${fileUrl}" class="file-audio"></audio>
       </div>`;
     }
@@ -862,13 +862,13 @@ _formatContent(str) {
     // if the element fires `error`, so listing a format here is safe.
     if (['mp3', 'ogg', 'oga', 'wav', 'm4a', 'aac', 'flac', 'opus', 'weba'].includes(ext)) {
       return `<div class="file-attachment">
-        <div class="file-info">${icon} <span class="file-name">${fileName}</span> <span class="file-size">(${fileSize})</span></div>
+        <div class="file-info"><span class="file-type-icon" aria-hidden="true">${icon}</span> <span class="file-name">${fileName}</span> <span class="file-size">(${fileSize})</span></div>
         <audio controls preload="none" src="${fileUrl}" class="file-audio"></audio>
       </div>`;
     }
     if (['mp4', 'webm', 'mov', 'm4v', 'ogv'].includes(ext)) {
       return `<div class="file-attachment">
-        <div class="file-info">${icon} <span class="file-name">${fileName}</span> <span class="file-size">(${fileSize})</span></div>
+        <div class="file-info"><span class="file-type-icon" aria-hidden="true">${icon}</span> <span class="file-name">${fileName}</span> <span class="file-size">(${fileSize})</span></div>
         <div class="file-video-wrap">
           <video controls preload="none" src="${fileUrl}" class="file-video"></video>
         </div>
@@ -4240,12 +4240,14 @@ _startEditMessage(msgEl, msgId) {
   textarea.rows = 1;
   textarea.maxLength = parseInt(this.serverSettings?.max_message_chars) || 2000;
   // The same drag bar the composer has, so a long message can be pulled
-  // open while editing it (#5662).
+  // open while editing it. It sits under the box, and dragging it down makes
+  // the box taller, since the message above it may be at the very top of
+  // the chat with nowhere to drag up to (#5662).
   const grip = document.createElement('div');
   grip.className = 'pip-input-resizer edit-resizer';
   grip.setAttribute('aria-hidden', 'true');
-  contentEl.appendChild(grip);
   contentEl.appendChild(textarea);
+  contentEl.appendChild(grip);
   this._bindInputResizer?.(grip);
 
   // Track active edit textarea for emoji picker redirection

@@ -292,7 +292,10 @@ _forumToolbarEl(code) {
 _createForumTopicEl(msg) {
   const el = document.createElement('div');
   const unread = !!(msg.thread && msg.thread.unread);
-  el.className = 'forum-topic' + (msg.pinned ? ' forum-topic-pinned' : '') + (msg.closed ? ' forum-topic-closed' : '') + (unread ? ' forum-topic-unread' : '') + (msg.nsfw ? ' forum-topic-nsfw' : '');
+  // Someone who has switched the blur off in Settings gets the card plain,
+  // with the 🔞 tag still on it (#5633).
+  const blurred = !!msg.nsfw && this._blurNsfw();
+  el.className = 'forum-topic' + (msg.pinned ? ' forum-topic-pinned' : '') + (msg.closed ? ' forum-topic-closed' : '') + (unread ? ' forum-topic-unread' : '') + (msg.nsfw ? ' forum-topic-nsfw' : '') + (msg.nsfw && !blurred ? ' revealed' : '');
   el.dataset.msgId = msg.id;
   el.dataset.userId = msg.user_id;
   el.dataset.time = msg.created_at;
@@ -308,7 +311,7 @@ _createForumTopicEl(msg) {
   const canEdit = this.user && (msg.user_id === this.user.id || this.user.isAdmin || (this._hasPerm && this._hasPerm('manage_messages')));
   // An NSFW topic blurs its picture and preview behind a label until clicked,
   // like a spoiler; the title stays readable (#5633).
-  const cover = msg.nsfw ? ` data-nsfw-label="${this._escapeHtml(t('forum.nsfw_reveal'))}"` : '';
+  const cover = blurred ? ` data-nsfw-label="${this._escapeHtml(t('forum.nsfw_reveal'))}"` : '';
   el.innerHTML = `
     ${this._forumAvatarHtml(msg)}
     ${thumb ? `<div class="forum-topic-thumb"${cover}><img ${this._lazySrcAttr ? this._lazySrcAttr(`src="${this._escapeHtml(thumb)}"`) : `src="${this._escapeHtml(thumb)}"`} class="chat-image forum-thumb-img" alt=""></div>` : `<div class="forum-topic-thumb forum-topic-thumb-empty"${cover}><span>⬡</span></div>`}
@@ -769,6 +772,11 @@ _forumThreadRenderTopic() {
 
 _hideNsfw() {
   return localStorage.getItem('haven_hide_nsfw') === 'true';
+},
+
+// The blur on NSFW topics is on unless switched off in Settings (#5633).
+_blurNsfw() {
+  try { return localStorage.getItem('haven_blur_nsfw') !== 'false'; } catch { return true; }
 },
 
 // A topic marked NSFW is left out of the forum for anyone who hides NSFW

@@ -5,20 +5,20 @@
 // ═══════════════════════════════════════════════════════════
 
 import SocketMethods   from './modules/app-socket.js?v=4.8.3';
-import UIBindMethods   from './modules/app-ui.js?v=4.8.5';
-import MediaMethods    from './modules/app-media.js?v=4.8.1';
-import ContextMethods  from './modules/app-context.js?v=4.8.3';
+import UIBindMethods   from './modules/app-ui.js?v=4.9.2';
+import MediaMethods    from './modules/app-media.js?v=4.9.1';
+import ContextMethods  from './modules/app-context.js?v=4.9.1';
 import ChannelMethods  from './modules/app-channels.js?v=4.8.2';
 import MessageMethods  from './modules/app-messages.js?v=4.8.2';
 import UserMethods     from './modules/app-users.js?v=4.8.2';
 import VoiceMethods    from './modules/app-voice.js?v=4.7.1';
-import UtilityMethods  from './modules/app-utilities.js?v=4.8.5';
+import UtilityMethods  from './modules/app-utilities.js?v=4.9.1';
 import AdminMethods    from './modules/app-admin.js?v=4.8.3';
-import PlatformMethods from './modules/app-platform.js?v=4.8.7';
+import PlatformMethods from './modules/app-platform.js?v=4.9.1';
 import SearchMethods   from './modules/app-search.js?v=3.49.0';
 import FerryMethods    from './modules/app-ferry.js?v=3.51.4';
-import ForumMethods    from './modules/app-forum.js?v=4.8.4';
-import RoleToolMethods from './modules/app-role-tools.js?v=4.7.1';
+import ForumMethods    from './modules/app-forum.js?v=4.9.1';
+import RoleToolMethods from './modules/app-role-tools.js?v=4.9.1';
 
 class HavenApp {
   constructor() {

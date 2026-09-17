@@ -143,10 +143,38 @@ function getConfig() {
 // Discord REST
 // ══════════════════════════════════════════════════════════════
 
+// Discord answers a burst with a 429 and says how long to wait. A short wait
+// is honoured in place (the per-channel queue holds later messages behind
+// this one), up to three times; a long one is reported instead, with the
+// number of seconds, so the sender knows Discord is throttling the channel
+// and the bridge is not broken. Before this the bridge waited at most ten
+// seconds once and then showed Discord's own words, which read as a fault.
+const RATE_LIMIT_MAX_WAIT_MS = 30000;
+const RATE_LIMIT_ATTEMPTS = 3;
+
+async function rateLimitWaitMs(res) {
+  let seconds = 0;
+  try {
+    const info = await res.clone().json();
+    if (Number.isFinite(info?.retry_after)) seconds = info.retry_after;
+  } catch { /* header-only 429 */ }
+  if (!seconds) {
+    const header = Number(res.headers.get('retry-after'));
+    seconds = Number.isFinite(header) && header > 0 ? header : 1;
+  }
+  return Math.max(250, Math.ceil(seconds * 1000));
+}
+
+function rateLimitError(waitMs) {
+  const err = new Error(`Discord is rate limiting this channel; try again in about ${Math.ceil(waitMs / 1000)}s`);
+  err.status = 429;
+  return err;
+}
+
 /**
- * One REST call with bot auth. Retries once on a 429 using Discord's own
- * retry_after, and once on a 5xx. Everything else surfaces to the caller so the
- * admin UI can show the real reason a pairing is broken.
+ * One REST call with bot auth. Waits out short 429s using Discord's own
+ * retry_after, retries once on a 5xx. Everything else surfaces to the caller
+ * so the admin UI can show the real reason a pairing is broken.
  */
 async function discordRequest(method, path, body, attempt = 0) {
   const { token } = getConfig();
@@ -163,11 +191,14 @@ async function discordRequest(method, path, body, attempt = 0) {
     signal: AbortSignal.timeout(15000),
   });
 
-  if (res.status === 429 && attempt < 1) {
-    let wait = 1000;
-    try { wait = Math.min(10000, Math.ceil((await res.clone().json()).retry_after * 1000) || 1000); } catch { /* header-only 429 */ }
-    await sleep(wait);
-    return discordRequest(method, path, body, attempt + 1);
+  if (res.status === 429) {
+    const wait = await rateLimitWaitMs(res);
+    console.warn(`[ferry] Discord rate limit on ${method} ${path}: retry after ${Math.ceil(wait / 1000)}s`);
+    if (attempt < RATE_LIMIT_ATTEMPTS - 1 && wait <= RATE_LIMIT_MAX_WAIT_MS) {
+      await sleep(wait);
+      return discordRequest(method, path, body, attempt + 1);
+    }
+    throw rateLimitError(wait);
   }
   if (res.status >= 500 && attempt < 1) {
     await sleep(1500);
@@ -201,14 +232,14 @@ async function executeWebhook(webhookId, webhookToken, payload, attempt = 0) {
     signal: AbortSignal.timeout(15000),
   });
 
-  if (res.status === 429 && attempt < 2) {
-    let wait = 1000;
-    try {
-      const info = await res.clone().json();
-      wait = Math.min(10000, Math.ceil((info.retry_after || 1) * 1000));
-    } catch { /* header-only 429, fall back to the 1s default */ }
-    await sleep(wait);
-    return executeWebhook(webhookId, webhookToken, payload, attempt + 1);
+  if (res.status === 429) {
+    const wait = await rateLimitWaitMs(res);
+    console.warn(`[ferry] Discord rate limit on webhook ${webhookId}: retry after ${Math.ceil(wait / 1000)}s`);
+    if (attempt < RATE_LIMIT_ATTEMPTS - 1 && wait <= RATE_LIMIT_MAX_WAIT_MS) {
+      await sleep(wait);
+      return executeWebhook(webhookId, webhookToken, payload, attempt + 1);
+    }
+    throw rateLimitError(wait);
   }
 
   let data = null;

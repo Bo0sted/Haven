@@ -593,6 +593,15 @@ _setupNotifications() {
     hideNsfwToggle.checked = localStorage.getItem('haven_hide_nsfw') === 'true';
     hideNsfwToggle.addEventListener('change', () => this._setHideNsfw?.(hideNsfwToggle.checked));
   }
+  // The blur on an NSFW topic is on unless switched off (#5633).
+  const blurNsfwToggle = document.getElementById('blur-nsfw-topics');
+  if (blurNsfwToggle) {
+    blurNsfwToggle.checked = localStorage.getItem('haven_blur_nsfw') !== 'false';
+    blurNsfwToggle.addEventListener('change', () => {
+      try { localStorage.setItem('haven_blur_nsfw', blurNsfwToggle.checked ? 'true' : 'false'); } catch {}
+      if (this._forumActive && this._forumReload) this._forumReload();
+    });
+  }
   this._setupSettingsSearch?.();
   const hideOwnScoreToggle = document.getElementById('hide-own-score');
   if (hideOwnScoreToggle) {

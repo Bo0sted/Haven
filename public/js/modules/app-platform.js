@@ -629,6 +629,8 @@ async _setupDesktopShortcuts() {
     'ArrowLeft': 'Left', 'ArrowRight': 'Right',
     'Escape': 'Escape', 'Tab': 'Tab', 'Enter': 'Return',
     'Backspace': 'Backspace', 'Delete': 'Delete',
+    // Electron spells the lock keys this way; the browser reports CapsLock.
+    'CapsLock': 'Capslock', 'NumLock': 'Numlock', 'ScrollLock': 'Scrolllock',
     'Home': 'Home', 'End': 'End', 'PageUp': 'PageUp', 'PageDown': 'PageDown',
   };
 

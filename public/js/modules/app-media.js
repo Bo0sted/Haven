@@ -4411,12 +4411,20 @@ _setupToolbarIconPicker() {
     }
   };
 
+  // Glyphs is the Haven Glyphs plugin, switched on and off from here so it
+  // sits with the other two icon looks instead of on the plugin page. The
+  // plugin replaces emoji text, so the toolbars show their emoji twins under
+  // it and the plugin turns those into glyphs (#5673).
+  const GLYPHS_PLUGIN = 'HavenGlyphs.plugin.js';
+  const applyIconMode = (mode) => {
+    document.documentElement.dataset.toolbaricons = mode === 'glyphs' ? 'emoji' : mode;
+    picker.querySelectorAll('[data-toolbaricons]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.toolbaricons === mode);
+    });
+  };
   const savedMode = localStorage.getItem('haven-toolbar-icons') || 'mono';
   const normalizedMode = savedMode === 'color' ? 'emoji' : savedMode;
-  document.documentElement.dataset.toolbaricons = normalizedMode;
-  picker.querySelectorAll('[data-toolbaricons]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.toolbaricons === normalizedMode);
-  });
+  applyIconMode(normalizedMode);
 
   let savedSlots = parseInt(localStorage.getItem('haven-toolbar-visible-slots') || '3', 10);
   if (!Number.isFinite(savedSlots)) savedSlots = 3;
@@ -4456,11 +4464,21 @@ _setupToolbarIconPicker() {
   picker.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-toolbaricons]');
     if (!btn) return;
-    const mode = btn.dataset.toolbaricons;
-    document.documentElement.dataset.toolbaricons = mode;
+    let mode = btn.dataset.toolbaricons;
+    const loader = window.HavenPluginLoader;
+    if (mode === 'glyphs') {
+      const plugin = loader?.loadedPlugins?.get?.(GLYPHS_PLUGIN);
+      if (!plugin || !plugin.instance) {
+        this._showToast(t('settings.toolbar_icons.glyphs_missing'), 'error');
+        mode = 'emoji';
+      } else {
+        loader.enablePlugin(GLYPHS_PLUGIN);
+      }
+    } else if (loader?.loadedPlugins?.get?.(GLYPHS_PLUGIN)?.enabled) {
+      loader.disablePlugin(GLYPHS_PLUGIN);
+    }
     localStorage.setItem('haven-toolbar-icons', mode);
-    picker.querySelectorAll('[data-toolbaricons]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    applyIconMode(mode);
     refreshCurrentMessages();
   });
 
