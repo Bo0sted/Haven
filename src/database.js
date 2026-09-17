@@ -247,6 +247,27 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_upload_ownership_user
       ON upload_ownership(user_id);
 
+    -- ── Attachment tagging (upload tags) ──────────────────
+    -- A GLOBAL tag vocabulary applied to file/image uploads. Separate from the
+    -- per-channel forum-topic tags (channels.forum_tags / messages.tags JSON).
+    -- upload_tags is the vocabulary; attachment_tags links a tag to the file a
+    -- message carries. name_norm is the case-folded uniqueness/lookup key.
+    CREATE TABLE IF NOT EXISTS upload_tags (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT NOT NULL,
+      name_norm  TEXT NOT NULL UNIQUE,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS attachment_tags (
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      rel_path   TEXT NOT NULL,
+      tag_id     INTEGER NOT NULL REFERENCES upload_tags(id) ON DELETE CASCADE,
+      PRIMARY KEY (message_id, rel_path, tag_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachment_tags_tag ON attachment_tags(tag_id);
+    CREATE INDEX IF NOT EXISTS idx_attachment_tags_msg ON attachment_tags(message_id);
+
     CREATE INDEX IF NOT EXISTS idx_messages_channel
       ON messages(channel_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_channel_code
@@ -897,7 +918,7 @@ function initDatabase() {
       'rename_sub_channel', 'delete_lower_messages', 'manage_webhooks',
       'use_ferry',
       'upload_files', 'use_voice', 'view_history', 'view_all_members',
-      'manage_music_queue',
+      'manage_music_queue', 'manage_tags',
       'delete_own_messages', 'edit_own_messages'
     ];
     serverModPerms.forEach(p => insertPerm.run(serverMod.lastInsertRowid, p));

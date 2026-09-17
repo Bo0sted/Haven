@@ -9164,6 +9164,195 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   flex-wrap: nowrap;
 }
 
+/* ── Attachment tagging (composer) — (#tagging) ─────── */
+/* The active attachment (the one the tag bar edits) gets an accent ring; any
+   attachment carrying tags gets a subtle accent underline. */
+.image-queue-thumb.is-active,
+.file-queue-chip.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.image-queue-thumb.has-tags::after,
+.file-queue-chip.has-tags::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.file-queue-chip { position: relative; }
+
+.tag-queue-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.tag-queue-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.tag-queue-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+  border-radius: 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  max-width: 12rem;
+}
+.tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+.tag-chip-remove:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.tag-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 1rem;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.tag-add-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.tag-add-btn:disabled { opacity: 0.5; cursor: default; }
+
+.tag-popup {
+  position: absolute;
+  left: 0.75rem;
+  bottom: calc(100% + 0.25rem);
+  z-index: 40;
+  width: 16rem;
+  max-width: calc(100% - 1.5rem);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
+  padding: 0.375rem;
+}
+.tag-popup-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  outline: none;
+}
+.tag-popup-input:focus { border-color: var(--accent); }
+.tag-popup-list {
+  margin-top: 0.375rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tag-popup-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-popup-item:hover { background: var(--bg-tertiary); }
+.tag-popup-create { color: var(--accent); font-weight: 600; }
+.tag-popup-empty {
+  padding: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+/* ── Tags footer on messages carrying tagged attachments (#tagging) ─── */
+.message-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+.message-tags-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.message-tags-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 0.125rem;
+}
+.message-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.0625rem 0.4375rem;
+  border-radius: 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--text-secondary, var(--text-primary));
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.message-tag:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
 /* ── Upload progress bar ────────────────────────────── */
 .upload-progress-bar {
   display: flex;
@@ -10150,6 +10339,18 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
   padding: 0.5rem;
   color: var(--text-muted);
   font-size: 0.8125rem;
+}
+
+/* "Search removed tags" fallback in the tag: picker (#tagging phase 2). */
+.sfp-search-removed {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .search-result-item {

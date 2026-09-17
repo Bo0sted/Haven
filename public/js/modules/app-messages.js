@@ -868,6 +868,21 @@ _appendMessage(message, forceScroll = false) {
   }
 },
 
+// Footer listing every tag across a message's tagged attachments, folded into
+// one row with the tag icon and a "Tags" label (#tagging). The server already
+// dedupes the list; empty/absent = no footer.
+_renderAttachmentTags(tags) {
+  if (!Array.isArray(tags) || !tags.length) return '';
+  const icon = '<svg class="message-tags-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+  // Each chip is a button: clicking it runs a search for exactly that tag
+  // (wired via delegation in app-ui.js). data-tag carries the raw name.
+  const chips = tags.map(name => {
+    const esc = this._escapeHtml(name);
+    return `<button type="button" class="message-tag" data-tag="${esc}" title="${this._escapeHtml(t('tags.search_for', { name }))}">${esc}</button>`;
+  }).join('');
+  return `<div class="message-tags">${icon}<span class="message-tags-label">${t('tags.attachment_tags')}</span>${chips}</div>`;
+},
+
 _createMessageEl(msg, prevMsg) {
   // Persisted welcome message (new-member greeting). Rendered as a simple,
   // non-interactive system line reusing the .welcome-message styling — no
@@ -914,6 +929,7 @@ _createMessageEl(msg, prevMsg) {
     (new Date(msg.created_at) - new Date(prevMsg.created_at)) < 5 * 60 * 1000;
 
   const reactionsHtml = this._renderReactions(msg.id, msg.reactions || []);
+  const tagsHtml = this._renderAttachmentTags(msg.attachmentTags);
   const pollHtml = msg.poll ? this._renderPollWidget(msg.id, msg.poll) : '';
   const roleMenuHtml = msg.roleMenu ? this._renderRoleMenu(msg.id, msg.roleMenu) : '';
   const threadHtml = isDmContext ? ''
@@ -1058,6 +1074,7 @@ _createMessageEl(msg, prevMsg) {
         <div class="message-content">${pinnedTag}${archivedTag}${ephemeralTag}${this._formatContent(msg.content)}${editedHtml}${statusSlotHtml}</div>
         ${pollHtml}${roleMenuHtml}
         ${reactionsHtml}
+        ${tagsHtml}
         ${threadHtml}
       </div>
       ${toolbarHtml}
@@ -1195,6 +1212,7 @@ _createMessageEl(msg, prevMsg) {
         <div class="message-content">${this._formatContent(msg.content)}${editedHtml}</div>
         ${pollHtml}${roleMenuHtml}
         ${reactionsHtml}
+        ${tagsHtml}
         ${threadHtml}
       </div>
       ${toolbarHtml}
@@ -1222,6 +1240,8 @@ _promoteCompactToFull(compactEl) {
   const toolbarHtml = toolbarEl ? toolbarEl.outerHTML : '';
   const reactionsEl = compactEl.querySelector('.reactions-row');
   const reactionsHtml = reactionsEl ? reactionsEl.outerHTML : '';
+  const tagsEl = compactEl.querySelector('.message-tags');
+  const tagsHtml = tagsEl ? tagsEl.outerHTML : '';
   const pinnedTag = isPinned ? `<span class="pinned-tag" title="${t('app.messages.pinned')}">📌</span>` : '';
   const e2eTag = compactEl.dataset.e2e === '1' ? `<span class="e2e-tag" title="${t('app.messages.e2e_encrypted')}">🔒</span>` : '';
   const needsStatusSlot = !!e2eTag || compactEl.classList.contains('message-burn-pending');
@@ -1289,6 +1309,7 @@ _promoteCompactToFull(compactEl) {
         </div>
         <div class="message-content">${contentHtml}</div>
         ${reactionsHtml}
+        ${tagsHtml}
       </div>
       ${toolbarHtml}
       <button class="msg-dots-btn" aria-label="${t('app.actions.message_actions')}">⋯</button>

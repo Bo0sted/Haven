@@ -2276,6 +2276,17 @@ _setupUI() {
     this._jumpToMessage(parseInt(replyMsgId, 10));
   });
 
+  // Tag chip click (message footer / search result) — run a search for exactly
+  // that tag. Delegated on document so it works in every surface that renders a
+  // Tags footer without per-container wiring. (#tagging phase 2)
+  document.addEventListener('click', (e) => {
+    const chip = e.target.closest('.message-tag[data-tag]');
+    if (!chip) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this._searchByTag?.(chip.dataset.tag);
+  });
+
   // #channel-name link click — switch to the referenced channel.
   // Delegated globally so it works inside the main pane, thread panel, and
   // DM PiP without per-container wiring.
@@ -7560,7 +7571,8 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
       code: targetChannel,
       content: line,
       isImage: true,
-      ...(bundled && { bundled: true })
+      ...(bundled && { bundled: true }),
+      ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {})
     });
     this.notifications.play('sent');
   } catch (err) {

@@ -61,6 +61,7 @@ _queueImage(file) {
     return this._showToast(t('media.max_attachments_n', { n: this._maxAttachments() }), 'error');
   }
   this._imageQueue.push(file);
+  this._activeAttachment = file;   // newest attachment is the one the tag bar edits
   this._renderImageQueue();
   document.getElementById('message-input').focus();
 },
@@ -73,6 +74,7 @@ _renderImageQueue() {
   if (!hasImages && !hasFiles) {
     bar.style.display = 'none';
     bar.innerHTML = '';
+    this._renderTagBar();
     return;
   }
   bar.style.display = 'flex';
@@ -80,16 +82,21 @@ _renderImageQueue() {
   if (hasImages) {
     this._imageQueue.forEach((file, idx) => {
       const thumb = document.createElement('div');
-      thumb.className = 'image-queue-thumb' + (file._spoiler ? ' is-spoiler' : '');
+      thumb.className = 'image-queue-thumb' + (file._spoiler ? ' is-spoiler' : '')
+        + (file === this._activeAttachment ? ' is-active' : '');
+      if (file._tags && file._tags.length) thumb.classList.add('has-tags');
       const img = document.createElement('img');
       img.src = URL.createObjectURL(file);
       img.alt = file.name;
       img.onload = () => URL.revokeObjectURL(img.src);
+      // Clicking a queued attachment makes it the one the tag bar edits (#tagging).
+      thumb.addEventListener('click', () => this._selectAttachment(file));
       const removeBtn = document.createElement('button');
       removeBtn.className = 'image-queue-remove';
       removeBtn.title = t('media.remove');
       removeBtn.textContent = '×';
-      removeBtn.addEventListener('click', () => {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         this._imageQueue.splice(idx, 1);
         this._renderImageQueue();
       });
@@ -102,7 +109,8 @@ _renderImageQueue() {
   if (hasFiles) {
     this._fileQueue.forEach((file, idx) => {
       const chip = document.createElement('div');
-      chip.className = 'file-queue-chip';
+      chip.className = 'file-queue-chip' + (file === this._activeAttachment ? ' is-active' : '');
+      if (file._tags && file._tags.length) chip.classList.add('has-tags');
       chip.title = file.name + ' — ' + this._formatFileSize(file.size);
       const icon = document.createElement('span');
       icon.className = 'file-queue-chip-icon';
@@ -113,11 +121,13 @@ _renderImageQueue() {
       const size = document.createElement('span');
       size.className = 'file-queue-chip-size';
       size.textContent = this._formatFileSize(file.size);
+      chip.addEventListener('click', () => this._selectAttachment(file));
       const removeBtn = document.createElement('button');
       removeBtn.className = 'image-queue-remove';
       removeBtn.title = t('media.remove');
       removeBtn.textContent = '×';
-      removeBtn.addEventListener('click', () => {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         this._fileQueue.splice(idx, 1);
         this._renderImageQueue();
       });
@@ -140,6 +150,232 @@ _renderImageQueue() {
     });
     bar.appendChild(clearAll);
   }
+  this._renderTagBar();
+},
+
+// ── Attachment tagging (composer) — (#tagging) ──────────────────────────────
+// A row below the image-queue bar tags the *active* attachment. Tags ride on
+// the File object (`_tags`), same trick as `_spoiler`, so the flush loop can
+// read them without extra state. Applying an existing tag is open to any
+// uploader; minting a new one needs manage_tags and is committed on send.
+
+// Phase 1 hardcodes the limits (an admin setting swaps these in a later pass).
+// Kept in sync with the hard ceilings in src/uploadTags.js.
+_maxTagsPerAttachment() { return 3; },
+_maxTagLen() { return 20; },
+
+// Every queued attachment, images first, in the order they appear in the bar.
+_composerAttachments() {
+  return [...(this._imageQueue || []), ...(this._fileQueue || [])];
+},
+
+// Tagging is for plaintext channel uploads: DMs are E2E (the server never sees
+// their bytes, so it can't index a tag), and forum channels have their own
+// topic-tag UI in the composer that this would visually collide with.
+_tagBarEligible() {
+  const ch = this.channels?.find(c => c.code === this.currentChannel);
+  return !!(ch && !ch.is_dm && !ch.is_forum);
+},
+
+// Point the tag bar at a different queued attachment.
+_selectAttachment(file) {
+  if (!file) return;
+  this._activeAttachment = file;
+  this._closeTagPopup();
+  this._renderImageQueue();   // repaints active highlight + the tag bar
+},
+
+_renderTagBar() {
+  const bar = document.getElementById('tag-queue-bar');
+  if (!bar) return;
+  const items = this._composerAttachments();
+  // Keep the active pointer valid as the queue changes underneath it.
+  if (!items.includes(this._activeAttachment)) this._activeAttachment = items[0] || null;
+
+  if (!items.length || !this._tagBarEligible()) {
+    bar.style.display = 'none';
+    this._closeTagPopup();
+    return;
+  }
+  bar.style.display = 'flex';
+  this._ensureTagComposerBound();
+
+  const chips = document.getElementById('tag-queue-chips');
+  const file = this._activeAttachment;
+  const tags = (file && file._tags) || [];
+  if (chips) {
+    chips.innerHTML = '';
+    tags.forEach(name => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      const label = document.createElement('span');
+      label.className = 'tag-chip-label';
+      label.textContent = name;
+      const rm = document.createElement('button');
+      rm.className = 'tag-chip-remove';
+      rm.type = 'button';
+      rm.title = t('media.remove');
+      rm.textContent = '×';
+      rm.addEventListener('click', (e) => { e.stopPropagation(); this._removeTagFromActive(name); });
+      chip.appendChild(label);
+      chip.appendChild(rm);
+      chips.appendChild(chip);
+    });
+  }
+  // Disable "Add tag" once this attachment hit the cap.
+  const addBtn = document.getElementById('tag-add-btn');
+  if (addBtn) {
+    const full = tags.length >= this._maxTagsPerAttachment();
+    addBtn.disabled = full;
+    addBtn.title = full ? t('tags.limit_reached', { n: this._maxTagsPerAttachment() }) : t('tags.add_tag');
+  }
+},
+
+// Wire the Add-tag button, the popup input and the outside-click closer exactly
+// once — the tag bar is re-rendered constantly, so per-render binding would
+// stack listeners.
+_ensureTagComposerBound() {
+  if (this._tagComposerBound) return;
+  this._tagComposerBound = true;
+  const addBtn = document.getElementById('tag-add-btn');
+  const input = document.getElementById('tag-popup-input');
+  addBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const popup = document.getElementById('tag-popup');
+    if (popup && popup.style.display !== 'none') this._closeTagPopup();
+    else this._openTagPopup();
+  });
+  input?.addEventListener('input', () => {
+    clearTimeout(this._tagSearchTimer);
+    const q = input.value;
+    this._tagSearchTimer = setTimeout(() => this._tagPopupSearch(q), 250);
+  });
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); this._closeTagPopup(); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      // Enter applies the first offered row (an existing match, or the new-tag
+      // row when the user may create one).
+      const first = document.querySelector('#tag-popup-list .tag-popup-item');
+      if (first) first.click();
+    }
+  });
+  // Clicking anywhere outside the bar dismisses the popup without closing the
+  // composer.
+  this._tagOutsideClick = (e) => {
+    const bar = document.getElementById('tag-queue-bar');
+    if (bar && !bar.contains(e.target)) this._closeTagPopup();
+  };
+  document.addEventListener('click', this._tagOutsideClick, true);
+},
+
+_openTagPopup() {
+  if (!this._activeAttachment) return;
+  const tags = this._activeAttachment._tags || [];
+  if (tags.length >= this._maxTagsPerAttachment()) {
+    return this._showToast(t('tags.limit_reached', { n: this._maxTagsPerAttachment() }), 'error');
+  }
+  const popup = document.getElementById('tag-popup');
+  const input = document.getElementById('tag-popup-input');
+  if (!popup || !input) return;
+  popup.style.display = 'block';
+  input.value = '';
+  input.maxLength = this._maxTagLen();
+  this._tagPopupSearch('');   // show a first page of existing tags
+  input.focus();
+},
+
+_closeTagPopup() {
+  const popup = document.getElementById('tag-popup');
+  if (popup) popup.style.display = 'none';
+  clearTimeout(this._tagSearchTimer);
+},
+
+// Client mirror of src/uploadTags.normalizeTagName — same rules so the picker
+// rejects what the server would. Returns { name, norm } or null.
+_normalizeTag(raw) {
+  if (typeof raw !== 'string') return null;
+  const name = raw.trim().replace(/\s+/g, ' ');
+  if (!name || name.length > this._maxTagLen()) return null;
+  if (!/^[\p{L}\p{N} _-]+$/u.test(name)) return null;
+  return { name, norm: name.toLocaleLowerCase() };
+},
+
+// Debounced server lookup for the popup. Guards against a stale response
+// overwriting the list after the user has typed on.
+_tagPopupSearch(query) {
+  const input = document.getElementById('tag-popup-input');
+  if (!input || !this.socket) return;
+  const q = query;
+  this.socket.emit('search-upload-tags', { query: q }, (res) => {
+    if (input.value !== q) return;                 // user moved on
+    if (res && res.error === 'rate_limited') return;
+    this._renderTagPopupList(q, (res && res.tags) || []);
+  });
+},
+
+_renderTagPopupList(query, results) {
+  const list = document.getElementById('tag-popup-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const active = this._activeAttachment;
+  const applied = new Set(((active && active._tags) || []).map(x => x.toLocaleLowerCase()));
+  const norm = this._normalizeTag(query);
+
+  // Existing tags that aren't already on this attachment.
+  const rows = (results || []).filter(tag => !applied.has(String(tag.name).toLocaleLowerCase()));
+  rows.forEach(tag => {
+    const item = document.createElement('button');
+    item.className = 'tag-popup-item';
+    item.type = 'button';
+    item.textContent = tag.name;
+    item.addEventListener('click', () => this._applyTagToActive(tag.name));
+    list.appendChild(item);
+  });
+
+  // Offer to mint a new tag only to manage_tags holders, only when the typed
+  // name is valid and isn't an exact existing match already shown/applied.
+  const exact = norm && (
+    applied.has(norm.norm) ||
+    (results || []).some(tag => String(tag.name).toLocaleLowerCase() === norm.norm)
+  );
+  if (norm && !exact && this._hasPerm && this._hasPerm('manage_tags')) {
+    const create = document.createElement('button');
+    create.className = 'tag-popup-item tag-popup-create';
+    create.type = 'button';
+    create.textContent = t('tags.add_new', { name: norm.name });
+    create.addEventListener('click', () => this._applyTagToActive(norm.name));
+    list.appendChild(create);
+  }
+
+  if (!list.children.length) {
+    const empty = document.createElement('div');
+    empty.className = 'tag-popup-empty';
+    empty.textContent = norm ? t('tags.none_found') : t('tags.none_yet');
+    list.appendChild(empty);
+  }
+},
+
+_applyTagToActive(rawName) {
+  const file = this._activeAttachment;
+  if (!file) return;
+  const norm = this._normalizeTag(rawName);
+  if (!norm) return this._showToast(t('tags.invalid'), 'error');
+  if (!file._tags) file._tags = [];
+  if (file._tags.some(x => x.toLocaleLowerCase() === norm.norm)) { this._closeTagPopup(); return; }
+  if (file._tags.length >= this._maxTagsPerAttachment()) {
+    return this._showToast(t('tags.limit_reached', { n: this._maxTagsPerAttachment() }), 'error');
+  }
+  file._tags.push(norm.name);
+  this._closeTagPopup();
+  this._renderImageQueue();
+},
+
+_removeTagFromActive(name) {
+  const file = this._activeAttachment;
+  if (!file || !file._tags) return;
+  file._tags = file._tags.filter(x => x !== name);
+  this._renderImageQueue();
 },
 
 _clearImageQueue() {
@@ -204,6 +440,7 @@ _queueGeneralFile(file) {
     return this._showToast(t('media.max_attachments_n', { n: this._maxAttachments() }), 'error');
   }
   this._fileQueue.push(file);
+  this._activeAttachment = file;   // newest attachment is the one the tag bar edits
   this._renderImageQueue();
   document.getElementById('message-input')?.focus();
 },

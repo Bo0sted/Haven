@@ -681,6 +681,19 @@
       "media_disabled": "Media uploads are disabled in this channel"
     }
   },
+  "tags": {
+    "attachment_tags": "Tags",
+    "add_tag": "Add tag",
+    "add_new": "Add new tag \"{{name}}\"",
+    "search_placeholder": "Search tags…",
+    "none_found": "No matching tags",
+    "type_to_search": "Type to search tags",
+    "none_yet": "No tags yet",
+    "search_for": "Search for tag \"{{name}}\"",
+    "search_removed": "Search removed tags",
+    "limit_reached": "Up to {{n}} tags per attachment",
+    "invalid": "That tag isn't valid"
+  },
   "permissions": {
     "errors": {
       "no_create_channels": "You don't have permission to create channels",
@@ -713,6 +726,7 @@
     "use_voice": "Use Voice Chat",
     "use_tts": "Use Text-to-Speech",
     "manage_music_queue": "Manage Music Queue",
+    "manage_tags": "Manage Tags",
     "manage_webhooks": "Manage Webhooks",
     "mention_everyone": "Mention @everyone",
     "view_history": "View Message History",

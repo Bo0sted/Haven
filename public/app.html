@@ -341,6 +341,7 @@
                   <button type="button" class="sfp-chip" data-sfp-filter="from">from:</button>
                   <button type="button" class="sfp-chip" data-sfp-filter="in">in:</button>
                   <button type="button" class="sfp-chip" data-sfp-filter="has">has:</button>
+                  <button type="button" class="sfp-chip" data-sfp-filter="tag">tag:</button>
                   <button type="button" class="sfp-chip" data-sfp-filter="before">before:</button>
                   <button type="button" class="sfp-chip" data-sfp-filter="after">after:</button>
                   <button type="button" class="sfp-chip" data-sfp-filter="during">during:</button>
@@ -531,6 +532,18 @@
             <button class="reply-bar-close" id="reply-close-btn" data-i18n-title="header.cancel_reply" title="Cancel reply">&times;</button>
           </div>
           <div id="image-queue-bar" class="image-queue-bar" style="display:none"></div>
+          <div id="tag-queue-bar" class="tag-queue-bar" style="display:none">
+            <span class="tag-queue-label" id="tag-queue-label" data-i18n="tags.attachment_tags">Tags</span>
+            <div id="tag-queue-chips" class="tag-queue-chips"></div>
+            <button id="tag-add-btn" class="tag-add-btn" type="button" data-i18n-title="tags.add_tag" title="Add tag">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              <span data-i18n="tags.add_tag">Add tag</span>
+            </button>
+            <div id="tag-popup" class="tag-popup" style="display:none">
+              <input id="tag-popup-input" class="tag-popup-input" type="text" maxlength="20" autocomplete="off" spellcheck="false" data-i18n-placeholder="tags.search_placeholder" placeholder="Search tags…">
+              <div id="tag-popup-list" class="tag-popup-list"></div>
+            </div>
+          </div>
           <div id="upload-progress-bar" class="upload-progress-bar" style="display:none">
             <div class="upload-progress-track"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
             <span class="upload-progress-text" id="upload-progress-text" data-i18n="header.uploading">Uploading...</span>
