@@ -1467,6 +1467,7 @@
           <div class="settings-nav-item settings-nav-admin" data-target="section-stickers" style="display:none">🖼️ <span data-i18n="settings.nav.stickers">Stickers</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-sounds-admin" style="display:none">🔊 <span data-i18n="settings.nav.admin_sounds">Sounds</span></div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-uploads" style="display:none">📁 <span data-i18n="settings.nav.limits">Limits</span></div>
+          <div class="settings-nav-item settings-nav-admin" data-target="section-tags-admin" style="display:none">🏷️ <span data-i18n="settings.nav.tags">Tags</span></div>
 
           <div class="settings-nav-group-label settings-nav-admin" style="display:none" data-i18n="settings.nav.group_integrations">Integrations</div>
           <div class="settings-nav-item settings-nav-admin" data-target="section-bots" style="display:none">🤖 <span data-i18n="settings.nav.bots">Bots</span></div>
@@ -3016,6 +3017,16 @@
           </label>
           <small class="settings-hint" data-i18n="settings.admin.max_attachments_hint">How many files someone can queue on one message by dropping, pasting or picking them (1 to 50, default 10). Each one still has to fit the size limit above.</small>
           <label class="select-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.max_tags_per_attachment">Max Tags per Attachment</span>
+            <input type="number" id="max-tags-per-attachment" min="1" max="10" value="3" class="settings-number-input">
+          </label>
+          <small class="settings-hint" data-i18n="settings.admin.max_tags_per_attachment_hint">How many upload tags a user can put on one attachment (1 to 10, default 3).</small>
+          <label class="select-row" style="margin-top:8px">
+            <span data-i18n="settings.admin.max_tag_len">Max Tag Length (characters)</span>
+            <input type="number" id="max-tag-len" min="1" max="50" value="20" class="settings-number-input">
+          </label>
+          <small class="settings-hint" data-i18n="settings.admin.max_tag_len_hint">Maximum characters in an upload tag name (1 to 50, default 20).</small>
+          <label class="select-row" style="margin-top:8px">
             <span data-i18n="settings.admin.max_message_chars">Max Message Length (characters)</span>
             <input type="number" id="max-message-chars" min="200" max="100000" value="2000" class="settings-number-input">
           </label>
@@ -3052,6 +3063,19 @@
             </select>
           </label>
           <small class="settings-hint" data-i18n="settings.admin.session_duration_hint">How long a login token stays valid before users must sign in again. "Never expire" keeps users logged in until they hit Logout or change their password. Applies to new logins only; existing tokens keep their original expiry until they expire or rotate.</small>
+        </div>
+
+        <!-- Tags (Admin / manage_tags) — manage the upload-tag vocabulary -->
+        <div class="admin-settings" id="section-tags-admin" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+          <h5 class="settings-section-subtitle">🏷️ <span data-i18n="settings.admin.tags_title">Tags</span></h5>
+          <small class="settings-hint" data-i18n="settings.admin.tags_hint">Manage the upload-tag vocabulary. Renaming or deleting a tag applies to every attachment that uses it and cannot be undone.</small>
+          <div class="tag-admin-add">
+            <input type="text" id="tag-admin-new" class="settings-text-input" maxlength="50" data-i18n-placeholder="settings.admin.tags_add_placeholder" placeholder="New tag name" autocomplete="off">
+            <button class="btn-sm btn-accent" id="tag-admin-add-btn" data-i18n="settings.admin.tags_add_btn">Add tag</button>
+          </div>
+          <div id="tag-admin-list" class="tag-admin-list">
+            <p class="muted-text" data-i18n="settings.admin.tags_loading">Loading…</p>
+          </div>
         </div>
 
         <!-- Webhooks / Bots (Admin only) -->
