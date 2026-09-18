@@ -1837,7 +1837,9 @@ _setupUI() {
     if (!this._mediaGalleryData || !this._mediaGallerySelectMode) return;
     const tab = this._mediaGalleryActiveTab || 'photos';
     if (tab === 'links') return; // not deletable
-    const items = this._mediaGalleryData[tab] || [];
+    // Only the items currently visible under the active tag filter, so Select
+    // all never reaches attachments hidden by the filter.
+    const items = this._filterMediaItemsByTags(this._mediaGalleryData[tab] || [], tab);
     const selected = this._mediaGallerySelected || (this._mediaGallerySelected = new Map());
     // Toggle: if everything in this tab is already selected, clear; else add all
     const allSelected = items.length > 0 && items.every(it => selected.has(this._mediaItemKey(it)));
