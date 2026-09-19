@@ -7658,7 +7658,8 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
       content: line,
       isImage: true,
       ...(bundled && { bundled: true }),
-      ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {})
+      ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {}),
+      ...(file && file._selfDestruct ? { selfDestructMinutes: file._selfDestruct } : {})
     });
     if (file && file._tags && file._tags.length) this._recordFrequentTags(file._tags);
     this.notifications.play('sent');

@@ -5,6 +5,7 @@ const fs   = require('fs');
 const { utcStamp, isString, isInt, sanitizeText, parseBorderTransform, toReplyContext, stripRoleMentions } = require('./helpers');
 const { getActiveTokenizer, minQueryChars, buildMatchQuery } = require('../searchIndex');
 const { applyTagsToMessage, setMessageTags, normalizeTagName, escapeLike, extractUploadPath, effectiveLimits } = require('../uploadTags');
+const { parseSelfDestructMinutes, uploadUrlToRel, selfDestructStateForMessage, selfDestructStateForMessages } = require('../selfDestruct');
 
 module.exports = function register(socket, ctx) {
   const { io, db, state, userHasPermission, getUserEffectiveLevel, getChannelRoleChain,
@@ -331,6 +332,10 @@ module.exports = function register(socket, ctx) {
         .forEach(r => threadReadMap.set(r.thread_id, r.last_read_reply_id));
     }
 
+    // Self-destructing attachments (#5690): a message's countdown / "destroyed"
+    // line is metadata, so history renders the same state a live send does.
+    const selfDestructMap = selfDestructStateForMessages(db, msgIds);
+
     const enriched = messages.map(m => {
       const obj = { ...m };
       // Border fit travels with the message (like avatar) so it renders even when
@@ -360,6 +365,8 @@ module.exports = function register(socket, ctx) {
       if ('tags' in m) obj.tags = parseTags(m.tags);
       const atags = attachmentTagMap.get(m.id);
       if (atags && atags.length) obj.attachmentTags = atags;
+      const sd = selfDestructMap.get(m.id);
+      if (sd) obj.selfDestruct = sd;
       if ('closed' in m) obj.closed = !!m.closed;
       if ('nsfw' in m) obj.nsfw = !!m.nsfw;
       if (m.poll_data) {
@@ -1265,6 +1272,28 @@ module.exports = function register(socket, ctx) {
         } catch (e) { /* tags are best-effort */ }
       }
 
+      // Self-destructing attachment (#5690): the composer sends
+      // `selfDestructMinutes` alongside an upload. The timer starts now (send
+      // time). Same eligibility as tags — plaintext channel uploads only, never
+      // E2E DMs. Best-effort: a failure here never sinks the message. The state
+      // rides on the message payload so the recipient sees the countdown line
+      // straight away, attached to this very message.
+      let selfDestructState = null;
+      if (!channel.is_dm) {
+        const relPath = extractUploadPath(finalContent);
+        const mins = parseSelfDestructMinutes(data.selfDestructMinutes);
+        // Same rel_path convention as attachment_tags (keeps the "/uploads/"
+        // prefix); the sweep strips it for filesystem work.
+        if (relPath && mins && isSafeUploadRelPath(uploadUrlToRel(relPath))) {
+          try {
+            const expiresAt = new Date(Date.now() + mins * 60000).toISOString();
+            db.prepare('INSERT OR REPLACE INTO attachment_expiry (message_id, rel_path, expires_at, destroyed_at) VALUES (?, ?, ?, NULL)')
+              .run(result.lastInsertRowid, relPath, expiresAt);
+            selfDestructState = selfDestructStateForMessage(db, result.lastInsertRowid);
+          } catch (e) { /* expiry is best-effort */ }
+        }
+      }
+
       const message = {
         id: result.lastInsertRowid,
         content: finalContent,
@@ -1292,6 +1321,7 @@ module.exports = function register(socket, ctx) {
         break_chain: breakChain || undefined,
         ferry_target: ferryLabel || undefined,
         attachmentTags: appliedTags.length ? appliedTags : undefined,
+        selfDestruct: selfDestructState || undefined,
       };
 
       if (replyTo) {
@@ -1503,6 +1533,7 @@ module.exports = function register(socket, ctx) {
       }
     }, 10000);
   }
+
 
   // ── Scheduled messages (#5638) ──────────────────────────
   // Held on the server, so they go out whether or not the sender is online.

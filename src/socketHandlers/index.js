@@ -102,6 +102,12 @@ function setupSocketHandlers(io, db, opts = {}) {
   // at start-up, so an update or a migration leaves nobody half in.
   try { syncRoleGateMemberships(); } catch (err) { console.error('role gate membership sync failed:', err.message); }
 
+  // Self-destructing attachments (#5690): run one finalize pass now and every
+  // 10s after, independent of any connection, so timers that came due while the
+  // server was down are honored the moment it boots.
+  try { require('../selfDestruct').startSelfDestructSweeper(db, io, UPLOADS_DIR); }
+  catch (err) { console.error('self-destruct sweeper failed to start:', err.message); }
+
   // ── Shared state Maps ───────────────────────────────────
   const channelUsers        = new Map(); // code → Map<userId, { id, username, socketId, avatar?, avatar_shape? }>
   const voiceUsers          = new Map(); // code → Map<userId, { id, username, socketId, isMuted, isDeafened }>

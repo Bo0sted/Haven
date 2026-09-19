@@ -75,6 +75,7 @@ _renderImageQueue() {
     bar.style.display = 'none';
     bar.innerHTML = '';
     this._renderTagBar();
+    this._renderSelfDestructBar();
     return;
   }
   bar.style.display = 'flex';
@@ -151,6 +152,7 @@ _renderImageQueue() {
     bar.appendChild(clearAll);
   }
   this._renderTagBar();
+  this._renderSelfDestructBar();
 },
 
 // ── Attachment tagging (composer) — (#tagging) ──────────────────────────────
@@ -402,6 +404,91 @@ _removeTagFromActive(name) {
   if (!file || !file._tags) return;
   file._tags = file._tags.filter(x => x !== name);
   this._renderImageQueue();
+},
+
+// ── Self-destructing attachments (composer) — (#5690) ───────────────────────
+// A row below the tag bar sets a deletion timer on the *active* attachment,
+// the same one the tag bar edits. The chosen minutes ride on the File object
+// (`_selfDestruct`), the same trick as `_tags` / `_spoiler`, so the send loop
+// can read them without extra state. Same eligibility as tags: plaintext
+// channel uploads only, never DMs (E2E) or forums.
+_SELF_DESTRUCT_MIN: 2,
+_SELF_DESTRUCT_MAX: 1440,
+
+// Whole minutes, clamped to [2, 1440]. Decimals are floored — the input is
+// strictly minutes.
+_clampSelfDestruct(raw) {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return this._SELF_DESTRUCT_MIN;
+  return Math.max(this._SELF_DESTRUCT_MIN, Math.min(this._SELF_DESTRUCT_MAX, n));
+},
+
+_renderSelfDestructBar() {
+  const bar = document.getElementById('selfdestruct-queue-bar');
+  if (!bar) return;
+  const items = this._composerAttachments();
+  if (!items.length || !this._tagBarEligible()) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
+  this._ensureSelfDestructBound();
+  const file = this._activeAttachment;
+  const on = !!(file && file._selfDestruct);
+  const checkbox = document.getElementById('selfdestruct-checkbox');
+  const controls = document.getElementById('selfdestruct-controls');
+  const input = document.getElementById('selfdestruct-input');
+  if (checkbox) checkbox.checked = on;
+  if (controls) controls.style.display = on ? 'flex' : 'none';
+  if (input) {
+    input.min = String(this._SELF_DESTRUCT_MIN);
+    input.max = String(this._SELF_DESTRUCT_MAX);
+    input.value = on ? String(file._selfDestruct) : '';
+  }
+},
+
+// Wire the checkbox, preset buttons and the minutes input exactly once — the
+// bar is re-rendered constantly, so per-render binding would stack listeners.
+_ensureSelfDestructBound() {
+  if (this._selfDestructBound) return;
+  this._selfDestructBound = true;
+  const checkbox = document.getElementById('selfdestruct-checkbox');
+  const controls = document.getElementById('selfdestruct-controls');
+  const input = document.getElementById('selfdestruct-input');
+  checkbox?.addEventListener('change', () => {
+    const file = this._activeAttachment;
+    if (!file) { checkbox.checked = false; return; }
+    if (checkbox.checked) {
+      file._selfDestruct = this._clampSelfDestruct(file._selfDestruct || this._SELF_DESTRUCT_MIN);
+    } else {
+      delete file._selfDestruct;
+    }
+    this._renderSelfDestructBar();
+    if (checkbox.checked) input?.focus();
+  });
+  // Presets add their minutes to the current value; the 24hr preset replaces it
+  // (the input tops out at 24hr, so there is nothing to add past it).
+  controls?.querySelectorAll('.selfdestruct-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const file = this._activeAttachment;
+      if (!file) return;
+      const cur = Number(file._selfDestruct) || 0;
+      const next = btn.dataset.set != null
+        ? Number(btn.dataset.set)
+        : cur + Number(btn.dataset.add);
+      file._selfDestruct = this._clampSelfDestruct(next);
+      if (input) input.value = String(file._selfDestruct);
+    });
+  });
+  // The input is the source of truth. Clamp on the way in so the stored value
+  // never leaves [2, 1440].
+  const commit = () => {
+    const file = this._activeAttachment;
+    if (!file) return;
+    file._selfDestruct = this._clampSelfDestruct(input.value);
+  };
+  input?.addEventListener('input', commit);
+  input?.addEventListener('change', () => { commit(); input.value = String(this._activeAttachment?._selfDestruct ?? ''); });
 },
 
 // ── Frequent tags ──────────────────────────────────────────────────────────

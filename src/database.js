@@ -1480,6 +1480,26 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_scheduled_send_at ON scheduled_messages(send_at);
   `);
 
+  // ── Self-destructing attachments (#5690): a per-attachment deletion timer ──
+  // One row per file that should self-destruct, keyed like attachment_tags
+  // (message + file). The ON DELETE CASCADE means deleting the message
+  // prematurely also clears whatever it had queued here. On expiry the sweep
+  // removes the file for good (never into deleted-attachments) and strips the
+  // reference from the message.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS attachment_expiry (
+      message_id   INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      rel_path     TEXT NOT NULL,
+      expires_at   TEXT NOT NULL,
+      destroyed_at TEXT,
+      PRIMARY KEY (message_id, rel_path)
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachment_expiry_due ON attachment_expiry(expires_at);
+  `);
+  // destroyed_at was added after the table first shipped; keep the row once a
+  // file self-destructs so the "self-destructed" line survives a reload.
+  try { db.exec("ALTER TABLE attachment_expiry ADD COLUMN destroyed_at TEXT"); } catch { /* already present */ }
+
   // ── Migration: weighted automod strikes (#5614) ──
   // A word group can be worth more than one strike; link infractions stay at 1.
   try { db.prepare('SELECT weight FROM automod_infractions LIMIT 0').get(); }

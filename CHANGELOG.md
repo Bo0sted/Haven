@@ -21,6 +21,23 @@ Around that, a run of fixes from the tracker. Two tables and one column are
 created on first start; nothing to run by hand.
 
 ### Added
+- **Self-destructing attachments (#5690).** A Self-destruct row sits under
+  the tag bar in the composer and works the same way: click the attachment
+  you want it on, tick the box, and pick a timer. The presets +5m, +30m,
+  +1hr, +6hr and +12hr add to the box; 24hr sets it. The box is minutes, 2
+  to 1440, whole numbers only, and it is the source of truth. The timer
+  starts the moment the message is sent, and the message carries a muted,
+  theme-aware line right under it — an hourglass and a live countdown,
+  "Attachment self-destructing in 2 minutes" — that turns into "Attachment
+  self-destructed" in place once the file is gone (plural when more than one
+  goes at once). When the timer is up the server deletes the file for good —
+  it never lands in deleted-attachments — and strips the attachment off the
+  message. The sweep runs at boot too, so a timer that came due while the
+  server was down is honored the moment it starts back up. Deleting the
+  message first cancels what was queued, and an attachment removed from the
+  server before its timer fires is finished off the same way. Not in DMs,
+  which the server cannot read, or in forum channels — the same as tags. By
+  @Bo0sted.
 - **Tags on pictures and files (#5599).** Put a few tags on an upload as
   you send it, or later from the message menu under Edit tags. A message
   shows its tags under it, and clicking one searches for it. Search has a

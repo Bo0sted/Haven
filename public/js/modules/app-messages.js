@@ -883,6 +883,26 @@ _renderAttachmentTags(tags) {
   return `<div class="message-tags">${icon}<span class="message-tags-label">${t('tags.attachment_tags')}</span>${chips}</div>`;
 },
 
+// The self-destruct line that rides on an attachment's own message (#5690).
+// While the timer runs it shows an hourglass and a live relative countdown;
+// once the file is gone it flips, in place, to "self-destructed". Metadata-
+// driven (msg.selfDestruct = { pending, destroyed, expiresAt }) so it stays
+// attached to the message instead of arriving as a separate line in chat.
+_renderSelfDestructNote(sd) {
+  if (!sd || typeof sd !== 'object') return '';
+  if (sd.pending > 0 && sd.expiresAt) {
+    const secs = Math.trunc(Date.parse(sd.expiresAt) / 1000);
+    const when = Number.isFinite(secs) ? (this._formatTimestampToken(secs, 'R') || '') : '';
+    const key = sd.pending === 1 ? 'app.messages.attachment_self_destructing' : 'app.messages.attachments_self_destructing';
+    return `<div class="self-destruct-note" data-sd="pending"><span class="self-destruct-icon" aria-hidden="true">⏳</span> ${this._escapeHtml(t(key))} ${when}</div>`;
+  }
+  if (sd.destroyed > 0) {
+    const key = sd.destroyed === 1 ? 'app.messages.attachment_self_destructed' : 'app.messages.attachments_self_destructed';
+    return `<div class="self-destruct-note" data-sd="destroyed">${this._escapeHtml(t(key))}</div>`;
+  }
+  return '';
+},
+
 _createMessageEl(msg, prevMsg) {
   // Persisted welcome message (new-member greeting). Rendered as a simple,
   // non-interactive system line reusing the .welcome-message styling — no
@@ -930,6 +950,7 @@ _createMessageEl(msg, prevMsg) {
 
   const reactionsHtml = this._renderReactions(msg.id, msg.reactions || []);
   const tagsHtml = this._renderAttachmentTags(msg.attachmentTags);
+  const selfDestructHtml = this._renderSelfDestructNote(msg.selfDestruct);
   const pollHtml = msg.poll ? this._renderPollWidget(msg.id, msg.poll) : '';
   const roleMenuHtml = msg.roleMenu ? this._renderRoleMenu(msg.id, msg.roleMenu) : '';
   const threadHtml = isDmContext ? ''
@@ -1073,6 +1094,7 @@ _createMessageEl(msg, prevMsg) {
       <span class="compact-time">${this._fmtTime(msg.created_at)}</span>
       <div class="message-body">
         <div class="message-content">${pinnedTag}${archivedTag}${ephemeralTag}${this._formatContent(msg.content)}${editedHtml}${statusSlotHtml}</div>
+        ${selfDestructHtml}
         ${pollHtml}${roleMenuHtml}
         ${reactionsHtml}
         ${tagsHtml}
@@ -1211,6 +1233,7 @@ _createMessageEl(msg, prevMsg) {
           <span class="message-header-spacer"></span>
         </div>
         <div class="message-content">${this._formatContent(msg.content)}${editedHtml}</div>
+        ${selfDestructHtml}
         ${pollHtml}${roleMenuHtml}
         ${reactionsHtml}
         ${tagsHtml}
@@ -1243,6 +1266,10 @@ _promoteCompactToFull(compactEl) {
   const reactionsHtml = reactionsEl ? reactionsEl.outerHTML : '';
   const tagsEl = compactEl.querySelector('.message-tags');
   const tagsHtml = tagsEl ? tagsEl.outerHTML : '';
+  // Carry the self-destruct line (countdown or "destroyed") across the promote
+  // so it stays attached to the message. (#5690)
+  const sdEl = compactEl.querySelector('.self-destruct-note');
+  const selfDestructHtml = sdEl ? sdEl.outerHTML : '';
   const pinnedTag = isPinned ? `<span class="pinned-tag" title="${t('app.messages.pinned')}">📌</span>` : '';
   const e2eTag = compactEl.dataset.e2e === '1' ? `<span class="e2e-tag" title="${t('app.messages.e2e_encrypted')}">🔒</span>` : '';
   const needsStatusSlot = !!e2eTag || compactEl.classList.contains('message-burn-pending');
@@ -1309,6 +1336,7 @@ _promoteCompactToFull(compactEl) {
           <span class="message-header-spacer"></span>
         </div>
         <div class="message-content">${contentHtml}</div>
+        ${selfDestructHtml}
         ${reactionsHtml}
         ${tagsHtml}
       </div>

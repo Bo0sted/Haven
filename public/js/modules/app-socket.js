@@ -2576,6 +2576,36 @@ _setupSocketListeners() {
     });
   });
 
+  // ── Self-destructing attachments (#5690) ──
+  // The server removed a self-destructed attachment: the file is gone, its
+  // reference has been stripped from the content, and the self-destruct state
+  // is now "destroyed". Repaint every rendered copy — drop the attachment and
+  // flip the countdown line to "self-destructed" in place — and keep the render
+  // cache in sync so a scroll/re-render doesn't bring the attachment back.
+  this.socket.on('attachment-self-destructed', (data) => {
+    if (!data || !data.messageId) return;
+    const noteHtml = this._renderSelfDestructNote(data.selfDestruct);
+    document.querySelectorAll(`[data-msg-id="${data.messageId}"]`).forEach((msgEl) => {
+      const contentEl = msgEl.querySelector('.message-content, .thread-msg-content');
+      if (contentEl) {
+        try { contentEl.innerHTML = this._formatContent(data.content); }
+        catch { contentEl.textContent = data.content; }
+      }
+      msgEl.dataset.rawContent = data.content;
+      // Swap the existing countdown line for the new state (or add it if a copy
+      // somehow lacked one), keeping it attached under the message content.
+      const existing = msgEl.querySelector('.self-destruct-note');
+      if (existing) {
+        if (noteHtml) existing.outerHTML = noteHtml;
+        else existing.remove();
+      } else if (noteHtml && contentEl) {
+        contentEl.insertAdjacentHTML('afterend', noteHtml);
+      }
+    });
+    const cached = (this._lastRenderedMessages || []).find(m => m && m.id === data.messageId);
+    if (cached) { cached.content = data.content; cached.selfDestruct = data.selfDestruct || undefined; }
+  });
+
   // ── Search results ─────────────────────────────────
   // Global FTS search is server-paged; results belong to the shared public
   // context (DMs are searched locally). total/page drive the pager. The

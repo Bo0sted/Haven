@@ -269,6 +269,10 @@
     "messages": {
       "edited": "(edited)",
       "edited_at": "Edited at {{date}}",
+      "attachment_self_destructing": "Attachment self-destructing",
+      "attachments_self_destructing": "Attachments self-destructing",
+      "attachment_self_destructed": "Attachment self-destructed",
+      "attachments_self_destructed": "Attachments self-destructed",
       "pinned": "Pinned message",
       "protected": "Protected from cleanup",
       "e2e_encrypted": "End-to-end encrypted",
@@ -696,6 +700,10 @@
     "invalid": "That tag isn't valid",
     "frequent": "Frequent",
     "deleted_removed": "Tag \"{{name}}\" was deleted and has been removed from your frequent tags"
+  },
+  "self_destruct": {
+    "label": "Self-destruct",
+    "minutes": "min"
   },
   "permissions": {
     "errors": {
