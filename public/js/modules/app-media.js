@@ -210,6 +210,7 @@ _renderTagBar() {
   if (!this._canManageTags?.() && this._uploadTagsExist !== true) {
     bar.style.display = 'none';
     this._closeTagPopup();
+    this._renderFrequentTags();
     const now = Date.now();
     if (this.socket && now - (this._uploadTagsProbedAt || 0) > 15000) {
       this._uploadTagsProbedAt = now;
