@@ -4817,6 +4817,119 @@ _openImageInNewTab(img) {
   }).catch(() => this._showToast?.(t('media_runtime.image.open_failed'), 'error'));
 },
 
+_suggestedImageFilename(src, blob) {
+  let name = '';
+  try {
+    const path = new URL(src, window.location.origin).pathname;
+    name = decodeURIComponent(path.split('/').pop() || '');
+  } catch {}
+  name = String(name || '').replace(/[<>:"|?*\\]/g, '');
+  if (!name || name === 'media-proxy' || name === 'proxy' || name.length > 80 || !/\.[a-z0-9]{2,5}$/i.test(name)) {
+    const ext = ((blob?.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
+    name = `haven-image.${ext}`;
+  }
+  return name;
+},
+
+async _blobForContextImage(src) {
+  if (this._ctxImageBlob && this._ctxImageBlobSrc === src) {
+    try {
+      const warmed = await this._ctxImageBlob;
+      if (warmed) return warmed;
+    } catch { /* fall through */ }
+  }
+  try {
+    const resp = await fetch(src, { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error('fetch ' + resp.status);
+    return await resp.blob();
+  } catch (fetchErr) {
+    const candidates = [];
+    const lb = document.getElementById('lightbox-img');
+    if (lb?.src) candidates.push(lb);
+    document.querySelectorAll('img.chat-image').forEach(img => {
+      if (img.src === src || this._normalizeImgSrc?.(img.getAttribute('src')) === this._normalizeImgSrc?.(src)) {
+        candidates.push(img);
+      }
+    });
+    for (const img of candidates) {
+      try {
+        if (!img.naturalWidth) continue;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const blob = await new Promise((res, rej) =>
+          canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), 'image/png'));
+        if (blob) return blob;
+      } catch { /* tainted or detached */ }
+    }
+    throw fetchErr;
+  }
+},
+
+async _saveContextImage(src) {
+  try {
+    const blob = await this._blobForContextImage(src);
+    const filename = this._suggestedImageFilename(src, blob);
+    if (typeof window.havenDesktop?.saveImage === 'function') {
+      const buf = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      const chunk = 0x8000;
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      const res = await window.havenDesktop.saveImage({ bytes: btoa(binary), filename });
+      if (res?.cancelled) {
+        this._showToast(t('media_runtime.image.save_cancelled'), 'info');
+        return;
+      }
+      if (res?.ok) {
+        this._showToast(
+          res.path
+            ? t('media_runtime.image.saved_to', { path: res.path })
+            : t('media_runtime.image.saved'),
+          'success'
+        );
+        return;
+      }
+      throw new Error(res?.reason || 'save failed');
+    }
+    if (typeof window.showSaveFilePicker === 'function') {
+      try {
+        const ext = (filename.split('.').pop() || 'png').toLowerCase();
+        const mime = blob.type || 'image/png';
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: 'Image', accept: { [mime]: ['.' + ext] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        this._showToast(t('media_runtime.image.saved'), 'success');
+        return;
+      } catch (pickerErr) {
+        if (pickerErr && pickerErr.name === 'AbortError') {
+          this._showToast(t('media_runtime.image.save_cancelled'), 'info');
+          return;
+        }
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    this._showToast(t('media_runtime.image.saved'), 'success');
+  } catch (err) {
+    this._showToast(t('media_runtime.image.save_failed', { error: err.message || String(err) }), 'error');
+  }
+},
+
 _showImageContextMenu(e, src, opts = {}) {
   this._hideImageContextMenu();
   const menu = document.createElement('div');
@@ -4866,19 +4979,7 @@ _showImageContextMenu(e, src, opts = {}) {
     const action = ev.target.dataset.action;
     if (action === 'save') {
       this._hideImageContextMenu();
-      this._freshImageUrl(sourceImg).then(({ url, blob }) => {
-        const href = url || src;
-        const a = document.createElement('a');
-        a.href = href;
-        const mime = blob && blob.type ? blob.type.split('/')[1] : '';
-        a.download = (sourceImg && sourceImg.dataset && sourceImg.dataset.e2eSrc)
-          ? `image.${(mime || 'png').replace('jpeg', 'jpg')}`
-          : (src.split('/').pop().split('?')[0] || 'image');
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }).catch(() => this._showToast?.(t('media_runtime.image.open_failed'), 'error'));
+      this._saveContextImage(src);
       return;
     } else if (action === 'copy') {
       // Hide the menu immediately so it doesn't sit on screen during

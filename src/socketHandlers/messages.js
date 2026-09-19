@@ -2104,7 +2104,7 @@ module.exports = function register(socket, ctx) {
       // channel — using socket.currentChannel made the reaction silently
       // fail because the message wouldn't be found in that channel. (#bug-#4)
       const msg = db.prepare(
-        'SELECT m.id, c.code, c.id as channel_id, c.is_dm FROM messages m JOIN channels c ON m.channel_id = c.id WHERE m.id = ?'
+        'SELECT m.id, c.code, c.id as channel_id, c.is_dm, c.reactions_enabled FROM messages m JOIN channels c ON m.channel_id = c.id WHERE m.id = ?'
       ).get(data.messageId);
       if (!msg) return;
       const code = msg.code;
@@ -2118,6 +2118,9 @@ module.exports = function register(socket, ctx) {
         'SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ?'
       ).get(msg.channel_id, socket.user.id);
       if (!member && !socket.user.isAdmin) return;
+      if (msg.reactions_enabled === 0) {
+        return socket.emit('error-msg', 'Reactions are disabled in this channel');
+      }
 
       db.prepare(
         'INSERT OR IGNORE INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)'
@@ -2155,7 +2158,7 @@ module.exports = function register(socket, ctx) {
 
       // Look up the channel from the message (see add-reaction comment).
       const msgRow = db.prepare(
-        'SELECT m.id, c.code, c.id as channel_id FROM messages m JOIN channels c ON m.channel_id = c.id WHERE m.id = ?'
+        'SELECT m.id, c.code, c.id as channel_id, c.reactions_enabled FROM messages m JOIN channels c ON m.channel_id = c.id WHERE m.id = ?'
       ).get(data.messageId);
       if (!msgRow) return;
       const code = msgRow.code;
@@ -2164,6 +2167,9 @@ module.exports = function register(socket, ctx) {
         'SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ?'
       ).get(msgRow.channel_id, socket.user.id);
       if (!member && !socket.user.isAdmin) return;
+      if (msgRow.reactions_enabled === 0) {
+        return socket.emit('error-msg', 'Reactions are disabled in this channel');
+      }
 
       db.prepare(
         'DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?'

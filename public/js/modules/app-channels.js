@@ -159,6 +159,7 @@ async switchChannel(code) {
   // Upload button tied to media toggle
   const _uploadBtn = document.getElementById('upload-btn');
   if (_uploadBtn) _uploadBtn.style.display = _mediaOff ? 'none' : '';
+  this._applyReactionLock?.();
   // Dividers: first one only if both upload and text buttons visible, rest if text is on
   const _dividers = document.querySelectorAll('.input-actions-box .input-actions-divider');
   if (_dividers[0]) _dividers[0].style.display = (!_textOff && !_mediaOff) ? '' : 'none';
@@ -704,6 +705,32 @@ _revertPendingChannelToggle() {
   }
 },
 
+
+_channelAllowsReactions(code) {
+  const ch = (this.channels || []).find(c => c.code === (code || this.currentChannel));
+  if (!ch) return true;
+  return ch.reactions_enabled !== 0;
+},
+
+_applyReactionLock() {
+  const allowed = this._channelAllowsReactions(this.currentChannel);
+  const lockRoots = [
+    document.getElementById('messages'),
+    document.getElementById('thread-messages')
+  ];
+  for (const root of lockRoots) {
+    if (!root) continue;
+    root.classList.toggle('reactions-locked', !allowed);
+    root.querySelectorAll('[data-action="react"], [data-thread-action="react"]').forEach(el => {
+      el.hidden = !allowed;
+    });
+  }
+  if (!allowed) {
+    document.querySelectorAll('#messages .reaction-picker, #thread-messages .reaction-picker, .reaction-full-picker').forEach(el => el.remove());
+    document.querySelectorAll('#messages .showing-picker, #thread-messages .showing-picker').forEach(el => el.classList.remove('showing-picker'));
+  }
+},
+
 _updateChannelFunctionsPanel(ch) {
   if (!ch) return;
   // Voice & text toggles
@@ -716,6 +743,7 @@ _updateChannelFunctionsPanel(ch) {
   this._setCfnBadge('music', ch.music_enabled !== 0, t(ch.music_enabled !== 0 ? 'channel_functions.on' : 'channel_functions.off'));
   this._setCfnBadge('media', ch.media_enabled !== 0, t(ch.media_enabled !== 0 ? 'channel_functions.on' : 'channel_functions.off'));
   this._setCfnBadge('soundboard', ch.soundboard_enabled !== 0, t(ch.soundboard_enabled !== 0 ? 'channel_functions.on' : 'channel_functions.off'));
+  this._setCfnBadge('reactions', ch.reactions_enabled !== 0, t(ch.reactions_enabled !== 0 ? 'channel_functions.on' : 'channel_functions.off'));
   // Read-only toggle
   const isReadOnly = ch.read_only === 1;
   this._setCfnBadge('read-only', isReadOnly, t(isReadOnly ? 'channel_functions.on' : 'channel_functions.off'));

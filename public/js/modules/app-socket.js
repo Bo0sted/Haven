@@ -919,6 +919,7 @@ _setupSocketListeners() {
         // Per-channel, same reasoning as the composer gate in app-channels.js (#5468)
         const _isReadOnly = curCh.read_only === 1 && !this.user?.isAdmin && !curCh.canOverrideReadOnly;
         if (msgInputArea) msgInputArea.style.display = (_isReadOnly || (_textOff && _mediaOff)) ? 'none' : '';
+        this._applyReactionLock?.();
       }
     }
 

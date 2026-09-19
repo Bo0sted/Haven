@@ -14,6 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Haven uses [Sema
 ## [Unreleased]
 
 ### Added
+- **Save Image can pick a folder**, in browsers that have a file picker, and chat pictures that went black in some Tauri webviews stay on screen. Cancel shows a toast instead of failing silently.
+- **Per-channel Reactions toggle.** Channel Functions has a Reactions ON/OFF switch. Off hides the react control and the server refuses new or removed reactions. Existing badges stay. DMs stay on.
 - **Glyphs, a third look for the interface's icons (#5673).** Settings,
   Interface Icons (the old Toolbar Icons) has Glyphs next to Monochrome and
   Colorful Emoji. It redraws the icons across the whole interface with a

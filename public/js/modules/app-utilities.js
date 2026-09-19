@@ -2885,6 +2885,13 @@ _showQuickEmojiEditor(picker, msgEl, msgId) {
 },
 
 _showReactionPicker(msgEl, msgId) {
+  const pickerRoot = msgEl?.closest('#dm-pip-messages, #messages, #thread-messages');
+  const pickerCode = pickerRoot?.id === 'dm-pip-messages' ? this._activeDMPip : this.currentChannel;
+  if (this._channelAllowsReactions && !this._channelAllowsReactions(pickerCode)) {
+    this._showToast?.(t('channel_functions.reactions_disabled'), 'info');
+    return;
+  }
+
   // Toggle: if this message already has a picker open, close it and bail
   const existingPicker = msgEl.querySelector('.reaction-picker');
   if (existingPicker) {

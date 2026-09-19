@@ -956,8 +956,9 @@ _createMessageEl(msg, prevMsg) {
   const iMore = iconPair('⋯', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"></circle><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none"></circle></svg>');
   const canShareLink = !isDmContext && this._canShareChannelLink?.(this.currentChannel);
 
+  const reactionsAllowed = isDmContext || this._channelAllowsReactions?.(this.currentChannel) !== false;
   const toolbarActions = [
-    { key: 'react', html: `<button data-action="react" title="${t('msg_toolbar.react')}">${iReact}</button>` },
+    ...(reactionsAllowed ? [{ key: 'react', html: `<button data-action="react" title="${t('msg_toolbar.react')}">${iReact}</button>` }] : []),
     { key: 'reply', html: `<button data-action="reply" title="${t('msg_toolbar.reply')}">${iReply}</button>` },
     { key: 'quote', html: `<button data-action="quote" title="${t('msg_toolbar.quote')}">${iQuote}</button>` },
     // Threads are not available in DMs - omit the button entirely so there is

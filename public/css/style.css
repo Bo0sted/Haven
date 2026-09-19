@@ -8186,6 +8186,11 @@ img[data-lazy="loaded"] { animation: lazy-media-in 0.15s ease; }
   color: var(--text-primary);
 }
 
+.reactions-locked .reaction-badge {
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ── Reaction popout (who reacted) ────────────────────── */
 .reaction-popout {
   position: fixed;
