@@ -693,7 +693,9 @@
     "search_removed": "Search anyway",
     "edit": "Edit tags",
     "limit_reached": "Up to {{n}} tags per attachment",
-    "invalid": "That tag isn't valid"
+    "invalid": "That tag isn't valid",
+    "frequent": "Frequent",
+    "deleted_removed": "Tag \"{{name}}\" was deleted and has been removed from your frequent tags"
   },
   "permissions": {
     "errors": {

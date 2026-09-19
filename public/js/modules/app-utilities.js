@@ -334,8 +334,21 @@ _getMessageAttachments(messageId) {
   if (hinted && hinted.length) return hinted.slice();
   const msgs = this._lastRenderedMessages || [];
   const msg = msgs.find(m => m && m.id === messageId);
-  if (!msg || typeof msg.content !== 'string') return [];
-  return this._extractUploadUrls(msg.content);
+  if (msg && typeof msg.content === 'string') {
+    const urls = this._extractUploadUrls(msg.content);
+    if (urls.length) return urls;
+  }
+  // A message just sent or received is appended live to the DOM and never lands
+  // in _lastRenderedMessages, so its attachments were invisible here until a
+  // full re-render (which is why the retroactive "Edit tags" entry only showed
+  // after a refresh or channel switch). Fall back to the rendered content in the
+  // DOM, scoped to .message-content so an author avatar is not counted.
+  const el = document.querySelector(`#messages [data-msg-id="${messageId}"]`);
+  if (el) {
+    const body = el.querySelector('.message-content') || el;
+    return this._extractUploadUrls(body.innerHTML);
+  }
+  return [];
 },
 
 _extractUploadUrls(content) {

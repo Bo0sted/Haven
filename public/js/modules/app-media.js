@@ -201,6 +201,7 @@ _renderTagBar() {
   if (!items.length || !this._tagBarEligible()) {
     bar.style.display = 'none';
     this._closeTagPopup();
+    this._renderFrequentTags();
     return;
   }
   // Someone who cannot make tags has nothing to pick until one exists, so on
@@ -252,6 +253,7 @@ _renderTagBar() {
     addBtn.disabled = full;
     addBtn.title = full ? t('tags.limit_reached', { n: this._maxTagsPerAttachment() }) : t('tags.add_tag');
   }
+  this._renderFrequentTags();
 },
 
 // Wire the Add-tag button, the popup input and the outside-click closer exactly
@@ -399,6 +401,95 @@ _removeTagFromActive(name) {
   if (!file || !file._tags) return;
   file._tags = file._tags.filter(x => x !== name);
   this._renderImageQueue();
+},
+
+// ── Frequent tags ──────────────────────────────────────────────────────────
+// A quick-access row of the tags used most on this browser's uploads, saved to
+// localStorage (never the DB, since it is a per-person convenience). Most used
+// first; recorded on send. Clicking one applies it to the active attachment.
+_FREQ_TAGS_KEY: 'havenFrequentTags',
+
+_getFrequentTags() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(this._FREQ_TAGS_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter(e => e && typeof e.name === 'string')
+      .sort((a, b) => (b.count || 0) - (a.count || 0) || (b.ts || 0) - (a.ts || 0));
+  } catch { return []; }
+},
+
+_saveFrequentTags(list) {
+  try { localStorage.setItem(this._FREQ_TAGS_KEY, JSON.stringify(list.slice(0, 50))); } catch { /* storage full/blocked */ }
+},
+
+// Bump the use count for tags that just went out on an upload. Keyed
+// case-insensitively; display casing follows the latest use.
+_recordFrequentTags(names) {
+  if (!Array.isArray(names) || !names.length) return;
+  const list = this._getFrequentTags();
+  const now = Date.now();
+  for (const raw of names) {
+    const norm = this._normalizeTag(raw);
+    if (!norm) continue;
+    const existing = list.find(e => e.name.toLocaleLowerCase() === norm.norm);
+    if (existing) { existing.count = (existing.count || 0) + 1; existing.ts = now; existing.name = norm.name; }
+    else list.push({ name: norm.name, count: 1, ts: now });
+  }
+  this._saveFrequentTags(list);
+},
+
+_removeFrequentTag(name) {
+  const norm = this._normalizeTag(name);
+  if (!norm) return;
+  this._saveFrequentTags(this._getFrequentTags().filter(e => e.name.toLocaleLowerCase() !== norm.norm));
+},
+
+_renderFrequentTags() {
+  const bar = document.getElementById('tag-frequent-bar');
+  if (!bar) return;
+  const file = this._activeAttachment;
+  const barVisible = document.getElementById('tag-queue-bar')?.style.display !== 'none';
+  const applied = new Set(((file && file._tags) || []).map(x => x.toLocaleLowerCase()));
+  const full = ((file && file._tags) || []).length >= this._maxTagsPerAttachment();
+  const freq = (file && barVisible && !full)
+    ? this._getFrequentTags().filter(e => !applied.has(e.name.toLocaleLowerCase())).slice(0, 10)
+    : [];
+  if (!freq.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'tag-frequent-label';
+  label.textContent = t('tags.frequent');
+  bar.appendChild(label);
+  freq.forEach(e => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tag-frequent-chip';
+    chip.textContent = e.name;
+    chip.addEventListener('click', (ev) => { ev.stopPropagation(); this._applyFrequentTag(e.name); });
+    bar.appendChild(chip);
+  });
+  bar.style.display = 'flex';
+},
+
+// Because the frequent list lives in storage it can outlive the tag itself. So
+// verify the tag still exists in the vocabulary before applying it: if it was
+// deleted, tell the user, drop it from storage, and refresh the row instead of
+// applying a phantom tag the server would silently ignore.
+_applyFrequentTag(name) {
+  if (!this._activeAttachment || !this.socket) return;
+  const norm = this._normalizeTag(name);
+  if (!norm) { this._removeFrequentTag(name); this._renderFrequentTags(); return; }
+  this.socket.emit('search-upload-tags', { query: norm.name }, (res) => {
+    const exists = ((res && res.tags) || []).some(tg => String(tg.name).toLocaleLowerCase() === norm.norm);
+    if (!exists) {
+      this._showToast(t('tags.deleted_removed', { name: norm.name }), 'error');
+      this._removeFrequentTag(norm.name);
+      this._renderFrequentTags();
+      return;
+    }
+    this._applyTagToActive(norm.name);
+  });
 },
 
 _clearImageQueue() {

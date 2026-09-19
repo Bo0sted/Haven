@@ -3430,6 +3430,7 @@ _uploadGeneralFile(file, targetCode) {
         replyTo: (code === this.currentChannel && this.replyingTo) ? this.replyingTo.id : null,
         ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {})
       });
+      if (file && file._tags && file._tags.length) this._recordFrequentTags(file._tags);
       this.notifications.play('sent');
       if (code === this.currentChannel) this._clearReply();
     })

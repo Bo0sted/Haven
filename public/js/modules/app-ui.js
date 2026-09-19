@@ -7660,6 +7660,7 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
       ...(bundled && { bundled: true }),
       ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {})
     });
+    if (file && file._tags && file._tags.length) this._recordFrequentTags(file._tags);
     this.notifications.play('sent');
   } catch (err) {
     if (err?.aborted) return;

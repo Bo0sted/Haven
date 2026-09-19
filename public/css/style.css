@@ -9262,6 +9262,35 @@ html:not([data-toolbaricons="emoji"]):not([data-toolbaricons="color"]) .tb-icon-
 .tag-add-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .tag-add-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* Frequent tags: a quick-pick row under the Tags row (browser-storage only). */
+.tag-frequent-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.tag-frequent-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.tag-frequent-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.tag-frequent-chip:hover { color: var(--accent); border-color: var(--accent); }
+
 .tag-popup {
   position: absolute;
   left: 0.75rem;
