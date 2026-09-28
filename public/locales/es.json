@@ -543,10 +543,6 @@
     "set_nickname_title": "Establecer apodo",
     "nickname_hint": "Solo tú verás este apodo para {{name}}.",
     "nickname_clear_btn": "Limpiar",
-    "edit_profile_modal_title": "Editar perfil",
-    "bio_label": "Biografía",
-    "bio_max_hint": "(máx. 190 caracteres)",
-    "bio_placeholder": "Cuéntale a la gente sobre ti…",
     "gear_menu": {
       "assign_role": "Asignar rol",
       "role_management": "Gestión de roles",

@@ -543,10 +543,6 @@
     "set_nickname_title": "Définir un pseudo",
     "nickname_hint": "Seulement vous verrez ce pseudo pour {{name}}.",
     "nickname_clear_btn": "Effacer",
-    "edit_profile_modal_title": "Modifier le profil",
-    "bio_label": "Bio",
-    "bio_max_hint": "(max 190 caractères)",
-    "bio_placeholder": "Parlez de vous…",
     "gear_menu": {
       "assign_role": "Attribuer un rôle",
       "role_management": "Gestion des rôles",

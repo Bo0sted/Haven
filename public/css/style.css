@@ -5143,6 +5143,8 @@ select.cfn-select.cfn-input {
 /* One folded op = one nested wrapper. The transform/clip is set inline in JS;
    every wrapper fills its parent so ops compose cleanly from image outward. */
 .bce-op { position: absolute; inset: 0; }
+/* Avatar mode: the unedited image, faded under the crop so the cut area shows. */
+.bce-ghost { opacity: 0.3; }
 
 /* Edit history (the op log), newest at the bottom, each row undoes itself + later. */
 .border-crop-side { width: 8.5rem; display: flex; flex-direction: column; }
@@ -5182,6 +5184,8 @@ select.cfn-select.cfn-input {
 .border-crop-autocrop-btn:hover { color: var(--text-primary); border-color: var(--accent, #7aa2ff); }
 .border-crop-autocrop-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .border-crop-autocrop-btn:disabled:hover { color: var(--text-secondary); border-color: var(--border); }
+/* Lock sides toggle (avatar editor only); lit while on. */
+.border-crop-lock-btn.active { background: var(--accent, #7aa2ff); color: var(--accent-text); border-color: var(--accent, #7aa2ff); }
 
 /* Shown only for the Rotate tool (toggled in _renderBorderEditor). Quarter-turn
    nudges that wrap through the same 0..360 logic as the manual rotate handle. */
@@ -6077,21 +6081,6 @@ details.sound-section:not([open]) .sound-section-label::before {
 .profile-gear-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* ── Edit Profile Modal ──────────────────────────── */
-.edit-profile-modal-box {
-  width: 23.75rem;
-  max-width: 95vw;
-}
-
-.edit-profile-label {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin: 0.75rem 0 0.375rem;
-  letter-spacing: 0.03em;
-}
-
 .edit-profile-textarea {
   width: 100%;
   min-height: 5rem;
@@ -6109,12 +6098,21 @@ details.sound-section:not([open]) .sound-section-label::before {
   border-color: var(--accent);
 }
 
-.edit-profile-char-count {
-  font-size: 0.6875rem;
+.learn-more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 0 0.25rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--text-muted);
-  text-align: right;
-  margin-top: 0.125rem;
+  cursor: pointer;
 }
+.learn-more-toggle:hover { color: var(--text-secondary); }
+.learn-more-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
 /* Clickable message author and sidebar user items for profile popup */
 .message-author { cursor: pointer; }

@@ -1060,47 +1060,6 @@ _closeProfilePopup() {
   clearTimeout(this._hoverFadeTimeout);
 },
 
-_openEditProfileModal(profile) {
-  // Create a simple modal for editing bio and status
-  this._closeProfilePopup();
-  const existing = document.getElementById('edit-profile-modal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'edit-profile-modal';
-  modal.className = 'modal-overlay';
-  modal.style.display = 'flex';
-  modal.innerHTML = `
-    <div class="modal edit-profile-modal-box">
-      <h3>${t('users.edit_profile_modal_title')}</h3>
-      <label class="edit-profile-label">${t('users.bio_label')} <span class="muted-text">${t('users.bio_max_hint')}</span></label>
-      <textarea id="edit-profile-bio" class="edit-profile-textarea" maxlength="190" placeholder="${t('users.bio_placeholder')}">${this._escapeHtml(profile.bio || '')}</textarea>
-      <div class="edit-profile-char-count"><span id="edit-profile-chars">${(profile.bio || '').length}</span>/190</div>
-      <div class="modal-actions">
-        <button class="btn-sm" id="edit-profile-cancel">${t('modals.common.cancel')}</button>
-        <button class="btn-sm btn-accent" id="edit-profile-save">${t('modals.common.save')}</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  const bioInput = document.getElementById('edit-profile-bio');
-  const charCount = document.getElementById('edit-profile-chars');
-
-  bioInput.addEventListener('input', () => {
-    charCount.textContent = bioInput.value.length;
-  });
-  bioInput.focus();
-
-  document.getElementById('edit-profile-cancel').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-
-  document.getElementById('edit-profile-save').addEventListener('click', () => {
-    this.socket.emit('set-bio', { bio: bioInput.value });
-    modal.remove();
-  });
-},
-
 // ── Voice Users ───────────────────────────────────────
 
 _renderVoiceUsers(users, channelCode) {

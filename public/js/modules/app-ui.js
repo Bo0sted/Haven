@@ -2056,7 +2056,12 @@ _setupUI() {
       document.getElementById('search-panel').style.display = 'none';
       document.getElementById('theme-popup').style.display = 'none';
       document.getElementById('quick-switcher-overlay')?.remove();
-      document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+      document.querySelectorAll('.modal-overlay').forEach(m => {
+        const wasOpen = m.style.display && m.style.display !== 'none';
+        m.style.display = 'none';
+        // Same signal as the modal ✕, so a modal can drop unsaved state.
+        if (wasOpen) m.dispatchEvent(new CustomEvent('modal-dismiss'));
+      });
       // Close the emoji picker too. Reuse its toggle so the parent/anchor
       // restore runs, and only when it's open so Escape can't open it.
       const emojiPicker = document.getElementById('emoji-picker');
@@ -3360,9 +3365,13 @@ _setupUI() {
     return { el: userItem, userId: parseInt(userItem.dataset.userId) };
   });
 
+  // Leaving Edit Profile without saving (Cancel, clicking outside, ✕, Escape)
+  // discards a picked or cleared avatar, so a later Save can't upload it.
   document.getElementById('cancel-rename-btn').addEventListener('click', () => {
     document.getElementById('rename-modal').style.display = 'none';
+    this._discardPendingAvatar();
   });
+  document.getElementById('rename-modal').addEventListener('modal-dismiss', () => this._discardPendingAvatar());
 
   document.getElementById('save-rename-btn').addEventListener('click', () => this._saveRename());
 
@@ -3375,7 +3384,10 @@ _setupUI() {
   });
 
   document.getElementById('rename-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+    if (e.target === e.currentTarget) {
+      e.currentTarget.style.display = 'none';
+      this._discardPendingAvatar();
+    }
   });
 
   // manage groups buttons
@@ -5335,6 +5347,7 @@ _openRenameModal() {
   this._loadPersonas?.();
   this._loadRoles(() => this._renderUserProfileGroupsList());
   this._updateAvatarPreview();
+  this._resetAvatarEditState();
   this._resetBorderEditState();
   // Sync shape picker buttons
   const picker = document.getElementById('avatar-shape-picker');

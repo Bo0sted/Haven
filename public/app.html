@@ -1193,16 +1193,31 @@
     <div class="modal">
       <h3 data-i18n="modals.edit_profile.title">Edit Profile</h3>
 
+      <!-- Display Name -->
+      <p class="modal-desc" data-i18n="modals.edit_profile.display_name_desc">Letters, numbers, underscores, and spaces (2–20 chars)</p>
+      <div class="form-group">
+        <label data-i18n="modals.edit_profile.display_name_label">Display Name</label>
+        <input type="text" id="rename-input" data-i18n-placeholder="modals.edit_profile.display_name_placeholder" placeholder="New display name..." maxlength="20">
+      </div>
+
+      <!-- Bio -->
+      <div class="form-group" style="margin-top:8px">
+        <label data-i18n="modals.edit_profile.bio_label">Bio</label> <span class="muted-text" data-i18n="modals.edit_profile.bio_max">(max 190 chars)</span>
+        <textarea id="edit-profile-bio" class="edit-profile-textarea" maxlength="190" data-i18n-placeholder="modals.edit_profile.bio_placeholder" placeholder="Tell people about yourself…" rows="2"></textarea>
+      </div>
+
       <!-- Avatar Customizer -->
       <div class="avatar-settings" style="margin-bottom: 16px;">
-        <h5 class="settings-section-subtitle" data-i18n="modals.edit_profile.avatar_title">Avatar</h5>
+        <h5 class="settings-section-subtitle" style="margin-top:0" data-i18n="modals.edit_profile.avatar_title">Avatar</h5>
         <div class="avatar-upload-row" style="margin-bottom: 10px;">
           <div class="avatar-upload-preview" id="avatar-upload-preview"></div>
           <button type="button" class="btn-sm" id="avatar-upload-btn" data-i18n="modals.edit_profile.upload_btn">Upload</button>
+          <button type="button" class="btn-sm" id="avatar-crop-btn" data-i18n="modals.edit_profile.edit_btn" disabled>Edit</button>
           <button type="button" class="btn-sm" id="avatar-remove-btn" data-i18n="modals.edit_profile.clear_btn">Clear</button>
           <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">
         </div>
         <small class="muted-text" style="display:block;margin-top:-4px;margin-bottom:8px;opacity:0.6" data-i18n="modals.edit_profile.avatar_hint">JPG, PNG, GIF (animated!), WebP · Max 2 MB</small>
+        <small class="muted-text" id="avatar-edit-note" style="display:none;margin-top:-4px;margin-bottom:8px;opacity:0.6" data-i18n="modals.edit_profile.avatar_edit_animated">Animated images can't be edited.</small>
         <h5 class="settings-section-subtitle" data-i18n="modals.edit_profile.border_title">Border</h5>
         <div class="avatar-upload-row" style="margin-bottom: 10px;">
           <div class="avatar-upload-preview" id="border-upload-preview"></div>
@@ -1217,9 +1232,15 @@
           <option value="trigger" data-i18n="modals.edit_profile.animate_trigger">Trigger</option>
           <option value="disabled" data-i18n="modals.edit_profile.animate_disabled">Disabled</option>
         </select>
-        <small class="muted-text" style="display:block;margin-bottom:6px;opacity:0.6" data-i18n="modals.edit_profile.animate_note_intro">Controls how animations on your profile will appear for every user on Haven. This applies to both your avatar and border, assuming you upload an animated image such as a GIF or APNG.</small>
-        <small class="muted-text" style="display:block;margin-bottom:4px;opacity:0.6" data-i18n="modals.edit_profile.animate_note_trigger">Trigger — Animations on your profile will loop when a user puts their cursor over your message, or opens your profile card.</small>
-        <small class="muted-text" style="display:block;margin-bottom:8px;opacity:0.6" data-i18n="modals.edit_profile.animate_note_disabled">Disabled — Animations will be completely disabled for your profile. Existing animated images uploaded to your profile will remain untouched, however, only the first frame of the image will be displayed on your profile.</small>
+        <button type="button" class="learn-more-toggle" id="animate-learn-more-toggle" aria-expanded="false" aria-controls="animate-learn-more-body">
+          <span class="collapse-toggle-arrow collapsed" id="animate-learn-more-arrow" aria-hidden="true">▾</span>
+          <span data-i18n="modals.edit_profile.animate_learn_more">Learn more</span>
+        </button>
+        <div class="collapsible-section-body collapsed" id="animate-learn-more-body">
+          <small class="muted-text" style="display:block;margin-bottom:6px;opacity:0.6" data-i18n="modals.edit_profile.animate_note_intro">Controls how animations on your profile will appear for every user on Haven. This applies to both your avatar and border, assuming you upload an animated image such as a GIF or APNG.</small>
+          <small class="muted-text" style="display:block;margin-bottom:4px;opacity:0.6" data-i18n="modals.edit_profile.animate_note_trigger">Trigger — Animations on your profile will loop when a user puts their cursor over your message, or opens your profile card.</small>
+          <small class="muted-text" style="display:block;margin-bottom:8px;opacity:0.6" data-i18n="modals.edit_profile.animate_note_disabled">Disabled — Animations will be completely disabled for your profile. Existing animated images uploaded to your profile will remain untouched, however, only the first frame of the image will be displayed on your profile.</small>
+        </div>
         <h5 class="settings-section-subtitle" data-i18n="modals.edit_profile.shape_title">Shape</h5>
         <div class="avatar-shape-picker" id="avatar-shape-picker">
           <button type="button" class="avatar-shape-btn active" data-shape="circle" data-i18n-title="modals.edit_profile.shape_circle" title="Circle"><div class="shape-preview shape-circle"></div></button>
@@ -1228,19 +1249,6 @@
           <button type="button" class="avatar-shape-btn" data-shape="hex" data-i18n-title="modals.edit_profile.shape_hexagon" title="Hexagon"><div class="shape-preview shape-hex"></div></button>
           <button type="button" class="avatar-shape-btn" data-shape="diamond" data-i18n-title="modals.edit_profile.shape_diamond" title="Diamond"><div class="shape-preview shape-diamond"></div></button>
         </div>
-      </div>
-
-      <!-- Display Name -->
-      <p class="modal-desc" data-i18n="modals.edit_profile.display_name_desc">Letters, numbers, underscores, and spaces (2–20 chars)</p>
-      <div class="form-group">
-        <label data-i18n="modals.edit_profile.display_name_label">Display Name</label>
-        <input type="text" id="rename-input" data-i18n-placeholder="modals.edit_profile.display_name_placeholder" placeholder="New display name..." maxlength="20">
-      </div>
-
-      <!-- Bio -->
-      <div class="form-group" style="margin-top:8px">
-        <label data-i18n="modals.edit_profile.bio_label">Bio</label> <span class="muted-text" data-i18n="modals.edit_profile.bio_max">(max 190 chars)</span>
-        <textarea id="edit-profile-bio" class="edit-profile-textarea" maxlength="190" data-i18n-placeholder="modals.edit_profile.bio_placeholder" placeholder="Tell people about yourself…" rows="2"></textarea>
       </div>
 
       <!-- Groups -->
@@ -1280,7 +1288,9 @@
   <!-- Border Edit Modal. An append-only op log is the source of truth: each tool
        appends one fraction-based op (crop / move / resize / rotate / distort),
        folded in order as nested CSS wrappers. The right-side list shows the log
-       with per-entry undo. Nothing is baked; the same fold drives real rendering. -->
+       with per-entry undo. Nothing is baked; the same fold drives real rendering.
+       The avatar reuses this editor with only Crop; its result is drawn
+       to a canvas and uploaded as the new avatar image. -->
   <div class="modal-overlay" id="border-crop-modal" style="display:none">
     <div class="modal">
       <h3 data-i18n="modals.border_crop.title">Edit</h3>
@@ -1295,6 +1305,7 @@
             <button type="button" class="border-crop-mode-btn" data-mode="opacity" data-i18n="modals.border_crop.mode_opacity">Opacity</button>
           </div>
           <button type="button" class="border-crop-autocrop-btn" id="border-crop-autocrop-btn" data-i18n="modals.border_crop.autocrop">Crop out invisible pixels</button>
+          <button type="button" class="border-crop-autocrop-btn border-crop-lock-btn" id="border-crop-lock-btn" aria-pressed="false" data-i18n="modals.border_crop.lock_sides" data-i18n-title="modals.border_crop.lock_sides_hint" title="Crop all sides evenly">Lock sides</button>
           <div class="border-crop-rotate-actions" id="border-crop-rotate-actions">
             <button type="button" class="btn-sm" id="border-rotate-ccw">-90°</button>
             <button type="button" class="btn-sm" id="border-rotate-cw">+90°</button>

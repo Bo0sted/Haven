@@ -543,10 +543,6 @@
     "set_nickname_title": "Spitzname festlegen",
     "nickname_hint": "Nur du siehst diesen Spitznamen für {{name}}.",
     "nickname_clear_btn": "Löschen",
-    "edit_profile_modal_title": "Profil bearbeiten",
-    "bio_label": "Bio",
-    "bio_max_hint": "(max. 190 Zeichen)",
-    "bio_placeholder": "Erzähl den Leuten von dir…",
     "gear_menu": {
       "assign_role": "Rolle zuweisen",
       "role_management": "Rollenverwaltung",

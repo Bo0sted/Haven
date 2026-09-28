@@ -814,7 +814,205 @@ _resetBorderEditState() {
   if (animSel) animSel.value = this._pendingAnimateProfile;
 },
 
-// The border editor is event sourced: this._borderOps is an append-only log of
+// ── Avatar editing ──
+// The avatar reuses the border editor in 'avatar' mode with only the Crop tool.
+// Unlike the border, the result is baked: Done draws the crop to a canvas and
+// stages it as the pending avatar file, so every surface (push icons, native
+// apps) shows it. The avatar keeps a single crop, _avatarCrop, over the unedited
+// _avatarEditSource; reopening the editor loads it back as the live draft, so it
+// can be adjusted or discarded until the next Save. Stills only: a canvas holds
+// one frame, so animated images keep their Edit button disabled.
+
+// Committed op log of whichever image the editor is open on. The avatar has none:
+// its one crop is the draft while editing and is stored by Done.
+_ops() {
+  return this._editTarget === 'avatar' ? [] : this._borderOps;
+},
+
+// Point the avatar editor at a new unedited image (a picked File, the saved URL,
+// or null), clear its crop, and work out whether it is animated. openEditor opens
+// the editor once the image is known to be still (used right after a pick).
+_setAvatarEditSource(src, file, openEditor = false) {
+  this._avatarEditSource = src || null;
+  this._avatarEditFile = file || null;
+  this._avatarCrop = null;
+  this._avatarEditBaked = false;
+  this._avatarIsAnimated = null;
+  const token = (this._avatarEditToken = (this._avatarEditToken || 0) + 1);
+  const settle = (animated) => {
+    if (token !== this._avatarEditToken) return; // a newer source replaced this one
+    this._avatarIsAnimated = animated;
+    this._updateAvatarEditButton();
+    const profileOpen = document.getElementById('rename-modal')?.style.display === 'flex';
+    if (openEditor && animated === false && profileOpen) this._openImageEditor('avatar');
+  };
+  if (file) {
+    file.arrayBuffer().then((buf) => settle(this._isAnimatedImageBytes(buf)), () => settle(null));
+  } else if (src && !this._animCanAnimate(src)) {
+    settle(false);
+  } else if (src) {
+    fetch(src).then((r) => r.arrayBuffer()).then((buf) => settle(this._isAnimatedImageBytes(buf)), () => settle(null));
+  }
+  this._updateAvatarEditButton();
+},
+
+// Called when Edit Profile opens: edit the saved avatar, as the preview shows.
+_resetAvatarEditState() {
+  this._setAvatarEditSource(this.user.avatar || null, null);
+},
+
+// Edit Profile closed without saving: drop the picked (or cleared) avatar and the
+// "Unsaved changes" label. The border, shape and animation choices are already
+// reset from the saved values each time the modal opens.
+_discardPendingAvatar() {
+  this._pendingAvatarFile = null;
+  this._pendingAvatarPreviewUrl = null;
+  this._pendingAvatarRemoved = false;
+  this._updateAvatarPreview();
+  this._resetAvatarEditState();
+  const status = document.getElementById('avatar-save-status');
+  if (status) { status.textContent = ''; status.style.color = ''; }
+},
+
+// Edit needs a still image to work on; animated ones get a short note instead.
+_updateAvatarEditButton() {
+  const has = !!this._avatarEditSource && !this._pendingAvatarRemoved;
+  const btn = document.getElementById('avatar-crop-btn');
+  if (btn) btn.disabled = !has || this._avatarIsAnimated !== false;
+  const note = document.getElementById('avatar-edit-note');
+  if (note) note.style.display = (has && this._avatarIsAnimated === true) ? 'block' : 'none';
+},
+
+// True for a GIF with more than one frame, an APNG, or an animated WebP.
+_isAnimatedImageBytes(buf) {
+  const b = new Uint8Array(buf);
+  const str = (p, n) => String.fromCharCode(...b.subarray(p, p + n));
+  if (str(0, 3) === 'GIF') {
+    // Walk the block stream and count image descriptors.
+    let p = 13;
+    if (b[10] & 0x80) p += 3 * (1 << ((b[10] & 7) + 1));
+    let frames = 0;
+    const skipSubBlocks = () => { while (p < b.length && b[p]) p += b[p] + 1; p++; };
+    while (p < b.length) {
+      if (b[p] === 0x2C) {
+        if (++frames > 1) return true;
+        const packed = b[p + 9];
+        p += 10;
+        if (packed & 0x80) p += 3 * (1 << ((packed & 7) + 1));
+        p++; // LZW minimum code size
+        skipSubBlocks();
+      } else if (b[p] === 0x21) {
+        p += 2;
+        skipSubBlocks();
+      } else {
+        break; // trailer
+      }
+    }
+    return false;
+  }
+  if (b[0] === 0x89 && str(1, 3) === 'PNG') {
+    // An acTL chunk ahead of the image data marks an APNG.
+    let p = 8;
+    while (p + 8 <= b.length) {
+      const len = ((b[p] << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3]) >>> 0;
+      const type = str(p + 4, 4);
+      if (type === 'acTL') return true;
+      if (type === 'IDAT') return false;
+      p += 12 + len;
+    }
+    return false;
+  }
+  if (str(0, 4) === 'RIFF' && str(8, 4) === 'WEBP') {
+    return str(12, 4) === 'VP8X' && !!(b[20] & 0x02);
+  }
+  return false;
+},
+
+// Open the editor on the border or the avatar. The avatar shows only Crop; its
+// saved crop comes back as the live draft so it can be adjusted or discarded.
+_openImageEditor(target) {
+  if (!Array.isArray(this._borderOps)) this._borderOps = [];
+  this._editTarget = target;
+  this._borderDraft = null;
+  this._borderTool = 'crop';
+  this._resizeAnchor = 'center';
+  this._cropLocked = false;
+  this._setupBorderEditor();
+  const modal = document.getElementById('border-crop-modal');
+  // Show the modal first so the stage has real dimensions before rendering.
+  if (modal) modal.style.display = 'flex';
+  this._selectBorderTool('crop');
+  if (target === 'avatar' && this._avatarCrop) {
+    this._borderDraft = { ...this._avatarCrop };
+    this._renderBorderEditor();
+  }
+},
+
+// Done in avatar mode: bake _avatarCrop into a new pending avatar file. With no
+// crop left, fall back to the unedited image.
+_applyAvatarEdits() {
+  const preview = document.getElementById('avatar-upload-preview');
+  const showPreview = (url) => {
+    if (!preview) return;
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = t('media_runtime.avatar.preview_alt');
+    preview.innerHTML = '';
+    preview.appendChild(img);
+  };
+  if (!this._avatarCrop) {
+    if (!this._avatarEditBaked) return;
+    this._avatarEditBaked = false;
+    this._pendingAvatarFile = this._avatarEditFile;
+    this._pendingAvatarPreviewUrl = this._avatarEditFile ? this._avatarEditSource : null;
+    if (this._avatarEditFile) { showPreview(this._avatarEditSource); this._markAvatarUnsaved(); }
+    else this._updateAvatarPreview();
+    return;
+  }
+  const img = document.querySelector('#border-crop-layers .border-crop-border');
+  if (!img || !img.complete || !img.naturalWidth) return;
+  const nw = img.naturalWidth, nh = img.naturalHeight, M = Math.max(nw, nh);
+  // The stage shows the image contained in a square, so a stage fraction is M px.
+  const box = this._advanceBox({ left: 0, top: 0, right: 1, bottom: 1 }, this._avatarCrop);
+  const sx = (box.left - (1 - nw / M) / 2) * M;
+  const sy = (box.top - (1 - nh / M) / 2) * M;
+  const sw = (box.right - box.left) * M, sh = (box.bottom - box.top) * M;
+  // Keep the cropped pixels as they are, only scaling down past 1024px.
+  const k = Math.min(1, 1024 / Math.max(sw, sh));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(sw * k));
+  canvas.height = Math.max(1, Math.round(sh * k));
+  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  // Keep JPEG and WebP as they came; everything else, and any crop that reaches
+  // past the image into transparent space, becomes PNG.
+  const srcType = this._avatarEditFile ? this._avatarEditFile.type
+    : (/\.jpe?g(\?|#|$)/i.test(this._avatarEditSource) ? 'image/jpeg' : /\.webp(\?|#|$)/i.test(this._avatarEditSource) ? 'image/webp' : 'image/png');
+  const outside = sx < -0.5 || sy < -0.5 || sx + sw > nw + 0.5 || sy + sh > nh + 0.5;
+  const type = (srcType === 'image/jpeg' && !outside) ? 'image/jpeg' : srcType === 'image/webp' ? 'image/webp' : 'image/png';
+  const fail = () => this._showToast(t('media_runtime.avatar.edit_failed'), 'error');
+  try {
+    canvas.toBlob((blob) => {
+      if (!blob) return fail();
+      if (blob.size > 2 * 1024 * 1024) return this._showToast(t('toasts.image_too_large', { max: 2 }), 'error');
+      const ext = { 'image/jpeg': 'jpg', 'image/webp': 'webp' }[blob.type] || 'png';
+      this._pendingAvatarFile = new File([blob], `avatar.${ext}`, { type: blob.type });
+      this._pendingAvatarRemoved = false;
+      this._avatarEditBaked = true;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        this._pendingAvatarPreviewUrl = ev.target.result;
+        showPreview(ev.target.result);
+        this._markAvatarUnsaved();
+      };
+      reader.readAsDataURL(blob);
+    }, type, 0.92);
+  } catch {
+    fail(); // cross-origin image: the canvas is tainted
+  }
+},
+
+// The border editor is event sourced: this._ops() (the border's log, or the
+// avatar's while _editTarget is 'avatar') is an append-only log of
 // fraction-based ops and this._borderDraft is the current tool's uncommitted op.
 // Everything shown is a pure fold of (ops + draft); nothing is baked to pixels.
 
@@ -864,7 +1062,7 @@ _advanceBox(cb, op) {
 // Every tool re-initializes against this so it acts on the real current dimensions.
 _committedContentBox() {
   let cb = { left: 0, top: 0, right: 1, bottom: 1 };
-  for (const op of this._borderOps) cb = this._advanceBox(cb, op);
+  for (const op of this._ops()) cb = this._advanceBox(cb, op);
   return cb;
 },
 
@@ -1295,9 +1493,20 @@ _renderBorderEditor() {
   const avatarUrl = this._pendingAvatarRemoved ? null : (this._pendingAvatarPreviewUrl || this.user.avatar);
   const borderUrl = this._pendingBorderRemoved ? null : (this._pendingBorderPreviewUrl || this.user.border);
   const shapeClass = 'avatar-' + (this._pendingAvatarShape || this.user.avatarShape || 'circle');
+  const editingAvatar = this._editTarget === 'avatar';
+  // The image the tools act on; the action rows below only show when there is one.
+  const subjectUrl = editingAvatar ? this._avatarEditSource : borderUrl;
+  // The avatar has only Crop, so the tool picker and edit history have no job there.
+  const modes = document.getElementById('border-crop-modes');
+  if (modes) modes.style.display = editingAvatar ? 'none' : '';
+  const side = document.querySelector('#border-crop-modal .border-crop-side');
+  if (side) side.style.display = editingAvatar ? 'none' : '';
 
   let avatarLayer;
-  if (avatarUrl) {
+  if (editingAvatar) {
+    // The unedited avatar, faded, so the area being cropped away stays visible.
+    avatarLayer = subjectUrl ? `<img class="border-crop-border bce-ghost" src="${this._escapeHtml(subjectUrl)}" alt="">` : '';
+  } else if (avatarUrl) {
     avatarLayer = `<img class="border-crop-avatar ${shapeClass}" src="${this._escapeHtml(avatarUrl)}" alt="${t('media_runtime.avatar.alt')}">`;
   } else {
     const color = this._getUserColor(this.user.username);
@@ -1305,14 +1514,15 @@ _renderBorderEditor() {
     avatarLayer = `<div class="border-crop-avatar ${shapeClass}" style="background-color:${color}">${initial}</div>`;
   }
 
-  if (borderUrl) {
+  if (subjectUrl) {
     const W = stage.clientWidth || 192, H = stage.clientHeight || 192;
-    let stack = `<img class="border-crop-border" src="${this._escapeHtml(borderUrl)}" alt="${t('media_runtime.avatar.border_alt')}">`;
+    const subjectAlt = editingAvatar ? t('media_runtime.avatar.alt') : t('media_runtime.avatar.border_alt');
+    let stack = `<img class="border-crop-border" src="${this._escapeHtml(subjectUrl)}" alt="${subjectAlt}">`;
     let cb = { left: 0, top: 0, right: 1, bottom: 1 };
     // An opacity draft is the single source of truth for opacity, so hide the
     // committed opacity op(s) while editing instead of multiplying with them.
     const draftIsOpacity = this._borderDraft && this._borderDraft.type === 'opacity';
-    for (const op of this._borderOps) {
+    for (const op of this._ops()) {
       if (draftIsOpacity && op.type === 'opacity') continue;
       stack = `<div class="bce-op" style="${this._borderWrapperStyle(op, W, H, cb)}">${stack}</div>`;
       cb = this._advanceBox(cb, op);
@@ -1328,20 +1538,26 @@ _renderBorderEditor() {
   // Rotate. Both need a border to act on.
   const autocropBtn = document.getElementById('border-crop-autocrop-btn');
   if (autocropBtn) {
-    autocropBtn.style.display = (this._borderTool === 'crop' && borderUrl) ? 'block' : 'none';
+    autocropBtn.style.display = (this._borderTool === 'crop' && subjectUrl) ? 'block' : 'none';
     autocropBtn.disabled = this._hasCrop();
   }
+  const lockBtn = document.getElementById('border-crop-lock-btn');
+  if (lockBtn) {
+    lockBtn.style.display = (editingAvatar && subjectUrl) ? 'block' : 'none';
+    lockBtn.classList.toggle('active', !!this._cropLocked);
+    lockBtn.setAttribute('aria-pressed', String(!!this._cropLocked));
+  }
   const rotateActions = document.getElementById('border-crop-rotate-actions');
-  if (rotateActions) rotateActions.style.display = (this._borderTool === 'rotate' && borderUrl) ? 'flex' : 'none';
+  if (rotateActions) rotateActions.style.display = (this._borderTool === 'rotate' && subjectUrl) ? 'flex' : 'none';
   const resizeActions = document.getElementById('border-crop-resize-actions');
   if (resizeActions) {
-    resizeActions.style.display = (this._borderTool === 'resize' && borderUrl) ? 'flex' : 'none';
+    resizeActions.style.display = (this._borderTool === 'resize' && subjectUrl) ? 'flex' : 'none';
     const anchorSel = document.getElementById('border-resize-anchor');
     if (anchorSel) anchorSel.value = this._resizeAnchor || 'center';
   }
   const opacityActions = document.getElementById('border-crop-opacity-actions');
   if (opacityActions) {
-    opacityActions.style.display = (this._borderTool === 'opacity' && borderUrl) ? 'flex' : 'none';
+    opacityActions.style.display = (this._borderTool === 'opacity' && subjectUrl) ? 'flex' : 'none';
     // Reflect the opacity draft (seeded from the committed value on entry) so the
     // slider shows the current opacity, not a reset 100%.
     const pct = (this._borderDraft && this._borderDraft.type === 'opacity') ? Math.round(this._borderDraft.value * 100) : 100;
@@ -1480,13 +1696,13 @@ _renderBorderHistory() {
   const list = document.getElementById('border-crop-history');
   if (!list) return;
   const tr = (key) => t(key);
-  if (!this._borderOps.length) {
+  if (!this._ops().length) {
     list.innerHTML = `<div class="bce-hist-empty">${tr('modals.border_crop.no_edits')}</div>`;
     return;
   }
   const glyph = { crop: '▣', move: '✥', resize: '⤢', rotate: '⟳', opacity: '◐', distort: '◇' };
   const undoTitle = tr('modals.border_crop.undo');
-  list.innerHTML = this._borderOps.map((op, i) =>
+  list.innerHTML = this._ops().map((op, i) =>
     `<div class="bce-hist-row"><span class="bce-hist-label">${glyph[op.type] || ''} ${tr('modals.border_crop.mode_' + op.type, op.type)}</span>` +
     `<button type="button" class="bce-hist-undo" data-index="${i}" title="${undoTitle}">↶</button></div>`
   ).join('');
@@ -1506,8 +1722,10 @@ _borderBoxExceeds(op) {
   return box.left < -lim || box.top < -lim || box.right > 1 + lim || box.bottom > 1 + lim;
 },
 
-// Commit-on-leave: keep the draft only if it actually changed something.
+// Commit-on-leave: keep the draft only if it actually changed something. The
+// avatar has no log to commit into; Done stores its crop instead.
 _commitBorderDraft() {
+  if (this._editTarget === 'avatar') return;
   const d = this._borderDraft;
   this._borderDraft = null;
   if (d && d.type === 'opacity') {
@@ -1526,7 +1744,7 @@ _commitBorderDraft() {
     this._showToast(t('modals.border_crop.exceeds_frame'), 'error');
     return;
   }
-  this._borderOps.push(d);
+  this._ops().push(d);
 },
 
 // Switch tools (or re-enter the same one): commit the current draft, then start a
@@ -1558,7 +1776,7 @@ _selectBorderTool(tool) {
 // Auto-crop reads the raw image, so it is only valid before any crop; once one
 // exists it would stack a second crop, so the button (and this) refuse.
 _hasCrop() {
-  return this._borderOps.some((op) => op.type === 'crop') ||
+  return this._ops().some((op) => op.type === 'crop') ||
     (this._borderDraft && this._borderDraft.type === 'crop' && this._borderOpChanged(this._borderDraft));
 },
 
@@ -1682,7 +1900,10 @@ _setupBorderEditor() {
       if (active.edge === 'right')  f = (cb.right - px) / cw;
       if (active.edge === 'top')    f = (py - cb.top) / ch;
       if (active.edge === 'bottom') f = (cb.bottom - py) / ch;
-      d[active.edge] = Math.min(0.49, Math.max(0, f));
+      const v = Math.min(0.49, Math.max(0, f));
+      // Lock sides (avatar only): one drag trims all four edges by the same amount.
+      if (this._editTarget === 'avatar' && this._cropLocked) d.top = d.right = d.bottom = d.left = v;
+      else d[active.edge] = v;
     }
     this._applyBorderDraft();
   };
@@ -1741,6 +1962,14 @@ _setupBorderEditor() {
   const autocropBtn = document.getElementById('border-crop-autocrop-btn');
   if (autocropBtn) autocropBtn.addEventListener('click', () => this._autoCropInvisible());
 
+  // Lock sides (avatar only): while on, a crop drag trims every edge evenly.
+  const lockBtn = document.getElementById('border-crop-lock-btn');
+  if (lockBtn) lockBtn.addEventListener('click', () => {
+    this._cropLocked = !this._cropLocked;
+    lockBtn.classList.toggle('active', this._cropLocked);
+    lockBtn.setAttribute('aria-pressed', String(this._cropLocked));
+  });
+
   // Quarter-turn rotate nudges.
   const rotCw = document.getElementById('border-rotate-cw');
   const rotCcw = document.getElementById('border-rotate-ccw');
@@ -1781,7 +2010,7 @@ _setupBorderEditor() {
       const btn = e.target.closest('.bce-hist-undo');
       if (!btn) return;
       this._borderDraft = null;
-      this._borderOps.length = parseInt(btn.dataset.index, 10);
+      this._ops().length = parseInt(btn.dataset.index, 10);
       this._renderBorderEditor();
     });
   }
@@ -1820,6 +2049,16 @@ _setupAvatarUpload() {
 
   // ── Delegated click handler ──
   document.addEventListener('click', (e) => {
+    // Animated profile "Learn more" toggle
+    const learnMoreBtn = e.target.closest('#animate-learn-more-toggle');
+    if (learnMoreBtn) {
+      e.preventDefault();
+      const collapsed = document.getElementById('animate-learn-more-body').classList.toggle('collapsed');
+      document.getElementById('animate-learn-more-arrow')?.classList.toggle('collapsed', collapsed);
+      learnMoreBtn.setAttribute('aria-expanded', String(!collapsed));
+      return;
+    }
+
     // Shape buttons
     const shapeBtn = e.target.closest('.avatar-shape-btn');
     if (shapeBtn) {
@@ -1853,6 +2092,7 @@ _setupAvatarUpload() {
         const initial = this.user.username.charAt(0).toUpperCase();
         preview.innerHTML = `<div style="background-color:${color};width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.125rem;color:white">${initial}</div>`;
       }
+      this._setAvatarEditSource(null, null);
       this._markAvatarUnsaved();
       return;
     }
@@ -1869,24 +2109,27 @@ _setupAvatarUpload() {
     // Border Edit button → open the op-log editor. _borderOps is seeded from the
     // saved fit when the Edit Profile modal opens and reset to [] on image change,
     // so it already holds the right starting log here.
-    if (e.target.closest('#border-crop-btn')) {
+    // The avatar's Edit button opens the same editor in avatar mode (Crop only).
+    const editBtn = e.target.closest('#border-crop-btn, #avatar-crop-btn');
+    if (editBtn) {
       e.preventDefault();
-      if (!Array.isArray(this._borderOps)) this._borderOps = [];
-      this._borderDraft = null;
-      this._borderTool = 'crop';
-      this._resizeAnchor = 'center';
-      this._setupBorderEditor();
-      const modal = document.getElementById('border-crop-modal');
-      // Show the modal first so the stage has real dimensions before rendering.
-      if (modal) modal.style.display = 'flex';
-      this._selectBorderTool('crop');
+      this._openImageEditor(editBtn.id === 'avatar-crop-btn' ? 'avatar' : 'border');
       return;
     }
 
-    // Done → commit the in-progress draft (commit-on-leave) and close.
+    // Done → commit the in-progress draft (commit-on-leave) and close. Avatar
+    // edits are baked into the pending avatar file here.
     if (e.target.closest('#border-crop-done-btn')) {
       e.preventDefault();
-      this._commitBorderDraft();
+      if (this._editTarget === 'avatar') {
+        // The avatar's single crop is the draft; store it and bake it.
+        const d = this._borderDraft;
+        this._borderDraft = null;
+        this._avatarCrop = this._borderOpChanged(d) ? d : null;
+        this._applyAvatarEdits();
+      } else {
+        this._commitBorderDraft();
+      }
       const modal = document.getElementById('border-crop-modal');
       if (modal) modal.style.display = 'none';
       return;
@@ -1937,6 +2180,7 @@ _setupAvatarUpload() {
       const reader = new FileReader();
       reader.onload = (ev) => {
         this._pendingAvatarPreviewUrl = ev.target.result;
+        this._setAvatarEditSource(ev.target.result, file, true);
         const preview = document.getElementById('avatar-upload-preview');
         if (preview) {
           const img = document.createElement('img');
@@ -2026,6 +2270,8 @@ async _commitAvatarSettings() {
       
       // Notify connected sockets about the avatar change (small URL, not data URL)
       if (this.socket) this.socket.emit('set-avatar', { url: data.url });
+      // The saved image is now the unedited one the editor starts from.
+      this._resetAvatarEditState();
     }
 
     // 2. Remove avatar if Clear was clicked
@@ -2042,8 +2288,9 @@ async _commitAvatarSettings() {
       this.user.avatar = null;
       localStorage.setItem('haven_user', JSON.stringify(this.user));
       this._pendingAvatarRemoved = false;
-      
+
       if (this.socket) this.socket.emit('set-avatar', { url: '' });
+      this._resetAvatarEditState();
     }
 
     // 2b. Upload border image via HTTP if a new file was chosen
@@ -4841,7 +5088,11 @@ _setupModalExpand() {
         closeBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           const overlay = modal.closest('.modal-overlay');
-          if (overlay) overlay.style.display = 'none';
+          if (overlay) {
+            overlay.style.display = 'none';
+            // Lets a modal drop unsaved state when closed this way (see Escape too).
+            overlay.dispatchEvent(new CustomEvent('modal-dismiss'));
+          }
           if (modal.classList.contains('modal-maximized')) {
             modal.classList.remove('modal-maximized');
             expandBtn.textContent = '⛶';
