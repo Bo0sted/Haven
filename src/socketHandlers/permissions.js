@@ -201,28 +201,9 @@ module.exports = function createPermissions(db) {
     `).all(userId);
   }
 
-  // Cosmetic display for the synthetic admin role, backed by the
-  // 'admin_role_display' server setting (falls back to sensible defaults).
-  // This is purely cosmetic: is_admin, the effective level (100) and the
-  // permission set (['*']) are computed independently and never look at this.
-  function getAdminRoleDisplay() {
-    const defaults = { name: 'Admin', color: '#e74c3c', icon: null, visible: true };
-    try {
-      const row = db.prepare("SELECT value FROM server_settings WHERE key = 'admin_role_display'").get();
-      if (!row) return defaults;
-      const p = JSON.parse(row.value);
-      return {
-        name: (typeof p.name === 'string' && p.name.trim()) ? p.name : defaults.name,
-        color: (typeof p.color === 'string' && /^#[0-9a-fA-F]{3,6}$/.test(p.color)) ? p.color : defaults.color,
-        icon: (typeof p.icon === 'string' && p.icon) ? p.icon : null,
-        visible: p.visible !== false
-      };
-    } catch { return defaults; }
-  }
-
+  // The role that styles the user: the highest one that is not transparent.
   function getUserHighestRole(userId, channelId = null) {
-    const all = getUserAllRoles(userId, channelId);
-    return all.length > 0 ? all[0] : null;
+    return getUserAllRoles(userId, channelId).find(r => !r.transparent) || null;
   }
 
   // Returns every role that applies to `userId` in `channelId`'s context:
@@ -231,14 +212,6 @@ module.exports = function createPermissions(db) {
   // { id, name, level, color, icon, scope, channel_id }. Used for multi-role
   // display so the member tooltip / chat hover can list all roles a user holds.
   function getUserAllRoles(userId, channelId = null) {
-    const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(userId);
-    if (user && user.is_admin) {
-      const d = getAdminRoleDisplay();
-      // Visibility off hides the admin badge/colour everywhere, for everyone.
-      if (!d.visible) return [];
-      return [{ id: 0, name: d.name, level: 100, color: d.color, icon: d.icon, scope: 'server', channel_id: null }];
-    }
-
     // Dedupe by role.id for display purposes — if a user holds the same
     // role in multiple channels (or both server-wide and a channel), we
     // surface it once with the highest effective level. Channel scope is
@@ -255,7 +228,7 @@ module.exports = function createPermissions(db) {
 
     const serverRows = db.prepare(`
       SELECT r.id, r.name, COALESCE(ur.custom_level, r.level) as level,
-             r.color, r.icon, r.scope, ur.channel_id
+             r.color, r.icon, r.transparent, r.scope, ur.channel_id
       FROM roles r JOIN user_roles ur ON r.id = ur.role_id
       WHERE ur.user_id = ? AND ur.channel_id IS NULL
     `).all(userId);
@@ -267,7 +240,7 @@ module.exports = function createPermissions(db) {
         const placeholders = chain.map(() => '?').join(',');
         const chRows = db.prepare(`
           SELECT r.id, r.name, COALESCE(ur.custom_level, r.level) as level,
-                 r.color, r.icon, r.scope, ur.channel_id
+                 r.color, r.icon, r.transparent, r.scope, ur.channel_id
           FROM roles r JOIN user_roles ur ON r.id = ur.role_id
           WHERE ur.user_id = ? AND ur.channel_id IN (${placeholders})
         `).all(userId, ...chain);
@@ -357,7 +330,7 @@ module.exports = function createPermissions(db) {
   return {
     getChannelRoleChain, getUserEffectiveLevel, getPermissionThresholds,
     userHasPermission, getUserPermissions, getUserGlobalPermissions, getUserRoles,
-    getUserHighestRole, getUserAllRoles, getAdminRoleDisplay,
+    getUserHighestRole, getUserAllRoles,
     parseRoleGate, roleGateAllows, getUserUploadMb, syncRoleGateMemberships
   };
 };

@@ -2031,8 +2031,7 @@ _renderAllMembers(members) {
   const isSelf = (id) => id === this.user.id;
 
   list.innerHTML = members.map(m => {
-    // Admin supersedes all other roles — only show the Admin badge, not DB-assigned roles
-    const rolesHtml = m.isAdmin ? '' : m.roles.map(r =>
+    const rolesHtml = m.roles.map(r =>
       `<span class="aml-role-badge" style="border-color:${this._safeColor(r.color, '#888')};color:${this._safeColor(r.color, '#888')}">${this._escapeHtml(r.name)}</span>`
     ).join('');
     const adminBadge = m.isAdmin ? `<span class="aml-admin-badge">${t('settings.admin.badge_admin')}</span>` : '';
@@ -2087,6 +2086,9 @@ _renderAllMembers(members) {
         btns += `<button class="aml-action-btn aml-btn-delete" data-uid="${m.id}" data-uname="${this._escapeHtml(m.username)}" title="${t('settings.admin.delete_from_server_title')}">🗑️</button>`;
       }
       actionsHtml = `<div class="aml-actions">${btns}</div>`;
+    } else if (perms.isAdmin) {
+      // Only the admin may manage their own roles.
+      actionsHtml = `<div class="aml-actions"><button class="aml-action-btn aml-btn-role" data-uid="${m.id}" data-uname="${this._escapeHtml(m.username)}" title="${t('users.gear_menu.assign_role')}">👑</button></div>`;
     }
 
     return `<div class="aml-member-row">
@@ -4290,8 +4292,8 @@ async _importExecute(importId, selectedChannels) {
 // server that predates an event never sends the ack, so the plain callback
 // form waits forever and the UI does nothing — no toast, no error, nothing.
 // That is exactly what happens on partially-updated self-hosts (new public/
-// files served by an old server.js, e.g. a server older than 3.44.0 asked for
-// 'update-admin-role-display'). Surface it as an actionable error instead.
+// files served by an old server.js asked for an event it doesn't know yet).
+// Surface it as an actionable error instead.
 _roleEmit(event, payload, cb) {
   this.socket.timeout(10000).emit(event, payload, (err, res) => {
     if (err) { this._showToast(t('toasts.role_server_no_response'), 'error'); return; }
@@ -4302,7 +4304,6 @@ _roleEmit(event, payload, cb) {
 _initRoleManagement() {
   this._allRoles = [];
   this._selectedRoleId = null;
-  this._adminRoleDisplay = null;
 
   document.getElementById('close-role-modal-btn')?.addEventListener('click', () => {
     document.getElementById('role-modal').style.display = 'none';
@@ -4454,13 +4455,6 @@ _renderChannelCreatorRoleSelect() {
 
 _openRoleModal() {
   document.getElementById('role-modal').style.display = 'flex';
-  // Admin-only: fetch the current cosmetic display for the synthetic Admin
-  // role so the sidebar entry shows its saved name/colour.
-  if (this.user && this.user.isAdmin) {
-    this._roleEmit('get-admin-role-display', {}, (res) => {
-      if (res && res.display) { this._adminRoleDisplay = res.display; this._renderRoleSidebar(); }
-    });
-  }
   this._loadRoles();
 },
 
@@ -4468,17 +4462,6 @@ _renderRoleSidebar() {
   const list = document.getElementById('role-list-sidebar');
   if (!list) return;
   let html = '';
-  // Admin-only: the synthetic Admin role sits on top, separated from the real
-  // roles by a divider. Its id is the string 'admin' so it never collides with
-  // real (integer) role ids.
-  if (this.user && this.user.isAdmin) {
-    const d = this._adminRoleDisplay || { name: 'Admin', color: '#e74c3c' };
-    html += `<div class="role-sidebar-item${this._selectedRoleId === 'admin' ? ' active' : ''}" data-role-id="admin">
-      <span class="role-color-dot" style="background:${this._safeColor(d.color, '#e74c3c')}"></span>
-      ${this._escapeHtml(d.name)}
-    </div>
-    <div class="role-sidebar-divider"></div>`;
-  }
 
   // leveled roles
   const leveledRoles = this._allRoles.filter(r => r.level > 0);
@@ -4507,7 +4490,7 @@ _renderRoleSidebar() {
   list.querySelectorAll('.role-sidebar-item').forEach(el => {
     el.addEventListener('click', () => {
       const id = el.dataset.roleId;
-      this._selectedRoleId = (id === 'admin') ? 'admin' : parseInt(id, 10);
+      this._selectedRoleId = parseInt(id, 10);
       this._renderRoleSidebar();
       this._renderRoleDetail();
     });
@@ -4522,104 +4505,6 @@ _renderRoleSidebar() {
 // letting the user check/uncheck them and be silently overridden.
 _canControlRolePerm(p) {
   return !!(this.user && this.user.isAdmin) || (!ADMIN_ONLY_PERMS.includes(p) && this._hasPerm(p));
-},
-
-// Cosmetic-only editor for the synthetic Admin role. Everything here maps to
-// the 'admin_role_display' server setting and changes appearance only — the
-// admin keeps level 100 and every permission regardless. No level, permissions,
-// auto-assign or delete, because there is nothing functional to edit.
-_renderAdminRoleDetail() {
-  const panel = document.getElementById('role-detail-panel');
-  const d = this._adminRoleDisplay || { name: 'Admin', color: '#e74c3c', icon: null, visible: true };
-  // The shared modal-actions Save button is for real roles; this editor is
-  // self-contained with its own Save, so hide the shared one.
-  const sharedSave = document.getElementById('save-role-btn');
-  if (sharedSave) sharedSave.style.display = 'none';
-  const iconPreview = d.icon
-    ? `<img class="role-icon-preview" src="${this._escapeHtml(d.icon)}" alt="${t('settings.admin.role_form.icon')}">`
-    : `<div class="role-icon-preview" style="display:flex;align-items:center;justify-content:center;font-size:0.6875rem;color:var(--text-muted)">${t('settings.admin.role_form.icon_none')}</div>`;
-
-  panel.innerHTML = `
-    <div class="role-detail-form">
-      <p class="perm-admin-note">${t('settings.admin.role_form.admin_cosmetic_note')}</p>
-      <label class="settings-label">${t('settings.admin.role_form.name')}</label>
-      <input type="text" class="settings-text-input" id="admin-role-name" value="${this._escapeHtml(d.name)}" maxlength="30">
-      <label class="settings-label" style="margin-top:8px;">${t('settings.admin.role_form.color')}</label>
-      <input type="color" id="admin-role-color" value="${this._safeColor(d.color, '#e74c3c')}" style="width:50px;height:30px;border:none;cursor:pointer">
-      <label class="settings-label" style="margin-top:8px;">${t('settings.admin.role_form.icon')}</label>
-      <div class="role-icon-upload-row">
-        ${iconPreview}
-        <input type="file" id="admin-role-icon-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
-        <button class="btn-sm" id="admin-role-icon-upload-btn" type="button">${t('settings.admin.upload_btn')}</button>
-        ${d.icon ? `<button class="btn-sm danger" id="admin-role-icon-remove-btn" type="button">${t('settings.admin.remove_btn')}</button>` : ''}
-      </div>
-      <small class="muted-text" style="font-size:0.6875rem;">${t('settings.admin.role_form.icon_hint')}</small>
-      <label class="toggle-row" style="margin-top:12px;">
-        <span>${t('settings.admin.role_form.visibility')}</span>
-        <input type="checkbox" id="admin-role-visible" ${d.visible ? 'checked' : ''}>
-      </label>
-      <small class="muted-text" style="font-size:0.6875rem;">${t('settings.admin.role_form.visibility_hint')}</small>
-      <div style="margin-top:12px;">
-        <button class="btn-sm btn-accent" id="admin-role-save-btn">${t('settings.admin.roles_save')}</button>
-      </div>
-    </div>
-  `;
-
-  // Pending icon change: undefined = unchanged, null = removed, string = new path.
-  this._pendingAdminIcon = undefined;
-  const fileInput = document.getElementById('admin-role-icon-file');
-  document.getElementById('admin-role-icon-upload-btn')?.addEventListener('click', () => fileInput.click());
-  fileInput?.addEventListener('change', async () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    if (file.size > 512 * 1024) { this._showToast(t('settings.admin.role_form.icon_too_large'), 'error'); return; }
-    let uploadFile = file;
-    try {
-      const bmp = await createImageBitmap(file);
-      if (bmp.width !== 16 || bmp.height !== 16) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 16; canvas.height = 16;
-        canvas.getContext('2d').drawImage(bmp, 0, 0, 16, 16);
-        bmp.close();
-        uploadFile = await new Promise(r => canvas.toBlob(r, 'image/png'));
-      } else { bmp.close(); }
-    } catch { /* fall through with original file */ }
-    const fd = new FormData();
-    fd.append('icon', uploadFile, 'role-icon.png');
-    try {
-      const res = await fetch('/api/upload-role-icon', { method: 'POST', headers: { 'Authorization': 'Bearer ' + this.token }, body: fd });
-      const j = await res.json();
-      if (j.error) { this._showToast(j.error, 'error'); return; }
-      this._pendingAdminIcon = j.path;
-      const preview = panel.querySelector('.role-icon-preview');
-      if (preview) preview.outerHTML = `<img class="role-icon-preview" src="${this._escapeHtml(j.path)}" alt="${t('settings.admin.role_form.icon')}">`;
-      this._showToast(t('settings.admin.role_form.icon_uploaded_admin'), 'success');
-    } catch { this._showToast(t('settings.admin.upload_failed'), 'error'); }
-  });
-  document.getElementById('admin-role-icon-remove-btn')?.addEventListener('click', () => {
-    this._pendingAdminIcon = null;
-    const preview = panel.querySelector('.role-icon-preview');
-    if (preview) preview.outerHTML = `<div class="role-icon-preview" style="display:flex;align-items:center;justify-content:center;font-size:0.6875rem;color:var(--text-muted)">${t('settings.admin.role_form.icon_none')}</div>`;
-    document.getElementById('admin-role-icon-remove-btn')?.remove();
-    this._showToast(t('settings.admin.role_form.icon_removed_admin'), 'success');
-  });
-
-  document.getElementById('admin-role-save-btn')?.addEventListener('click', () => {
-    const icon = this._pendingAdminIcon !== undefined ? this._pendingAdminIcon : (d.icon || null);
-    const payload = {
-      name: document.getElementById('admin-role-name').value.trim() || 'Admin',
-      color: document.getElementById('admin-role-color').value,
-      icon,
-      visible: document.getElementById('admin-role-visible').checked
-    };
-    this._roleEmit('update-admin-role-display', payload, (res) => {
-      if (res && res.error) { this._showToast(res.error, 'error'); return; }
-      this._adminRoleDisplay = res.display || payload;
-      this._showToast(t('settings.admin.roles_saved'), 'success');
-      this._renderRoleSidebar();
-      this._renderAdminRoleDetail();
-    });
-  });
 },
 
 _updateRoleLevelPermsVis(levelInputId, permissionsSectionId, permissionsNoteId) {
@@ -4642,7 +4527,6 @@ _updateRoleLevelPermsVis(levelInputId, permissionsSectionId, permissionsNoteId) 
 
 _renderRoleDetail() {
   const panel = document.getElementById('role-detail-panel');
-  if (this._selectedRoleId === 'admin') { this._renderAdminRoleDetail(); return; }
   const role = this._allRoles.find(r => r.id === this._selectedRoleId);
   if (!role) {
     panel.innerHTML = `<p class="muted-text" style="padding:20px;text-align:center">${t('settings.admin.roles_select_role')}</p>`;
@@ -4662,6 +4546,11 @@ _renderRoleDetail() {
       <input type="number" class="settings-number-input" id="role-edit-level" value="${role.level}" min="0" max="99">
       <label class="settings-label" style="margin-top:8px;">${t('settings.admin.role_form.color')}</label>
       <input type="color" id="role-edit-color" value="${role.color || '#aaaaaa'}" style="width:50px;height:30px;border:none;cursor:pointer">
+      <label class="toggle-row" style="margin-top:8px;">
+        <span>${t('settings.admin.role_form.transparent')}</span>
+        <input type="checkbox" id="role-edit-transparent" ${role.transparent ? 'checked' : ''}>
+      </label>
+      <small class="muted-text" style="font-size:0.6875rem;">${t('settings.admin.role_form.transparent_hint')}</small>
       <label class="settings-label" style="margin-top:8px;">${t('settings.admin.role_form.upload_cap')}</label>
       <input type="number" class="settings-number-input" id="role-edit-upload-mb" value="${role.max_upload_mb || ''}" min="1" max="102400" placeholder="${this._escapeHtml(t('settings.admin.role_form.upload_cap_placeholder', { mb: parseInt(this.serverSettings?.max_upload_mb, 10) || 25 }))}">
       <small class="muted-text" style="font-size:0.6875rem;">${t('settings.admin.role_form.upload_cap_hint')}</small>
@@ -4764,6 +4653,7 @@ _renderRoleDetail() {
       name: document.getElementById('role-edit-name').value.trim(),
       level: parseInt(document.getElementById('role-edit-level').value, 10),
       color: document.getElementById('role-edit-color').value,
+      transparent: document.getElementById('role-edit-transparent').checked,
       icon: this._pendingRoleIcon !== undefined ? this._pendingRoleIcon : role.icon,
       autoAssign: document.getElementById('role-edit-auto-assign').checked,
       // Channel access lives on the channel now, as Required roles (#5649).
@@ -4822,6 +4712,7 @@ _renderRoleDetail() {
       name: trimmed,
       level: role.level,
       color: role.color || '#aaaaaa',
+      transparent: !!role.transparent,
       icon: role.icon || null,
       autoAssign: false,
       maxUploadMb: role.max_upload_mb || null,

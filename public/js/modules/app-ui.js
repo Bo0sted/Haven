@@ -2278,7 +2278,7 @@ _setupUI() {
     const authorTrigger = e.target.closest('.message-author, .message-avatar, .message-avatar-img');
     if (authorTrigger && !e.target.closest('.msg-toolbar')) {
       const userId = parseInt(msgEl.dataset.userId);
-      if (!isNaN(userId) && userId !== this.user.id) {
+      if (!isNaN(userId) && (userId !== this.user.id || this.user.isAdmin)) {
         e.preventDefault();
         this._showUserContextMenu(e, userId, msgEl.dataset.username);
         return;
@@ -3280,7 +3280,7 @@ _setupUI() {
     const userItem = e.target.closest('.user-item');
     if (!userItem) return;
     const userId = parseInt(userItem.dataset.userId);
-    if (isNaN(userId) || userId === this.user.id) return;
+    if (isNaN(userId) || (userId === this.user.id && !this.user.isAdmin)) return;
     e.preventDefault();
     this._showUserContextMenu(e, userId);
   });

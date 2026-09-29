@@ -97,7 +97,7 @@ function setupSocketHandlers(io, db, opts = {}) {
   // ── Permission helpers (shared across all connections) ───
   const {
     getChannelRoleChain, getUserEffectiveLevel, getPermissionThresholds,
-    userHasPermission, getUserPermissions, getUserGlobalPermissions, getUserRoles, getUserHighestRole, getUserAllRoles, getAdminRoleDisplay,
+    userHasPermission, getUserPermissions, getUserGlobalPermissions, getUserRoles, getUserHighestRole, getUserAllRoles,
     parseRoleGate, roleGateAllows, getUserUploadMb, syncRoleGateMemberships
   } = createPermissions(db);
 
@@ -2540,7 +2540,7 @@ function setupSocketHandlers(io, db, opts = {}) {
       io, db, state,
       // Permissions
       getChannelRoleChain, getUserEffectiveLevel, getPermissionThresholds,
-      userHasPermission, getUserPermissions, getUserGlobalPermissions, getUserRoles, getUserHighestRole, getUserAllRoles, getAdminRoleDisplay,
+      userHasPermission, getUserPermissions, getUserGlobalPermissions, getUserRoles, getUserHighestRole, getUserAllRoles,
       parseRoleGate, roleGateAllows, getUserUploadMb, syncRoleGateMemberships,
       // Broadcast helpers
       broadcastChannelLists, broadcastVoiceUsers, voiceCodesVisibleTo, emitOnlineUsers, emitDmPresence, resetPresenceSync,

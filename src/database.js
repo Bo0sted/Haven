@@ -1600,6 +1600,45 @@ function initDatabase() {
     db.exec('ALTER TABLE roles ADD COLUMN max_upload_mb INTEGER DEFAULT NULL');
   }
 
+  // ── Migration: transparent roles ────────────────────────
+  // A transparent role never colors its holder; the next role down does.
+  try {
+    db.prepare('SELECT transparent FROM roles LIMIT 0').get();
+  } catch {
+    db.exec('ALTER TABLE roles ADD COLUMN transparent INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // One-time: the made-up Admin role, which only lived in the
+  // 'admin_role_display' setting, becomes a real role at the top with every
+  // permission a role can hold, given to the admin so they look the same.
+  // Their powers still come from is_admin; the role adds nothing to them.
+  // A server that had it hidden gets no role.
+  try {
+    const done = db.prepare("SELECT value FROM server_settings WHERE key = 'admin_role_converted'").get();
+    if (!done) {
+      db.transaction(() => {
+        const admin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
+        const row = db.prepare("SELECT value FROM server_settings WHERE key = 'admin_role_display'").get();
+        let d = {};
+        try { d = row ? JSON.parse(row.value) : {}; } catch { d = {}; }
+        if (admin && d.visible !== false) {
+          const name = (typeof d.name === 'string' && d.name.trim()) ? d.name.trim().slice(0, 30) : 'Admin';
+          const color = (typeof d.color === 'string' && /^#[0-9a-fA-F]{3,6}$/.test(d.color)) ? d.color : '#e74c3c';
+          const icon = (typeof d.icon === 'string' && /^\/uploads\//i.test(d.icon)) ? d.icon : null;
+          const r = db.prepare("INSERT INTO roles (name, level, scope, color, icon) VALUES (?, 99, 'server', ?, ?)")
+            .run(name, color, icon);
+          const { VALID_ROLE_PERMS } = require('./socketHandlers/helpers');
+          const insertPerm = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission, allowed) VALUES (?, ?, 1)');
+          VALID_ROLE_PERMS.forEach(p => insertPerm.run(r.lastInsertRowid, p));
+          db.prepare('INSERT INTO user_roles (user_id, role_id, channel_id, granted_by) VALUES (?, ?, NULL, ?)')
+            .run(admin.id, r.lastInsertRowid, admin.id);
+        }
+        db.prepare("DELETE FROM server_settings WHERE key = 'admin_role_display'").run();
+        db.prepare("INSERT OR REPLACE INTO server_settings (key, value) VALUES ('admin_role_converted', '1')").run();
+      })();
+    }
+  } catch (err) { console.error('Admin role conversion failed:', err); }
+
   // ── Role menus: a message people react to, or click, to give themselves a role ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS role_menus (

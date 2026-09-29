@@ -45,6 +45,17 @@ _showUserContextMenu(e, targetUserId, targetNameOverride) {
     this.socket.emit('get-user-profile', { userId: targetUserId });
   });
 
+  // Only the admin can open this menu on themselves, and all it offers them
+  // besides their profile is their own roles. The rest targets other people.
+  if (targetUserId === this.user?.id) {
+    addBtn(`👑 ${t('users.gear_menu.role_management')}`, () => {
+      this._hideUserContextMenu();
+      this._openRoleAssignCenter(targetUserId);
+    });
+    this._placeUserContextMenu(menu, e);
+    return;
+  }
+
   // Direct Message
   addBtn(`💬 ${t('users.direct_message')}`, () => {
     this._hideUserContextMenu();
@@ -177,6 +188,10 @@ _showUserContextMenu(e, targetUserId, targetNameOverride) {
     }, true);
   }
 
+  this._placeUserContextMenu(menu, e);
+},
+
+_placeUserContextMenu(menu, e) {
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
   document.body.appendChild(menu);

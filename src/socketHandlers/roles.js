@@ -10,7 +10,7 @@ module.exports = function register(socket, ctx) {
     io, db, state, userHasPermission, getUserEffectiveLevel,
     getUserPermissions, getUserGlobalPermissions, getUserRoles, getUserHighestRole,
     emitOnlineUsers, broadcastChannelLists, getEnrichedChannels,
-    transferAdminRef, HAVEN_VERSION, logAudit, getAdminRoleDisplay
+    transferAdminRef, HAVEN_VERSION, logAudit
   } = ctx;
   const { channelUsers } = state;
   const _audit = (typeof logAudit === 'function') ? logAudit : () => {};
@@ -475,42 +475,6 @@ module.exports = function register(socket, ctx) {
     cb({ channelId: channel.id, channelName: channel.name, members: result });
   });
 
-  // ── Admin role cosmetic display (admin only) ────────────
-  // The admin role is synthetic (there is no row for it in `roles`). These
-  // handlers persist a purely cosmetic override in server_settings under
-  // 'admin_role_display'. Nothing here affects is_admin, level or permissions.
-  socket.on('get-admin-role-display', (data, callback) => {
-    const cb = typeof callback === 'function' ? callback : () => {};
-    if (!socket.user.isAdmin) return cb({ error: 'Only the admin can view this' });
-    cb({ display: getAdminRoleDisplay() });
-  });
-
-  socket.on('update-admin-role-display', (data, callback) => {
-    const cb = typeof callback === 'function' ? callback : () => {};
-    if (!socket.user.isAdmin) return cb({ error: 'Only the admin can edit this' });
-    if (!data || typeof data !== 'object') return cb({ error: 'Invalid request' });
-
-    // Validated like create/update-role; invalid fields fall back to the safe
-    // default rather than being rejected, since this is cosmetic only.
-    const name = isString(data.name, 1, 30) ? data.name.trim() : 'Admin';
-    const color = (isString(data.color, 4, 7) && /^#[0-9a-fA-F]{3,6}$/.test(data.color)) ? data.color : '#e74c3c';
-    const icon = (isString(data.icon, 1, 512) && /^\/uploads\//i.test(data.icon)) ? data.icon : null;
-    const visible = data.visible !== false;
-
-    db.prepare("INSERT OR REPLACE INTO server_settings (key, value) VALUES ('admin_role_display', ?)")
-      .run(JSON.stringify({ name, color, icon, visible }));
-
-    // Refresh every live display: member lists re-read getUserHighestRole and
-    // clients re-fetch role-driven UI on roles-updated.
-    for (const [code] of channelUsers) { emitOnlineUsers(code); }
-    io.except('bot-sockets').emit('roles-updated');
-
-    cb({ success: true, display: { name, color, icon, visible } });
-    _audit({ actor: socket.user, action: 'admin_role_display_update',
-      target_type: 'server', target_id: null, target_name: 'admin_role_display',
-      details: { name, color, icon, visible } });
-  });
-
   // ── Create role ─────────────────────────────────────────
   socket.on('create-role', (data, callback) => {
     if (!data || typeof data !== 'object') return;
@@ -526,6 +490,7 @@ module.exports = function register(socket, ctx) {
     const scope = data.scope === 'channel' ? 'channel' : 'server';
     const color = isString(data.color, 4, 7) && /^#[0-9a-fA-F]{3,6}$/.test(data.color) ? data.color : null;
     const autoAssign = data.autoAssign ? 1 : 0;
+    const transparent = data.transparent ? 1 : 0;
     const icon = isString(data.icon, 1, 512) && /^\/uploads\//i.test(data.icon) ? data.icon : null;
     const maxUploadMb = isInt(data.maxUploadMb) && data.maxUploadMb >= 1 && data.maxUploadMb <= 102400 ? data.maxUploadMb : null;
 
@@ -543,8 +508,8 @@ module.exports = function register(socket, ctx) {
         db.prepare('UPDATE roles SET auto_assign = 0').run();
       }
       const result = db.prepare(
-        'INSERT INTO roles (name, level, scope, color, auto_assign, icon, max_upload_mb) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(name, level, scope, color, autoAssign, icon, maxUploadMb);
+        'INSERT INTO roles (name, level, scope, color, transparent, auto_assign, icon, max_upload_mb) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(name, level, scope, color, transparent, autoAssign, icon, maxUploadMb);
 
       const perms = level > 0 && Array.isArray(data.permissions) ? data.permissions : [];
       const adminOnlyPerms = ['transfer_admin', 'manage_roles', 'manage_server', 'delete_channel', 'view_all_channels'];
@@ -606,6 +571,9 @@ module.exports = function register(socket, ctx) {
       if (data.color !== undefined) {
         const safeColor = (isString(data.color, 4, 7) && /^#[0-9a-fA-F]{3,6}$/.test(data.color)) ? data.color : null;
         updates.push('color = ?'); values.push(safeColor);
+      }
+      if (data.transparent !== undefined) {
+        updates.push('transparent = ?'); values.push(data.transparent ? 1 : 0);
       }
       if (data.icon !== undefined) {
         const safeIcon = (isString(data.icon, 1, 512) && /^\/uploads\//i.test(data.icon)) ? data.icon : null;
@@ -979,12 +947,14 @@ module.exports = function register(socket, ctx) {
         WHERE cm.channel_id IN (${callerChannels.map(() => '?').join(',')})
           AND u.id != ?
         ORDER BY COALESCE(u.display_name, u.username)
-      `).all(...callerChannels.map(c => c.id), callerId);
+      `).all(...callerChannels.map(c => c.id), callerIsAdmin ? -1 : callerId);
 
       const users = [];
       const userChannelMap = {};
       for (const m of allMembers) {
-        if (m.is_admin) continue;
+        // The admin is listed so they can manage their own roles; nobody
+        // else sees themselves or any admin here.
+        if (m.is_admin && m.id !== callerId) continue;
         const userServerLevel = getUserEffectiveLevel(m.id);
         if (!callerIsAdmin && userServerLevel >= callerServerLevel) continue;
 
@@ -1080,7 +1050,9 @@ module.exports = function register(socket, ctx) {
     const roleId = isInt(data.roleId) ? data.roleId : null;
     if (!userId || !roleId) return cb({ error: 'Missing userId or roleId' });
 
-    if (userId === socket.user.id) {
+    // Only the admin may change their own roles. Their powers come from
+    // is_admin, not roles, so this can't raise them; for anyone else it could.
+    if (userId === socket.user.id && !socket.user.isAdmin) {
       return cb({ error: 'You cannot modify your own roles' });
     }
 
@@ -1196,7 +1168,9 @@ module.exports = function register(socket, ctx) {
     const roleId = isInt(data.roleId) ? data.roleId : null;
     if (!userId || !roleId) return cb({ error: 'Missing userId or roleId' });
 
-    if (userId === socket.user.id) {
+    // Only the admin may change their own roles. Their powers come from
+    // is_admin, not roles, so this can't raise them; for anyone else it could.
+    if (userId === socket.user.id && !socket.user.isAdmin) {
       return cb({ error: 'You cannot modify your own roles' });
     }
 
@@ -1600,7 +1574,11 @@ module.exports = function register(socket, ctx) {
             const insertPerm = db.prepare('INSERT OR IGNORE INTO role_permissions (role_id, permission, allowed) VALUES (?, ?, 1)');
             allPerms.forEach(p => insertPerm.run(formerAdminRole.id, p));
           }
-          db.prepare('DELETE FROM user_roles WHERE user_id = ? AND role_id = ? AND channel_id IS NULL').run(socket.user.id, formerAdminRole.id);
+          // A former admin is not a current one: their server roles, an Admin
+          // role among them, give way to Former Admin alone. It already holds
+          // every role permission, so nothing they could do is lost.
+          db.prepare('DELETE FROM user_roles WHERE user_id = ? AND channel_id IS NULL').run(socket.user.id);
+          db.prepare('DELETE FROM user_role_perms WHERE user_id = ? AND channel_id IS NULL').run(socket.user.id);
           db.prepare('INSERT INTO user_roles (user_id, role_id, channel_id, granted_by) VALUES (?, ?, NULL, ?)').run(
             socket.user.id, formerAdminRole.id, socket.user.id
           );
