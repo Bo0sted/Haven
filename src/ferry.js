@@ -30,6 +30,7 @@
  */
 
 const WebSocket = require('ws');
+const { agentFor } = require('./outboundProxy');
 const automod = require('./automod');
 const { stripRoleMentions } = require('./socketHandlers/helpers');
 
@@ -284,7 +285,7 @@ function connect() {
   const url = `${base}/?v=10&encoding=json`;
 
   try {
-    ws = new WebSocket(url);
+    ws = new WebSocket(url, { agent: agentFor(url) });
   } catch (err) {
     lastError = `Could not open the Discord gateway: ${err.message}`;
     scheduleReconnect();

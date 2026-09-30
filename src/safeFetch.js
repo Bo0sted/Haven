@@ -20,6 +20,7 @@ const http = require('node:http');
 const https = require('node:https');
 const zlib = require('node:zlib');
 const { resolveCallbackDestination, createPinnedLookup } = require('./webhookCallback');
+const outboundProxy = require('./outboundProxy');
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
@@ -60,12 +61,11 @@ function requestOnce(destination, headers, deadlineAt, maxBytes, truncate) {
       }
     };
 
-    request = transport.request(destination.url, {
+    const requestOptions = {
       method: 'GET',
-      agent: false,
       headers: { 'Accept-Encoding': 'gzip, deflate, br', ...headers },
-      lookup: createPinnedLookup(destination.address, destination.family),
-    }, (incoming) => {
+    };
+    const onResponse = (incoming) => {
       response = incoming;
       const status = incoming.statusCode || 0;
       if (REDIRECTS.has(status)) {
@@ -97,7 +97,16 @@ function requestOnce(destination, headers, deadlineAt, maxBytes, truncate) {
       source.on('end', done);
       source.on('error', (err) => finish(err));
       incoming.on('error', (err) => finish(err));
-    });
+    };
+    // Through a proxy the proxy picks the address; otherwise connect to
+    // exactly the address that was checked.
+    request = destination.proxy
+      ? outboundProxy.request(destination.url, requestOptions, onResponse, destination.proxy)
+      : transport.request(destination.url, {
+        ...requestOptions,
+        agent: false,
+        lookup: createPinnedLookup(destination.address, destination.family),
+      }, onResponse);
 
     timer = setTimeout(() => finish(new Error('Request timed out')), remaining);
     request.on('error', (err) => finish(err));

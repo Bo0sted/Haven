@@ -77,6 +77,10 @@ if (fs.existsSync(rootEnv)) {
   console.log('📄 Loaded project root .env as supplementary source');
 }
 
+// Send outgoing requests through the host's proxy (https_proxy / http_proxy /
+// no_proxy) when one is set. Without one this does nothing.
+require('./src/outboundProxy').install();
+
 const express = require('express');
 const { createServer } = require('http');
 const { createServer: createHttpsServer } = require('https');
@@ -1815,12 +1819,13 @@ app.get('/api/port-check', async (req, res) => {
   const port = process.env.PORT || 3000;
   const https = require('https');
   const http = require('http');
+  const { agentFor } = require('./src/outboundProxy');
 
   // Step 1: Get public IP
   let publicIp = null;
   try {
     publicIp = await new Promise((resolve, reject) => {
-      const req = https.get('https://api.ipify.org?format=json', { timeout: 5000 }, (resp) => {
+      const req = https.get('https://api.ipify.org?format=json', { timeout: 5000, agent: agentFor('https://api.ipify.org') }, (resp) => {
         let data = '';
         resp.on('data', chunk => data += chunk);
         resp.on('end', () => {
@@ -1840,7 +1845,7 @@ app.get('/api/port-check', async (req, res) => {
   try {
     reachable = await new Promise((resolve, reject) => {
       const url = `https://portchecker.io/api/v1/query?host=${publicIp}&ports=${port}`;
-      const req = https.get(url, { timeout: 10000 }, (resp) => {
+      const req = https.get(url, { timeout: 10000, agent: agentFor(url) }, (resp) => {
         let data = '';
         resp.on('data', chunk => data += chunk);
         resp.on('end', () => {

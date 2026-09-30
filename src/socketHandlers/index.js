@@ -21,6 +21,7 @@ const {
   postWebhookCallback,
   validateCallbackUrl
 } = require('../webhookCallback');
+const { agentFor } = require('../outboundProxy');
 const {
   clearChannelRuntimeState,
   createTempChannelDeleteCallback,
@@ -1353,7 +1354,7 @@ function setupSocketHandlers(io, db, opts = {}) {
         try {
           // A push service that never answers must not hold a queue slot
           // forever, or a handful of them would stop every notification.
-          sending = webpush.sendNotification({ endpoint: job.sub.endpoint, keys: { p256dh: job.sub.p256dh, auth: job.sub.auth } }, job.payload, { timeout: 10000 });
+          sending = webpush.sendNotification({ endpoint: job.sub.endpoint, keys: { p256dh: job.sub.p256dh, auth: job.sub.auth } }, job.payload, { timeout: 10000, agent: agentFor(job.sub.endpoint) });
         } catch (err) {
           sending = Promise.reject(err);
         }
