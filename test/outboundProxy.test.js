@@ -132,6 +132,13 @@ test('an unusable proxy address fails instead of going direct', async () => {
   });
 });
 
+test('proxy credentials are hidden when the proxy address is logged', () => {
+  assert.equal(outboundProxy.redact('http://user:secret@proxy:8080'), 'http://***@proxy:8080');
+  assert.equal(outboundProxy.redact('user:secret@proxy:8080'), '***@proxy:8080');
+  assert.equal(outboundProxy.redact('http://proxy:8080'), 'http://proxy:8080');
+  assert.equal(outboundProxy.redact('proxy:8080'), 'proxy:8080');
+});
+
 test('no_proxy matches names, subdomains, ports, addresses and CIDR ranges', async () => {
   const noProxy = 'localhost,127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8,.mcpc.cloud,haven,*.wild.test,ported.test:8443,[fd00::1]';
   await withEnv({ HTTPS_PROXY: 'http://tinyproxy:8888', HTTP_PROXY: 'http://tinyproxy:8888', NO_PROXY: noProxy }, () => {

@@ -60,8 +60,10 @@ function isProxiable(url) {
 
 const proxyCache = new Map();
 
+// Hide proxy credentials, with or without a scheme in front
+// (http://user:pass@host and user:pass@host).
 function redact(raw) {
-  return String(raw).replace(/\/\/[^@/]*@/, '//***@');
+  return String(raw).replace(/^((?:[a-z][a-z0-9+.-]*:\/\/)?)[^@/]*@/i, '$1***@');
 }
 
 function parseProxy(raw) {
@@ -443,5 +445,6 @@ module.exports = {
   fetch: proxiedFetch,
   install,
   proxyFor,
+  redact,
   request,
 };
