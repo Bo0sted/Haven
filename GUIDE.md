@@ -644,6 +644,22 @@ The `Upgrade` / `Connection` headers are required for Socket.io WebSocket traffi
 
 ---
 
+## 📤 Outgoing Proxy
+
+If the server can only reach the internet through a proxy (for example a Docker container with no route out and a filtering proxy beside it), set the standard proxy variables in `.env`:
+
+```env
+https_proxy=http://proxy.example:3128
+http_proxy=http://proxy.example:3128
+no_proxy=localhost,127.0.0.1
+```
+
+Link previews, the media proxy, bot callbacks, push notifications and Haven's other outgoing requests then go through the proxy. Hosts listed in `no_proxy` (names, subdomains, IP addresses or CIDR ranges) connect directly. Only `http://` proxy addresses are supported. Voice traffic is UDP and does not use the proxy.
+
+> ⚠️ **Your proxy becomes part of Haven's security.** For a request through the proxy, Haven can't pin the connection to the address it checked, and names it can't resolve itself are passed to the proxy. Haven still refuses private, loopback and cloud metadata addresses it can see, but a proxy that can reach your internal network could let members use link previews to reach hosts behind it. Restrict the proxy to the destinations Haven needs, ideally with whole-hostname allowlist rules.
+
+---
+
 ## 🔧 Router-Specific Tips
 
 ### Xfinity / Comcast (XB7 Gateway)

@@ -137,6 +137,7 @@ test('proxy credentials are hidden when the proxy address is logged', () => {
   assert.equal(outboundProxy.redact('user:secret@proxy:8080'), '***@proxy:8080');
   assert.equal(outboundProxy.redact('http://proxy:8080'), 'http://proxy:8080');
   assert.equal(outboundProxy.redact('proxy:8080'), 'proxy:8080');
+  assert.equal(outboundProxy.redact('http://user:p@ss@proxy:8080'), 'http://***@proxy:8080');
 });
 
 test('no_proxy matches names, subdomains, ports, addresses and CIDR ranges', async () => {
@@ -257,6 +258,40 @@ test('https goes through a CONNECT tunnel with TLS to the site inside it', async
   } finally {
     await close(proxy.server);
     await close(site);
+  }
+});
+
+test('https to an IP address checks the certificate against that address', async (t) => {
+  const pair = selfSignedCert();
+  if (!pair) return t.skip('openssl not available');
+  const site = await listen(https.createServer(pair, (req, res) => res.end('should not be reached')));
+  const proxy = await startProxy();
+  const target = `https://127.0.0.1:${site.address().port}/`;
+  try {
+    await withEnv({ HTTPS_PROXY: proxy.url }, async () => {
+      // The certificate is for localhost, so it must not be accepted for 127.0.0.1.
+      await assert.rejects(new Promise((resolve, reject) => {
+        https.get(target, { agent: outboundProxy.agentFor(target), ca: pair.cert }, resolve).on('error', reject);
+      }), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
+    });
+  } finally {
+    await close(proxy.server);
+    await close(site);
+  }
+});
+
+test('an abort also cancels a CONNECT the proxy has not answered yet', async () => {
+  const proxy = await listen(http.createServer());
+  const tunnelClosed = new Promise((resolve) => {
+    proxy.on('connect', (req, socket) => socket.on('end', () => { socket.destroy(); resolve(); }));
+  });
+  try {
+    await withEnv({ HTTPS_PROXY: `http://127.0.0.1:${proxy.address().port}` }, async () => {
+      await assert.rejects(outboundProxy.fetch('https://slow.example/', { signal: AbortSignal.timeout(200) }), (err) => err.name === 'TimeoutError');
+      await tunnelClosed;
+    });
+  } finally {
+    await close(proxy);
   }
 });
 

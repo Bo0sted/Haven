@@ -31,6 +31,9 @@ const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 const MAX_REDIRECTS = 20;
 const TUNNEL_TIMEOUT_MS = 30000;
+// Node's own fetch gives up on a connection that sends nothing for five
+// minutes, waiting for the headers or partway through the body.
+const FETCH_IDLE_TIMEOUT_MS = 300000;
 
 function readEnv(name) {
   for (const key of [name.toLowerCase(), name.toUpperCase()]) {
@@ -61,9 +64,10 @@ function isProxiable(url) {
 const proxyCache = new Map();
 
 // Hide proxy credentials, with or without a scheme in front
-// (http://user:pass@host and user:pass@host).
+// (http://user:pass@host and user:pass@host). The credentials run to the last
+// @ before the path, as URL parsing reads them, so a password may contain @.
 function redact(raw) {
-  return String(raw).replace(/^((?:[a-z][a-z0-9+.-]*:\/\/)?)[^@/]*@/i, '$1***@');
+  return String(raw).replace(/^((?:[a-z][a-z0-9+.-]*:\/\/)?)[^/?#]*@/i, '$1***@');
 }
 
 function parseProxy(raw) {
@@ -178,7 +182,7 @@ function proxyFor(target) {
 
 // ── Connecting through the proxy ────────────────────────
 
-function openTunnel(proxy, host, port) {
+function openTunnel(proxy, host, port, signal) {
   return new Promise((resolve, reject) => {
     const authority = net.isIPv6(host) ? `[${host}]:${port}` : `${host}:${port}`;
     const headers = { Host: authority };
@@ -191,6 +195,7 @@ function openTunnel(proxy, host, port) {
       path: authority,
       headers,
       agent: false,
+      signal,
     });
     request.setTimeout(TUNNEL_TIMEOUT_MS, () => request.destroy(new Error(`proxy did not answer for ${authority}`)));
     request.once('connect', (response, socket, head) => {
@@ -210,16 +215,18 @@ function openTunnel(proxy, host, port) {
 // An https.Agent whose connections are CONNECT tunnels through the proxy,
 // with TLS to the site running inside the tunnel.
 class TunnelAgent extends https.Agent {
-  constructor(proxy) {
+  constructor(proxy, signal) {
     super({ keepAlive: false });
     this.proxy = proxy;
+    this.signal = signal;
   }
 
   createConnection(options, callback) {
     const host = options.host || 'localhost';
-    openTunnel(this.proxy, host, options.port || 443).then((socket) => {
+    openTunnel(this.proxy, host, options.port || 443, this.signal).then((socket) => {
       callback(null, tls.connect({
         socket,
+        host,
         servername: options.servername || (net.isIP(host) ? undefined : host),
         ALPNProtocols: ['http/1.1'],
         rejectUnauthorized: options.rejectUnauthorized !== false,
@@ -248,8 +255,8 @@ class ForwardAgent extends http.Agent {
   }
 }
 
-function agentThrough(url, proxy) {
-  return isSecure(url) ? new TunnelAgent(proxy) : new ForwardAgent(proxy);
+function agentThrough(url, proxy, signal) {
+  return isSecure(url) ? new TunnelAgent(proxy, signal) : new ForwardAgent(proxy);
 }
 
 /**
@@ -271,7 +278,7 @@ function request(target, options, onResponse, proxy = proxyFor(target)) {
   const url = toUrl(target);
   const { lookup, agent, ...rest } = options;
   const transport = url.protocol === 'https:' ? https : http;
-  return transport.request(url, { ...rest, agent: agentThrough(url, proxy) }, onResponse);
+  return transport.request(url, { ...rest, agent: agentThrough(url, proxy, rest.signal) }, onResponse);
 }
 
 // ── fetch ───────────────────────────────────────────────
@@ -305,20 +312,13 @@ function sendOnce(url, method, headers, body, signal, proxy) {
     if (body) outgoing['content-length'] = String(body.length);
 
     let req;
-    const onAbort = () => req.destroy(signal.reason);
     try {
-      req = request(url, { method, headers: outgoing }, (response) => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(response);
-      }, proxy);
+      req = request(url, { method, headers: outgoing, signal }, resolve, proxy);
     } catch (err) {
       return reject(fetchFailed(err));
     }
-    signal.addEventListener('abort', onAbort, { once: true });
-    req.on('error', (err) => {
-      signal.removeEventListener('abort', onAbort);
-      reject(signal.aborted ? signal.reason : fetchFailed(err));
-    });
+    req.setTimeout(FETCH_IDLE_TIMEOUT_MS, () => req.destroy(new Error(`no data from ${url.host} for ${FETCH_IDLE_TIMEOUT_MS / 1000} s`)));
+    req.on('error', (err) => reject(signal.aborted ? signal.reason : fetchFailed(err)));
     req.end(body || undefined);
   });
 }
@@ -434,6 +434,14 @@ function install({ log = console.log, warn = console.warn } = {}) {
   }
   const noProxy = readEnv('no_proxy');
   if (noProxy) log(`🔀 [proxy] no_proxy → ${noProxy}`);
+  const setVars = ['https_proxy', 'HTTPS_PROXY', 'http_proxy', 'HTTP_PROXY']
+    .filter((key) => typeof process.env[key] === 'string' && process.env[key].trim());
+  const listed = setVars.length > 1 ? `${setVars.slice(0, -1).join(', ')} and ${setVars.at(-1)}` : setVars[0];
+  warn([
+    '⚠️  [proxy] SECURITY WARNING: outgoing proxy enabled.',
+    `Your configuration enables proxy support, which limits some of the protections offered by Haven against malicious users on your server. If this is not intentional, immediately comment out or remove ${listed} and restart Haven.`,
+    'Please refer to the "Outgoing Proxy" section of GUIDE.md for more information.',
+  ].join('\n'));
 
   globalThis.fetch = proxiedFetch;
   installed = true;

@@ -54,8 +54,6 @@ privateBlocked.addSubnet('::1', 128, 'ipv6');
 privateBlocked.addSubnet('fc00::', 7, 'ipv6');
 globalIpv6.addSubnet('2000::', 3, 'ipv6');
 
-const PROXIED_LOOKUP_MS = 3000;
-
 class UnsafeCallbackError extends Error {
   constructor(message) {
     super(message);
@@ -165,21 +163,17 @@ async function resolveCallbackDestination(urlString, options = {}) {
 // only to private addresses the host allowed (a bot next to Haven) is on this
 // machine's own network, which a proxy usually cannot reach, so it stays a
 // direct connection to the checked address, as it was before proxy support.
+// The lookup is not cut short (every caller has its own deadline), so a slow
+// answer is still checked instead of being handed to the proxy unchecked.
 async function checkProxiedDestination(url, hostname, literalFamily, proxy, lookup, allowPrivateCallbacks) {
   let addresses = [];
   if (literalFamily) {
     addresses = [{ address: hostname, family: literalFamily }];
   } else {
-    let timer;
     try {
-      addresses = await Promise.race([
-        lookup(hostname, { all: true, verbatim: true }),
-        new Promise(resolve => { timer = setTimeout(() => resolve([]), PROXIED_LOOKUP_MS); })
-      ]);
+      addresses = await lookup(hostname, { all: true, verbatim: true });
     } catch {
       addresses = [];
-    } finally {
-      clearTimeout(timer);
     }
   }
   const usable = (Array.isArray(addresses) ? addresses : []).filter(entry => entry.address && net.isIP(entry.address));
