@@ -660,6 +660,13 @@ async _toggleVoiceMessage() {
   if (ch.media_enabled === 0) { this._showToast(t('media.uploads_disabled'), 'error'); return; }
   const choice = this._voiceMimeChoice();
   if (!choice || !navigator.mediaDevices?.getUserMedia) { this._showToast(t('voice_message.unsupported'), 'error'); return; }
+  // Self-destruct on: ask how long first and record only once confirmed.
+  // Backing out records nothing and leaves the toggle on.
+  let destructMs = 0;
+  if (this._selfDestructArmed) {
+    destructMs = await this._askSelfDestruct();
+    if (!destructMs || this.currentChannel !== ch.code) return;
+  }
   let stream;
   try {
     // The same microphone voice chat uses, when one was picked.
@@ -676,7 +683,7 @@ async _toggleVoiceMessage() {
   let recorder;
   try { recorder = new MediaRecorder(stream, { mimeType: choice.mime }); }
   catch { recorder = new MediaRecorder(stream); }
-  const rec = { recorder, stream, chunks, ext: choice.ext, mime: recorder.mimeType || choice.mime, startedAt: Date.now(), code: this.currentChannel, send: false, timer: null };
+  const rec = { recorder, stream, chunks, ext: choice.ext, mime: recorder.mimeType || choice.mime, startedAt: Date.now(), code: this.currentChannel, send: false, timer: null, destructMs };
   recorder.addEventListener('dataavailable', (e) => { if (e.data && e.data.size) chunks.push(e.data); });
   recorder.addEventListener('stop', () => this._finishVoiceMessage(rec));
   try {
@@ -735,6 +742,12 @@ _finishVoiceMessage(rec) {
   // The length rides in the name so the message can show it without loading
   // the audio: voice-message-1m05s.weba.
   const file = new File([blob], `voice-message-${m}m${String(s).padStart(2, '0')}s.${rec.ext}`, { type });
+  // The timer counts from when it is sent, not from when recording began.
+  // Turning the flame off while recording sends it as a normal message.
+  if (rec.destructMs && this._selfDestructArmed) {
+    file._destructAt = Date.now() + rec.destructMs;
+    this._setSelfDestructArmed(false);
+  }
   this._uploadGeneralFile(file, rec.code);
 },
 
