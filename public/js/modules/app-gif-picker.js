@@ -310,11 +310,12 @@ _sendGifMessage(url) {
   if (!this.currentChannel || !url) return;
   // In a DM the GIF goes out through the composer's own send, the way a
   // sticker does, so it is encrypted like any other DM message; sent
-  // straight to the server it stayed plain text. Whatever was typed in the
+  // straight to the server it stayed plain text. With self-destruct on it
+  // goes the same way, so it asks how long first. Whatever was typed in the
   // box is put back afterwards.
   const dmCh = this.channels && this.channels.find(c => c.code === this.currentChannel);
   const input = document.getElementById('message-input');
-  if (dmCh && dmCh.is_dm && input && typeof this._sendMessage === 'function') {
+  if (((dmCh && dmCh.is_dm) || this._selfDestructArmed) && input && typeof this._sendMessage === 'function') {
     const draft = input.value;
     input.value = url;
     Promise.resolve(this._sendMessage()).catch((err) => { console.warn('[GIF] send failed', err); }).then((sent) => {
