@@ -319,7 +319,9 @@
       "voice_btn": "Record a voice message",
       "plus_btn": "More",
       "burn_btn": "Burn after read (DM only)",
-      "burn_btn_armed": "Burn after read armed — next message self-destructs 30s after viewing"
+      "burn_btn_armed": "Burn after read armed — next message self-destructs 30s after viewing",
+      "self_destruct_btn": "Self-destructing message",
+      "self_destruct_btn_armed": "Self-destruct is on: your next message deletes itself"
     },
     "profile": {
       "login_username": "Your login username",
@@ -439,7 +441,8 @@
     "burn_done": "Message burned",
     "burn_pending_tooltip": "Self-destructs {{seconds}}s after the recipient views it",
     "burn_reveal_hint": "({{seconds}}s after viewing)",
-    "new_messages": "NEW MESSAGES"
+    "new_messages": "NEW MESSAGES",
+    "self_destructing": "Self-destructing {{time}}"
   },
   "utils": {
     "today_at": "Today at {{time}}",
@@ -3053,6 +3056,16 @@
       "scheduled": "Scheduled for {{when}}",
       "updated": "Updated, sending at {{when}}",
       "sent": "Your scheduled message went out in #{{channel}}"
+    },
+    "self_destruct": {
+      "title": "Self-destructing message",
+      "hint": "This message and all its attachments will automatically delete at the time listed below. Attachments are removed instantly from the server, skipping the usual grace period Haven offers to admins to recover deleted attachments.",
+      "amount_label": "How long until it deletes",
+      "unit_label": "Unit",
+      "minutes": "Minutes",
+      "hours": "Hours",
+      "invalid": "Enter a time from 1 minute to 24 hours.",
+      "send": "Send"
     },
     "poll": {
       "title": "Create Poll",

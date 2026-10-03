@@ -270,6 +270,20 @@ _bindComposerModals() {
       this._showToast?.(t(toastKey), 'info');
     });
   }
+
+  // Self-destructing messages: a toggle that asks how long on the next send.
+  document.getElementById('self-destruct-btn')?.addEventListener('click', () => {
+    this._setSelfDestructArmed(!this._selfDestructArmed);
+  });
+  document.querySelectorAll('#self-destruct-modal [data-sd-unit]').forEach(b => {
+    b.addEventListener('click', () => {
+      this._setSelfDestructUnit(b.dataset.sdUnit);
+      document.getElementById('sd-amount')?.focus();
+    });
+  });
+  document.getElementById('sd-amount')?.addEventListener('input', () => {
+    document.getElementById('sd-error').style.display = 'none';
+  });
   document.getElementById('poll-cancel-btn').addEventListener('click', () => {
     document.getElementById('poll-modal').style.display = 'none';
   });
@@ -760,6 +774,79 @@ _bindInputResizer(handle) {
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+},
+
+/* ── Self-destructing messages ──────────────────────── */
+_setSelfDestructArmed(on) {
+  this._selfDestructArmed = !!on;
+  const btn = document.getElementById('self-destruct-btn');
+  if (!btn) return;
+  btn.classList.toggle('active', this._selfDestructArmed);
+  btn.setAttribute('aria-pressed', String(this._selfDestructArmed));
+  btn.title = t(this._selfDestructArmed ? 'app.input_bar.self_destruct_btn_armed' : 'app.input_bar.self_destruct_btn');
+},
+
+_setSelfDestructUnit(unit) {
+  this._selfDestructUnit = unit === 'hours' ? 'hours' : 'minutes';
+  document.querySelectorAll('#self-destruct-modal [data-sd-unit]').forEach(b => {
+    b.classList.toggle('active', b.dataset.sdUnit === this._selfDestructUnit);
+  });
+},
+
+/** Milliseconds for what was typed, or null. Up to two decimals, a comma
+ *  works as the decimal point, and the result must be 1 minute to 24 hours. */
+_parseSelfDestruct(raw, unit) {
+  const s = String(raw || '').trim().replace(',', '.');
+  if (!/^(\d{1,4}(\.\d{0,2})?|\.\d{1,2})$/.test(s)) return null;
+  const ms = Math.round(parseFloat(s) * (unit === 'hours' ? 3600000 : 60000));
+  return ms >= 60000 && ms <= 86400000 ? ms : null;
+},
+
+/** Ask how long the message lives. Resolves milliseconds, or null when the
+ *  sender backs out (Cancel, the X, Escape or a click outside). */
+_askSelfDestruct() {
+  const modal = document.getElementById('self-destruct-modal');
+  const input = document.getElementById('sd-amount');
+  const error = document.getElementById('sd-error');
+  if (!modal || !input) return Promise.resolve(null);
+  input.value = '';
+  error.style.display = 'none';
+  this._setSelfDestructUnit('minutes');
+  modal.style.display = 'flex';
+  // Focus now, not on a timer, so keys typed right after Enter land here.
+  input.focus();
+  return new Promise((resolve) => {
+    const close = (val) => {
+      modal.style.display = 'none';
+      modal.removeEventListener('click', onClick);
+      document.removeEventListener('keydown', onKey, true);
+      resolve(val);
+    };
+    const submit = () => {
+      const ms = this._parseSelfDestruct(input.value, this._selfDestructUnit);
+      if (ms) return close(ms);
+      error.style.display = '';
+      input.focus();
+    };
+    const onClick = (e) => {
+      if (e.target === modal || e.target.closest('#sd-cancel, #sd-close')) close(null);
+      else if (e.target.closest('#sd-send')) submit();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submit(); }
+    };
+    modal.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey, true);
+  });
+},
+
+/** The send-message field for a self-destruct deadline. Sent as the time
+ *  left rather than a clock time, so the sender's clock does not matter, and
+ *  attachments that finish uploading later still go at the same moment. */
+_destructField(at) {
+  if (!at) return {};
+  return { destructSeconds: Math.max(1, Math.min(86400, Math.round((at - Date.now()) / 1000))) };
 },
 
 /* ── Send later (#5638) ─────────────────────────────── */

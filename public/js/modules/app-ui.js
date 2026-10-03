@@ -732,6 +732,7 @@ async _uploadImage(file, targetCode, bundled = false, personaPrefix = '', spoile
       content: line,
       isImage: true,
       ...(bundled && { bundled: true }),
+      ...this._destructField(file && file._destructAt),
       ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {})
     });
     if (file && file._tags && file._tags.length) this._recordFrequentTags(file._tags);
@@ -806,7 +807,8 @@ _uploadGeneralFile(file, targetCode) {
         code,
         content,
         replyTo: (code === this.currentChannel && this.replyingTo) ? this.replyingTo.id : null,
-        ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {})
+        ...(file && file._tags && file._tags.length ? { attachmentTags: file._tags } : {}),
+        ...this._destructField(file && file._destructAt)
       });
       if (file && file._tags && file._tags.length) this._recordFrequentTags(file._tags);
       this.notifications.play('sent');

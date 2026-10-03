@@ -1591,10 +1591,14 @@ function initDatabase() {
     // Encrypted DM files (#5699): the server cannot read an E2E message to find
     // the file it points at, so the sender lists it here (JSON array of paths).
     { name: 'e2e_files', sql: "ALTER TABLE messages ADD COLUMN e2e_files TEXT DEFAULT NULL" },
+    // Self-destructing messages: when the message and its files are removed
+    // for good (ISO UTC timestamp). Swept by src/selfDestruct.js.
+    { name: 'destruct_at', sql: "ALTER TABLE messages ADD COLUMN destruct_at TEXT DEFAULT NULL" },
   ]) {
     if (!hasColumn('messages', col.name)) db.exec(col.sql);
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_messages_reply_to ON messages(reply_to) WHERE reply_to IS NOT NULL");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_messages_destruct_at ON messages(destruct_at) WHERE destruct_at IS NOT NULL");
 
   // Encrypted DM files (#5699). Deleting a message by any route (one message,
   // a whole DM or channel, auto-cleanup, a purge) notes its files here, and a

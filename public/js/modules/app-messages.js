@@ -22,6 +22,20 @@ async _sendMessage() {
     return;
   }
 
+  // Self-destructing message: ask how long it lives before anything goes.
+  // Backing out leaves the text, the attachments and the toggle as they were.
+  // Commands that never post a message are left alone.
+  let destructAt = null;
+  const postsNothing = !hasImages && !hasFiles && /^\/(clear|nick|play|gif|time|schedule|poll|tts:stop)(\s|$)/i.test(content);
+  if (this._selfDestructArmed && !postsNothing) {
+    const code = this.currentChannel;
+    const ms = await this._askSelfDestruct();
+    if (!ms || this.currentChannel !== code) return false;
+    destructAt = Date.now() + ms;
+    this._setSelfDestructArmed(false);
+    for (const f of [...(this._imageQueue || []), ...(this._fileQueue || [])]) f._destructAt = destructAt;
+  }
+
   // In a forum, a picture and its text sent together are one topic, the way
   // the New Post hint says, not an image topic next to a text topic. The
   // pictures upload first so the topic lands whole (#5653).
@@ -45,7 +59,7 @@ async _sendMessage() {
       if (this._uploadsCancelled) break;
     }
     const topicTags = [...new Set(files.flatMap(f => (f && Array.isArray(f._tags)) ? f._tags : []))];
-    this.socket.emit('send-message', { code, content: [content, ...lines].join('\n'), ...(topicTags.length ? { attachmentTags: topicTags } : {}) });
+    this.socket.emit('send-message', { code, content: [content, ...lines].join('\n'), ...(topicTags.length ? { attachmentTags: topicTags } : {}), ...this._destructField(destructAt) });
     if (topicTags.length) this._recordFrequentTags?.(topicTags);
     this.notifications.play('sent');
     if (hasFiles) this._flushFileQueue?.();
@@ -60,7 +74,11 @@ async _sendMessage() {
     const stickerName = content.slice(1, -1).toLowerCase();
     const stickers = Array.isArray(this.stickers) ? this.stickers : [];
     const sticker = stickers.find(s => (s.name || '').toLowerCase() === stickerName);
-    if (sticker && sticker.url) {
+    // With a timer set it goes out below as the sticker's link, which is all
+    // _sendStickerMessage would do, so the timer comes along.
+    if (sticker && sticker.url && destructAt) {
+      content = sticker.url;
+    } else if (sticker && sticker.url) {
       input.value = '';
       input.style.height = 'auto';
       this._clearReply();
@@ -196,6 +214,7 @@ async _sendMessage() {
   if (this._burnArmed) {
     payload.burnSeconds = 30;
   }
+  Object.assign(payload, this._destructField(destructAt));
 
   // Clear UI immediately (before any async E2E work)
   input.value = '';
@@ -982,6 +1001,7 @@ _createMessageEl(msg, prevMsg) {
   const reactionsHtml = this._renderReactions(msg.id, msg.reactions || []);
   const tagsHtml = this._renderAttachmentTags(msg.attachmentTags);
   const pollHtml = msg.poll ? this._renderPollWidget(msg.id, msg.poll) : '';
+  const destructHtml = this._selfDestructHtml(msg.destruct_at);
   const roleMenuHtml = msg.roleMenu ? this._renderRoleMenu(msg.id, msg.roleMenu) : '';
   const threadHtml = isDmContext ? ''
     : (msg.thread ? this._renderThreadPreview(msg.id, msg.thread, { forum: isForum })
@@ -1124,7 +1144,7 @@ _createMessageEl(msg, prevMsg) {
       <span class="compact-time">${this._fmtTime(msg.created_at)}</span>
       <div class="message-body">
         <div class="message-content">${pinnedTag}${archivedTag}${ephemeralTag}${this._formatContent(msg.content)}${editedHtml}${statusSlotHtml}</div>
-        ${pollHtml}${roleMenuHtml}
+        ${pollHtml}${roleMenuHtml}${destructHtml}
         ${reactionsHtml}
         ${tagsHtml}
         ${threadHtml}
@@ -1265,7 +1285,7 @@ _createMessageEl(msg, prevMsg) {
           <span class="message-header-spacer"></span>
         </div>
         <div class="message-content">${this._formatContent(msg.content)}${editedHtml}</div>
-        ${pollHtml}${roleMenuHtml}
+        ${pollHtml}${roleMenuHtml}${destructHtml}
         ${reactionsHtml}
         ${tagsHtml}
         ${threadHtml}
@@ -1275,6 +1295,16 @@ _createMessageEl(msg, prevMsg) {
     </div>
   `;
   return el;
+},
+
+// The "Self-destructing in 5 minutes" line under a message that deletes
+// itself. The relative time keeps ticking on the shared timestamp clock.
+_selfDestructHtml(destructAt) {
+  const ms = Date.parse(destructAt || '');
+  if (!Number.isFinite(ms)) return '';
+  const when = this._formatTimestampToken(Math.floor(ms / 1000), 'R');
+  if (!when) return '';
+  return `<div class="msg-self-destruct"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span>${t('messages.self_destructing', { time: when })}</span></div>`;
 },
 
 /**
@@ -1297,6 +1327,8 @@ _promoteCompactToFull(compactEl) {
   const reactionsHtml = reactionsEl ? reactionsEl.outerHTML : '';
   const tagsEl = compactEl.querySelector('.message-tags');
   const tagsHtml = tagsEl ? tagsEl.outerHTML : '';
+  const destructEl = compactEl.querySelector('.msg-self-destruct');
+  const destructHtml = destructEl ? destructEl.outerHTML : '';
   const pinnedTag = isPinned ? `<span class="pinned-tag" title="${t('app.messages.pinned')}">📌</span>` : '';
   const e2eTag = compactEl.dataset.e2e === '1' ? `<span class="e2e-tag" title="${t('app.messages.e2e_encrypted')}">🔒</span>` : '';
   const needsStatusSlot = !!e2eTag || compactEl.classList.contains('message-burn-pending');
@@ -1370,6 +1402,7 @@ _promoteCompactToFull(compactEl) {
           <span class="message-header-spacer"></span>
         </div>
         <div class="message-content">${contentHtml}</div>
+        ${destructHtml}
         ${reactionsHtml}
         ${tagsHtml}
       </div>
