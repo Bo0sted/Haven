@@ -1035,6 +1035,7 @@
 .sd-desc { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45; margin: 0 0 1rem; }
 .sd-row { display: flex; gap: 0.5rem; align-items: stretch; }
 .sd-amount { flex: 1 1 auto; min-width: 0; text-align: center; }
+.sd-preview { color: var(--text-muted); font-size: 0.8rem; margin: 0.5rem 0 0; }
 .sd-error { color: var(--danger); font-size: 0.78rem; margin: 0.5rem 0 0; }
 .sd-send { display: inline-flex; align-items: center; gap: 0.375rem; }
 

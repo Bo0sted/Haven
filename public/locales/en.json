@@ -3064,6 +3064,7 @@
       "unit_label": "Unit",
       "minutes": "Minutes",
       "hours": "Hours",
+      "preview": "Deletes in {{time}}",
       "invalid": "Enter a time from 1 minute to 24 hours.",
       "send": "Send"
     },

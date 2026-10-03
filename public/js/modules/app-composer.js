@@ -278,11 +278,13 @@ _bindComposerModals() {
   document.querySelectorAll('#self-destruct-modal [data-sd-unit]').forEach(b => {
     b.addEventListener('click', () => {
       this._setSelfDestructUnit(b.dataset.sdUnit);
+      this._updateSelfDestructPreview();
       document.getElementById('sd-amount')?.focus();
     });
   });
   document.getElementById('sd-amount')?.addEventListener('input', () => {
     document.getElementById('sd-error').style.display = 'none';
+    this._updateSelfDestructPreview();
   });
   document.getElementById('poll-cancel-btn').addEventListener('click', () => {
     document.getElementById('poll-modal').style.display = 'none';
@@ -802,6 +804,25 @@ _parseSelfDestruct(raw, unit) {
   return ms >= 60000 && ms <= 86400000 ? ms : null;
 },
 
+/** "Deletes in 1 hour, 30 minutes" under the input, exact rather than
+ *  rounded, in the reader's language. Hidden until the input makes sense. */
+_updateSelfDestructPreview() {
+  const el = document.getElementById('sd-preview');
+  if (!el) return;
+  const ms = this._parseSelfDestruct(document.getElementById('sd-amount')?.value, this._selfDestructUnit);
+  el.style.display = ms ? '' : 'none';
+  if (!ms) return;
+  const locale = this._timeLocale();
+  let secs = Math.round(ms / 1000);
+  const parts = [];
+  for (const [unit, size] of [['hour', 3600], ['minute', 60], ['second', 1]]) {
+    const n = Math.floor(secs / size);
+    secs -= n * size;
+    if (n) parts.push(new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'long' }).format(n));
+  }
+  el.textContent = t('modals.self_destruct.preview', { time: new Intl.ListFormat(locale, { style: 'long', type: 'unit' }).format(parts) });
+},
+
 /** Ask how long the message lives. Resolves milliseconds, or null when the
  *  sender backs out (Cancel, the X, Escape or a click outside). */
 _askSelfDestruct() {
@@ -812,6 +833,7 @@ _askSelfDestruct() {
   input.value = '';
   error.style.display = 'none';
   this._setSelfDestructUnit('minutes');
+  this._updateSelfDestructPreview();
   modal.style.display = 'flex';
   // Focus now, not on a timer, so keys typed right after Enter land here.
   input.focus();
