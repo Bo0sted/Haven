@@ -3065,7 +3065,7 @@
       "minutes": "Minutes",
       "hours": "Hours",
       "preview": "Deletes in {{time}}",
-      "invalid": "Enter a time from 1 minute to 24 hours.",
+      "invalid": "Enter a time from 30 seconds to 24 hours.",
       "send": "Send"
     },
     "poll": {

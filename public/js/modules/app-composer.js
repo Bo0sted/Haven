@@ -796,12 +796,12 @@ _setSelfDestructUnit(unit) {
 },
 
 /** Milliseconds for what was typed, or null. Up to two decimals, a comma
- *  works as the decimal point, and the result must be 1 minute to 24 hours. */
+ *  works as the decimal point, and the result must be 30 seconds to 24 hours. */
 _parseSelfDestruct(raw, unit) {
   const s = String(raw || '').trim().replace(',', '.');
   if (!/^(\d{1,4}(\.\d{0,2})?|\.\d{1,2})$/.test(s)) return null;
   const ms = Math.round(parseFloat(s) * (unit === 'hours' ? 3600000 : 60000));
-  return ms >= 60000 && ms <= 86400000 ? ms : null;
+  return ms >= 30000 && ms <= 86400000 ? ms : null;
 },
 
 /** "Deletes in 1 hour, 30 minutes" under the input, exact rather than
