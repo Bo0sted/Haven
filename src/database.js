@@ -674,6 +674,12 @@ function initDatabase() {
   // ── Migration: bio column ─────────────────────────────────
   addColumn('users', 'bio', "TEXT DEFAULT ''");
 
+  // ── Migration: birthday (YYYY-MM-DD) and when it was last set (ISO UTC).
+  // birthday_set_at outlives an unset birthday so the 30 day lock still holds.
+  addColumn('users', 'birthday', "TEXT DEFAULT NULL");
+  addColumn('users', 'birthday_set_at', "TEXT DEFAULT NULL");
+  addColumn('users', 'birthday_hide_year', "INTEGER DEFAULT 1");
+
   // ── Migration: custom_sounds table (admin-uploaded notification sounds) ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS custom_sounds (

@@ -26,6 +26,19 @@ function cleanChannelOrder(raw) {
   return out.length <= 20000 ? out : null;
 }
 
+const BIRTHDAY_LOCK_MS = 30 * 24 * 60 * 60 * 1000;
+
+// A real calendar date from 1900 up to today as YYYY-MM-DD, else null. A day
+// of slack lets someone whose local date is ahead of UTC pick their today.
+function cleanBirthday(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
+  if (y < 1900 || date.getTime() > Date.now() + 86400000) return null;
+  return value;
+}
+
 module.exports = function register(socket, ctx) {
   const { io, db, state, getChannelRoleChain, userHasPermission, getUserEffectiveLevel,
           emitOnlineUsers, emitDmPresence, broadcastVoiceUsers, generateToken,
@@ -281,7 +294,8 @@ module.exports = function register(socket, ctx) {
     try {
       const row = db.prepare(
         `SELECT u.id, u.username, COALESCE(u.display_name, u.username) as displayName,
-                u.avatar, u.avatar_shape, u.border, u.border_transform, u.animate_profile, u.status, u.status_text, u.bio, u.created_at
+                u.avatar, u.avatar_shape, u.border, u.border_transform, u.animate_profile, u.status, u.status_text, u.bio, u.created_at,
+                CASE WHEN u.birthday_hide_year = 0 THEN u.birthday ELSE substr(u.birthday, 6) END as birthday
          FROM users u WHERE u.id = ?`
       ).get(data.userId);
       if (!row) return;
@@ -348,6 +362,8 @@ module.exports = function register(socket, ctx) {
         status: hidden ? 'offline' : (row.status || 'online'),
         statusText: row.status_text || '',
         bio: row.bio || '',
+        // MM-DD, or YYYY-MM-DD when the owner turned off Hide birth year.
+        birthday: row.birthday || null,
         roles: roles,
         online: isOnline,
         createdAt: row.created_at,
@@ -372,6 +388,41 @@ module.exports = function register(socket, ctx) {
     } catch (err) {
       console.error('Set bio error:', err);
     }
+  });
+
+  // Setting a birthday locks it for 30 days. Unsetting (null) hides it at any
+  // time but keeps the lock, so it cannot be used to pick a new date early.
+  // Hide birth year is not part of the lock and can change whenever.
+  socket.on('set-birthday', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const birthday = data.birthday === null ? null : cleanBirthday(data.birthday);
+    if (data.birthday !== null && !birthday) return socket.emit('error-msg', 'Invalid birthday');
+    const hideYear = data.hideYear === false ? 0 : 1;
+    try {
+      const row = db.prepare('SELECT birthday, birthday_set_at, birthday_hide_year FROM users WHERE id = ?').get(socket.user.id);
+      if (!row || (row.birthday === birthday && row.birthday_hide_year === hideYear)) return;
+      let setAt = row.birthday_set_at;
+      if (birthday && birthday !== row.birthday) {
+        if (setAt && Date.now() - Date.parse(setAt) < BIRTHDAY_LOCK_MS) {
+          return socket.emit('error-msg', 'Your birthday can only be changed once every 30 days');
+        }
+        setAt = new Date().toISOString();
+      }
+      db.prepare('UPDATE users SET birthday = ?, birthday_set_at = ?, birthday_hide_year = ? WHERE id = ?')
+        .run(birthday, setAt, hideYear, socket.user.id);
+      socket.user.birthday = birthday;
+      socket.user.birthdaySetAt = setAt;
+      socket.user.birthdayHideYear = !!hideYear;
+      socket.emit('birthday-updated', { birthday, birthdaySetAt: setAt, birthdayHideYear: !!hideYear });
+    } catch (err) {
+      console.error('Set birthday error:', err);
+      return;
+    }
+    // Member lists carry the birthday, so a 🎉 shows (or goes) right away.
+    for (const [code, users] of channelUsers) {
+      if (users.has(socket.user.id)) emitOnlineUsers(code);
+    }
+    if (emitDmPresence) emitDmPresence(socket.user.id);
   });
 
   // ── Push Notifications ──────────────────────────────────

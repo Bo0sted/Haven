@@ -728,7 +728,8 @@ function setupSocketHandlers(io, db, opts = {}) {
   // this list is built) rather than in each caller.
   function getMentionableChannelMembers(channelId) {
     return db.prepare(`
-      SELECT u.id, COALESCE(u.display_name, u.username) as username, u.username as loginName FROM users u
+      SELECT u.id, COALESCE(u.display_name, u.username) as username, u.username as loginName,
+             substr(u.birthday, 6) as birthday FROM users u
       JOIN channel_members cm ON u.id = cm.user_id
       LEFT JOIN bans b ON b.user_id = u.id
       WHERE cm.channel_id = ? AND b.user_id IS NULL
@@ -996,7 +997,7 @@ function setupSocketHandlers(io, db, opts = {}) {
   // about a third.
   const MEMBER_DEFAULTS = {
     highScore: 0, statusText: '', avatar: null, avatarShape: 'circle', border: null,
-    borderTransform: null, animateProfile: 'trigger', isGuest: false, role: null, activity: null,
+    borderTransform: null, animateProfile: 'trigger', isGuest: false, role: null, activity: null, birthday: null,
   };
   function slimMember(u) {
     const out = {};
@@ -1063,13 +1064,14 @@ function setupSocketHandlers(io, db, opts = {}) {
       // reading every account on the server for each update (a two-person DM
       // included) was the cost that grew with the size of the server.
       const statusRows = db.prepare(`
-        SELECT u.id, u.status, u.status_text, u.avatar, u.avatar_shape, u.border, u.border_transform, u.animate_profile, u.is_guest
+        SELECT u.id, u.status, u.status_text, u.avatar, u.avatar_shape, u.border, u.border_transform, u.animate_profile, u.is_guest,
+               substr(u.birthday, 6) as birthday
         FROM users u
         JOIN channel_members cm ON cm.user_id = u.id
         JOIN channels c ON c.id = cm.channel_id
         WHERE c.code = ?
       `).all(code);
-      statusRows.forEach(r => { statusMap[r.id] = { status: r.status || 'online', statusText: r.status_text || '', avatar: r.avatar || null, avatarShape: r.avatar_shape || 'circle', border: r.border || null, borderTransform: parseBorderTransform(r.border_transform), animateProfile: r.animate_profile || 'trigger', isGuest: !!r.is_guest }; });
+      statusRows.forEach(r => { statusMap[r.id] = { status: r.status || 'online', statusText: r.status_text || '', avatar: r.avatar || null, avatarShape: r.avatar_shape || 'circle', border: r.border || null, borderTransform: parseBorderTransform(r.border_transform), animateProfile: r.animate_profile || 'trigger', isGuest: !!r.is_guest, birthday: r.birthday || null }; });
     } catch { /* runs on every presence change; members then show default status and avatar */ }
 
     const channel = db.prepare('SELECT id, role_gate, is_dm FROM channels WHERE code = ?').get(code);
@@ -1118,6 +1120,7 @@ function setupSocketHandlers(io, db, opts = {}) {
         borderTransform: statusMap[m.id]?.borderTransform || null,
         animateProfile: statusMap[m.id]?.animateProfile || 'trigger',
         isGuest: statusMap[m.id]?.isGuest || false,
+        birthday: statusMap[m.id]?.birthday || null,
         role: roleOf(m.id),
         // null unless the user opted in; getPublicActivity applies their
         // privacy prefs, so nothing filtered here can leak downstream.
@@ -1138,6 +1141,7 @@ function setupSocketHandlers(io, db, opts = {}) {
             borderTransform: statusMap[s.user.id]?.borderTransform || s.user.borderTransform || null,
             animateProfile: statusMap[s.user.id]?.animateProfile || s.user.animate_profile || 'trigger',
             isGuest: statusMap[s.user.id]?.isGuest || !!s.user.isGuest,
+            birthday: statusMap[s.user.id]?.birthday || null,
             role: roleOf(s.user.id),
             activity: activity.getPublicActivity(s.user.id)
           });
@@ -2093,7 +2097,7 @@ function setupSocketHandlers(io, db, opts = {}) {
 
     try {
       // created_at feeds the automod new-account link gate (v3.42.0).
-      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, border, border_transform, animate_profile, password_version, is_guest, created_at, oidc_subject, e2e_passphrase FROM users WHERE id = ?').get(user.id);
+      const uRow = db.prepare('SELECT display_name, is_admin, username, avatar, avatar_shape, border, border_transform, animate_profile, password_version, is_guest, created_at, oidc_subject, e2e_passphrase, birthday, birthday_set_at, birthday_hide_year FROM users WHERE id = ?').get(user.id);
       if (!uRow || uRow.username !== user.username) {
         return next(new Error('Session expired'));
       }
@@ -2110,6 +2114,9 @@ function setupSocketHandlers(io, db, opts = {}) {
       socket.user.animate_profile = uRow.animate_profile || 'trigger';
       socket.user.isGuest = !!uRow.is_guest;
       socket.user.createdAt = uRow.created_at || null;
+      socket.user.birthday = uRow.birthday || null;
+      socket.user.birthdaySetAt = uRow.birthday_set_at || null;
+      socket.user.birthdayHideYear = uRow.birthday_hide_year !== 0;
       // (#12) The client needs this to ask for the right secret: an SSO
       // account unlocks E2E with its encryption passphrase, not a password.
       socket.user.isSso = !!uRow.oidc_subject;
@@ -2303,6 +2310,10 @@ function setupSocketHandlers(io, db, opts = {}) {
       globalPermissions: getUserGlobalPermissions(socket.user.id),
       status: socket.user.status || 'online',
       statusText: socket.user.statusText || '',
+      // The full date, its privacy and when it was set, for Edit Profile.
+      birthday: socket.user.birthday || null,
+      birthdaySetAt: socket.user.birthdaySetAt || null,
+      birthdayHideYear: socket.user.birthdayHideYear !== false,
       nicknames,
       // Official messages (src/messageHighlights.js): whether this person keeps
       // official mode on, and what the server supports, for clients that talk

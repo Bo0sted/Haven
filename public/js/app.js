@@ -5,8 +5,8 @@
 // ═══════════════════════════════════════════════════════════
 
 import SocketMethods   from './modules/app-socket.js?v=4.21.0';
-import SocketChannelMethods from './modules/app-socket-channels.js?v=4.22.24';
-import SocketEventMethods from './modules/app-socket-events.js?v=4.22.24';
+import SocketChannelMethods from './modules/app-socket-channels.js?v=4.23.8';
+import SocketEventMethods from './modules/app-socket-events.js?v=4.23.8';
 import UIBindMethods   from './modules/app-ui.js?v=4.22.12';
 import ComposerMethods from './modules/app-composer.js?v=4.22.22';
 import ComposerListMethods from './modules/app-composer-lists.js?v=4.22.22';
@@ -15,7 +15,7 @@ import VoiceControlMethods from './modules/app-voice-controls.js?v=4.21.0';
 import MediaGalleryMethods from './modules/app-media-gallery.js?v=4.22.2';
 import MessageActionMethods from './modules/app-message-actions.js?v=4.23.1';
 import PipPanelMethods from './modules/app-pip-panels.js?v=4.22.22';
-import PeopleMethods from './modules/app-people.js?v=4.23.5';
+import PeopleMethods from './modules/app-people.js?v=4.23.8';
 import SettingsMethods from './modules/app-settings.js?v=4.22.9';
 import AdminControlMethods from './modules/app-admin-controls.js?v=4.21.0';
 import ExtensionUpdateMethods from './modules/app-extension-updates.js?v=4.17.18';
@@ -35,10 +35,10 @@ import ChannelMethods  from './modules/app-channels.js?v=4.22.23';
 import ChannelContextMethods from './modules/app-channel-context.js?v=4.22.14';
 import ChannelOrganizeMethods from './modules/app-channel-organize.js?v=4.21.0';
 import ChannelUnreadMethods from './modules/app-channel-unread.js?v=4.22.24';
-import MessageMethods  from './modules/app-messages.js?v=4.22.25';
+import MessageMethods  from './modules/app-messages.js?v=4.23.8';
 import LinkPreviewMethods from './modules/app-link-previews.js?v=4.21.0';
 import MessageToolMethods from './modules/app-message-tools.js?v=4.23.1';
-import UserMethods     from './modules/app-users.js?v=4.21.0';
+import UserMethods     from './modules/app-users.js?v=4.23.8';
 import VoiceMethods    from './modules/app-voice.js?v=4.21.0';
 import ScreenWebcamMethods from './modules/app-screen-webcam.js?v=4.22.21';
 import StreamTileMethods from './modules/app-stream-tiles.js?v=4.21.0';

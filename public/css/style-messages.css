@@ -1222,6 +1222,19 @@ html[lang="fa"] :is(input:not([type]), input[type="text"], input[type="search"],
   margin-bottom: 0.5rem;
 }
 
+/* Birthdays: the 🎉 in front of a name on the day, and the shower that falls
+   past the avatar when a profile card opens (_rainBirthdayConfetti). */
+.profile-popup-displayname .birthday-mark { margin-right: 0.25em; }
+.message-header .birthday-mark { margin-right: -0.25rem; }
+.birthday-confetti {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100011;  /* above the profile card */
+  line-height: 1;
+  pointer-events: none;
+}
+
 .profile-popup-actions {
   margin-top: 0.5rem;
 }

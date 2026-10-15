@@ -223,6 +223,14 @@ _bindPeople() {
 
   document.getElementById('save-rename-btn').addEventListener('click', () => this._saveRename());
 
+  const birthdayInput = document.getElementById('edit-profile-birthday');
+  const birthdayUnset = document.getElementById('edit-profile-birthday-unset');
+  birthdayInput.addEventListener('input', () => { birthdayUnset.style.display = birthdayInput.value ? '' : 'none'; });
+  birthdayUnset.addEventListener('click', () => {
+    birthdayInput.value = '';
+    birthdayUnset.style.display = 'none';
+  });
+
   // Add persona button (#86, #5349)
   const addPersonaBtn = document.getElementById('add-persona-btn');
   if (addPersonaBtn) addPersonaBtn.addEventListener('click', () => this._showPersonaEditor?.(null));
@@ -257,6 +265,7 @@ _openRenameModal() {
   // Populate bio
   const bioInput = document.getElementById('edit-profile-bio');
   if (bioInput) bioInput.value = this.user.bio || '';
+  this._syncBirthdayEditor();
   // Load personas list (#86, #5349)
   this._loadPersonas?.();
   this._loadRoles(() => this._renderUserProfileGroupsList());
@@ -298,10 +307,35 @@ _saveRename() {
   if (bioInput) {
     this.socket.emit('set-bio', { bio: bioInput.value });
   }
+  // Only an actual birthday change goes out; the server enforces the lock.
+  const birthday = document.getElementById('edit-profile-birthday').value || null;
+  const hideYear = document.getElementById('edit-profile-birthday-hide-year').checked;
+  if (birthday !== (this.user.birthday || null) || hideYear !== (this.user.birthdayHideYear !== false)) {
+    this.socket.emit('set-birthday', { birthday, hideYear });
+  }
   // Also commit any pending avatar and groups changes
   this._commitAvatarSettings();
   this._GroupManagerSaveGroups();
   document.getElementById('rename-modal').style.display = 'none';
+},
+
+// The birthday field stays disabled for 30 days after a birthday is set.
+// Unsetting does not restart or end that, so Unset works while locked.
+_syncBirthdayEditor() {
+  const input = document.getElementById('edit-profile-birthday');
+  const unset = document.getElementById('edit-profile-birthday-unset');
+  const note = document.getElementById('edit-profile-birthday-note');
+  const setAt = Date.parse(this.user.birthdaySetAt || '');
+  const daysLocked = setAt ? Math.ceil((setAt + 30 * 86400000 - Date.now()) / 86400000) : 0;
+  const now = this._nowZonedParts();
+  input.max = `${now.year}-${String(now.monthIndex + 1).padStart(2, '0')}-${String(now.day).padStart(2, '0')}`;
+  input.value = this.user.birthday || '';
+  input.disabled = daysLocked > 0;
+  document.getElementById('edit-profile-birthday-hide-year').checked = this.user.birthdayHideYear !== false;
+  unset.style.display = input.value ? '' : 'none';
+  note.textContent = daysLocked > 0
+    ? t(daysLocked === 1 ? 'modals.edit_profile.birthday_locked_one' : 'modals.edit_profile.birthday_locked_other', { count: daysLocked })
+    : t('modals.edit_profile.birthday_hint');
 },
 
 _loadGroupChannelAccess(roleIds, callback) {

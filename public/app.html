@@ -1223,6 +1223,20 @@
         <textarea id="edit-profile-bio" class="edit-profile-textarea" maxlength="190" data-i18n-placeholder="modals.edit_profile.bio_placeholder" placeholder="Tell people about yourself…" rows="2"></textarea>
       </div>
 
+      <!-- Birthday: locked for 30 days once set; Unset hides it but keeps the lock -->
+      <div class="form-group" style="margin-top:8px">
+        <label for="edit-profile-birthday" data-i18n="modals.edit_profile.birthday_label">Birthday</label>
+        <div class="input-row">
+          <input type="date" id="edit-profile-birthday" min="1900-01-01" style="flex:1">
+          <button type="button" class="btn-sm" id="edit-profile-birthday-unset" data-i18n="modals.edit_profile.birthday_unset">Unset</button>
+        </div>
+        <small id="edit-profile-birthday-note"></small>
+        <label class="toggle-row" style="margin-top:4px">
+          <span data-i18n="modals.edit_profile.birthday_hide_year">Hide birth year</span>
+          <input type="checkbox" id="edit-profile-birthday-hide-year" checked>
+        </label>
+      </div>
+
       <!-- Avatar Customizer -->
       <div class="avatar-settings" style="margin-bottom: 16px;">
         <h5 class="settings-section-subtitle" style="margin-top:0" data-i18n="modals.edit_profile.avatar_title">Avatar</h5>
@@ -5227,7 +5241,7 @@
   <!-- Shared with the server (src/automod.js requires the same file) so both
        sides reach identical verdicts on a link. Must load before app.js. -->
   <script src="/js/automod-rules.js?v=4.21.0"></script>
-  <script type="module" src="/js/app.js?v=4.23.7"></script>
+  <script type="module" src="/js/app.js?v=4.23.8"></script>
   <script src="/js/plugin-loader.js?v=4.21.0"></script>
   <script src="/js/modules/stream-debug.js?v=4.21.0"></script>
   <script src="/js/password-eye.js?v=4.21.0"></script>

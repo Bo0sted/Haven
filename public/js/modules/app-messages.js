@@ -445,6 +445,24 @@ _restyleMessageAuthors() {
   });
 },
 
+// The 🎉 in front of authors follows the member lists, so it appears on
+// messages already on screen the moment someone sets today as their birthday.
+_syncBirthdayMarks() {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  if (!(this._lastOnlineUsers || []).length && !(this.channelMembers || []).length) return;
+  container.querySelectorAll('.message[data-user-id]').forEach(el => {
+    if (el.dataset.personaId || el.classList.contains('webhook-message') || el.classList.contains('imported-message')) return;
+    const author = el.querySelector('.message-header .message-author');
+    if (!author) return;
+    const prev = author.previousElementSibling;
+    const mark = prev && prev.classList.contains('birthday-mark') ? prev : null;
+    const html = this._birthdayMarkHtml(this._memberById(el.dataset.userId)?.birthday);
+    if (html && !mark) author.insertAdjacentHTML('beforebegin', html);
+    else if (!html && mark) mark.remove();
+  });
+},
+
 _renderMessages(messages, lastReadMessageId) {
   // Cache the last batch so other handlers can re-render (e.g. mention
   // formatting after channel-members arrives on first load). (#5273)
@@ -1260,6 +1278,7 @@ _createMessageEl(msg, prevMsg) {
   // The author name, painted by a gradient role when the author has one.
   const authorText = msg.persona_id ? msg.username : this._getNickname(msg.user_id, msg.username);
   const authorHtml = authorRoleStyled ? this._roleNameHtml(onlineUser.role, authorText) : this._escapeHtml(authorText);
+  const birthdayMark = msg.persona_id || msg.is_webhook || msg.imported_from ? '' : this._birthdayMarkHtml(onlineUser?.birthday);
 
   const botBadge = msg.imported_from === 'discord'
     ? '<span class="discord-badge">DISCORD</span>'
@@ -1323,7 +1342,7 @@ _createMessageEl(msg, prevMsg) {
       <div class="message-body">
         ${replyHtml}
         <div class="message-header">
-          ${msgRoleIconBefore}
+          ${msgRoleIconBefore}${birthdayMark}
           <span class="message-author" style="color:${authorColor}"${!msg.persona_id && this._nicknames[msg.user_id] ? ` title="${this._escapeHtml(msg.username)}"` : ''}>${authorHtml}</span>
           ${msgRoleIconAfter}
           ${botBadge}
@@ -1431,6 +1450,7 @@ _promoteCompactToFull(compactEl) {
   const authorColor2 = roleStyled2 ? this._safeColor(onlineUser.role.color, color) : color;
   const authorText2 = this._getNickname(userId, username);
   const authorHtml2 = roleStyled2 ? this._roleNameHtml(onlineUser.role, authorText2) : this._escapeHtml(authorText2);
+  const birthdayMark2 = compactEl.dataset.personaId ? '' : this._birthdayMarkHtml(onlineUser?.birthday);
 
   // Replace the compact element in-place
   const wasAnnouncement = compactEl.classList.contains('announcement');
@@ -1447,7 +1467,7 @@ _promoteCompactToFull(compactEl) {
       ${this._avatarWithBorder(avatarHtml, { border, borderTransform, animateProfile })}
       <div class="message-body">
         <div class="message-header">
-          ${msgRoleIconBefore2}
+          ${msgRoleIconBefore2}${birthdayMark2}
           <span class="message-author" style="color:${authorColor2}"${this._nicknames[userId] ? ` title="${this._escapeHtml(username)}"` : ''}>${authorHtml2}</span>
           ${msgRoleIconAfter2}
           ${msgRoleBadge}

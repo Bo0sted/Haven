@@ -598,7 +598,7 @@ _listenPresenceAndVoice() {
   // put them back so everything reading a member sees the full shape.
   const fillMember = (u) => ({
     highScore: 0, statusText: '', avatar: null, avatarShape: 'circle', border: null,
-    borderTransform: null, animateProfile: 'trigger', isGuest: false, role: null, activity: null,
+    borderTransform: null, animateProfile: 'trigger', isGuest: false, role: null, activity: null, birthday: null,
     ...u,
   });
 
