@@ -16,6 +16,7 @@ const automod = require('../automod');
 const { resolveSpotifyToYouTube, searchYouTube, fetchYouTubePlaylist, extractYouTubeVideoId, resolveMusicMetadata } = require('./musicResolver');
 const createPermissions = require('./permissions');
 const { diskStatus } = require('../diskGuard');
+const { toolsReady: privacyToolsReady } = require('../privacyPass');
 const highlights = require('../messageHighlights');
 const { grantAdminRole } = require('../roleDefaults');
 const {
@@ -2377,6 +2378,10 @@ function setupSocketHandlers(io, db, opts = {}) {
       const status = diskStatus();
       if (status.low) socket.emit('disk-status', status);
     }
+
+    // Without exiftool and ffmpeg, photo and video uploads are refused; saying
+    // so up front spares someone uploading a whole video only to be turned away.
+    if (!privacyToolsReady()) socket.emit('privacy-status', { ready: false });
 
     // Start the presence clock the moment a user goes from offline to online.
     // A second tab/device keeps the original onlineSince so "continuously

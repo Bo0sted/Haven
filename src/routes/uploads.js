@@ -26,7 +26,7 @@ module.exports = function registerUploads(deps) {
     }
 
     upload.single('image')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
       // Enforce the upload cap: the server setting, raised by any role that says so
@@ -94,7 +94,7 @@ module.exports = function registerUploads(deps) {
     }
 
     fileUpload.single('file')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
       // Enforce the upload cap: the server setting, raised by any role that says so
@@ -121,6 +121,16 @@ module.exports = function registerUploads(deps) {
         mimetype: req.file.mimetype
       });
     });
+  });
+
+  // ── Held-back upload status ──────────────────────────────
+  // An older file the privacy pass could not clean is held back from
+  // uploads/, so its message shows a note instead of a broken picture.
+  app.get('/api/upload-status', (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token || !verifyToken(token)) return res.status(401).json({ error: 'Unauthorized' });
+    const rel = String(req.query.path || '').replace(/^\/?uploads\//, '');
+    res.json({ state: require('../privacyPass').heldState(rel) });
   });
 
   // ── Flash ROM status & download ──────────────────────────

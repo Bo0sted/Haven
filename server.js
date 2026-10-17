@@ -96,6 +96,7 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const multer = require('multer');
 const { sniffImageType } = require('./src/imageMetadata');
+const privacyPass = require('./src/privacyPass');
 const diskGuard = require('./src/diskGuard');
 
 // (#5505) Refuse uploads that would eat into the reserved disk headroom, so a
@@ -886,7 +887,9 @@ app.get('/api/themes', (req, res) => {
 // ── File uploads (DB-configurable limit, avatar max 5 MB) ──
 const uploadDir = UPLOADS_DIR;
 
-const uploadStorage = multer.diskStorage({
+// Every upload is written into unprocessed/ first and only reaches uploads/
+// once its location data is gone (src/privacyPass.js).
+const uploadStorage = privacyPass.diskStorage({
   destination: uploadDir,
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -1642,7 +1645,7 @@ app.post('/api/upload-server-icon', uploadLimiter, uploadDiskGuard, (req, res) =
   if (!verifyAdminFromDb(user)) return res.status(403).json({ error: 'Admin only' });
 
   upload.single('image')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return res.status(400).json({ error: err.message, code: err.code });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     if (req.file.size > 2 * 1024 * 1024) {
       fs.unlinkSync(req.file.path);
@@ -1679,7 +1682,7 @@ app.post('/api/upload-role-icon', uploadLimiter, uploadDiskGuard, (req, res) => 
   }
 
   upload.single('icon')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return res.status(400).json({ error: err.message, code: err.code });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     if (req.file.size > 512 * 1024) {
       fs.unlinkSync(req.file.path);
@@ -1714,7 +1717,7 @@ app.post('/api/upload-server-banner', uploadLimiter, uploadDiskGuard, (req, res)
   if (!verifyAdminFromDb(user)) return res.status(403).json({ error: 'Admin only' });
 
   upload.single('image')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return res.status(400).json({ error: err.message, code: err.code });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     if (req.file.size > 4 * 1024 * 1024) {
       fs.unlinkSync(req.file.path);
@@ -3283,6 +3286,16 @@ try {
   console.error('[fcm] Could not read the FCM Privacy setting, leaving FCM off:', err.message);
 }
 initFcm(DATA_DIR);
+// Clean photos and videos uploaded before the privacy pass existed, and tell
+// everyone when photo and video uploads open (the tools were installed).
+privacyPass.start(db, { onReady: () => io.emit('privacy-status', { ready: true }) });
+// How far a video's cleaning has got, for the uploader's progress bar.
+privacyPass.setProgressEmitter((req, percent) => {
+  const uploadId = String(req.headers['x-upload-id'] || '').slice(0, 64);
+  const user = uploadId && verifyToken(req.headers.authorization?.split(' ')[1] || '');
+  if (!user) return;
+  for (const [, s] of io.sockets.sockets) if (s.user?.id === user.id) s.emit('upload-processing', { uploadId, percent });
+});
 app.set('io', io);   // expose to auth routes (session invalidation on password change)
 botAudioManager = new BotAudioManager(io, BOT_AUDIO_DIR);
 socketRuntime = setupSocketHandlers(io, db, {
@@ -3725,6 +3738,7 @@ function gracefulShutdown(signal) {
   try { rotateCrashLogIfNeeded(); fs.appendFileSync(CRASH_LOG, line); } catch { /* crash log is a diagnostic extra; shutdown continues */ }
   console.log(`\n${signal} received, shutting down`);
   botAudioManager?.shutdown();
+  require('./src/mediaTools').stopExiftool();
   io.close();
   server.close(() => process.exit(0));
 }

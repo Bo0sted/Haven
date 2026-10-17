@@ -562,6 +562,13 @@ _setupCollapsibleSections() {
 // can be several at once, hence a set, and hence hiding the bar only once
 // the last one settles rather than whenever any single one does.
 _uploadWithProgress(url, formData) {
+  // Photos and videos have their location data removed on the server once
+  // they arrive. Without the tools for it they are refused, so say so before
+  // sending anything rather than after a whole video has gone up.
+  const media = [...formData.values()].find(v => v instanceof Blob && /^(image|video)\//.test(v.type));
+  if (media && this._privacyToolsMissing) {
+    return Promise.reject(new Error(t('toasts.privacy_tools_missing')));
+  }
   return new Promise((resolve, reject) => {
     const bar = document.getElementById('upload-progress-bar');
     const fill = document.getElementById('upload-progress-fill');
@@ -575,9 +582,14 @@ _uploadWithProgress(url, formData) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
     xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+    // Lets the server's "upload-processing" events find this bar.
+    const uploadId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    xhr.setRequestHeader('X-Upload-Id', uploadId);
+    if (!this._uploadProcessing) this._uploadProcessing = new Map();
 
     const settle = () => {
       this._activeUploads.delete(xhr);
+      this._uploadProcessing.delete(uploadId);
       if (bar && this._activeUploads.size === 0) bar.style.display = 'none';
     };
 
@@ -589,6 +601,19 @@ _uploadWithProgress(url, formData) {
       }
     });
 
+    // Sent in full: a photo or video now has its location data removed. The
+    // bar starts over for that and follows the server's progress on videos;
+    // photos take a moment, so they only change the label.
+    xhr.upload.addEventListener('load', () => {
+      if (!media) return;
+      if (text) text.textContent = t('common.removing_location');
+      if (/^video\//.test(media.type) && fill) fill.style.width = '0%';
+      this._uploadProcessing.set(uploadId, (percent) => {
+        if (fill) fill.style.width = percent + '%';
+        if (text) text.textContent = `${t('common.removing_location')} ${percent}%`;
+      });
+    });
+
     xhr.addEventListener('load', () => {
       settle();
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -596,7 +621,16 @@ _uploadWithProgress(url, formData) {
         catch { reject(new Error(t('toasts.invalid_json_response'))); }
       } else {
         let errMsg = t('toasts.upload_failed_status', { status: xhr.status });
-        try { const d = JSON.parse(xhr.responseText); errMsg = d.error || errMsg; } catch { /* no JSON error body: keep the status message */ }
+        const privacyToasts = {
+          PRIVACY_TOOLS_MISSING: 'toasts.privacy_tools_missing',
+          PRIVACY_GPS_REMAINS: 'toasts.privacy_gps_remains',
+          PRIVACY_FAILED: 'toasts.privacy_failed',
+        };
+        try {
+          const d = JSON.parse(xhr.responseText);
+          errMsg = privacyToasts[d.code] ? t(privacyToasts[d.code]) : (d.error || errMsg);
+          if (d.code === 'PRIVACY_TOOLS_MISSING') this._privacyToolsMissing = true;
+        } catch { /* no JSON error body: keep the status message */ }
         reject(new Error(errMsg));
       }
     });

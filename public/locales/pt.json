@@ -302,6 +302,12 @@
       "temporary_guest": "Conta de convidado temporária",
       "guest_badge": "CONVIDADO",
       "cannot_play_file": "{{name}} — não pode ser reproduzido neste navegador",
+      "upload_held_processing_this": "Este arquivo ainda está sendo processado.",
+      "upload_held_processing_one": "1 arquivo ainda está sendo processado.",
+      "upload_held_processing_other": "{{count}} arquivos ainda estão sendo processados.",
+      "upload_held_failed_this": "Não foi possível processar este arquivo.",
+      "upload_held_failed_one": "Não foi possível processar 1 arquivo.",
+      "upload_held_failed_other": "Não foi possível processar {{count}} arquivos.",
       "link": "Link",
       "embed_full": "Completo",
       "embed_medium": "Médio",
@@ -380,6 +386,9 @@
     "popup_blocked": "O pop-up foi bloqueado — verifique as configurações do navegador",
     "upload_failed": "Falha no envio",
     "upload_cancelled": "Envio cancelado",
+    "privacy_tools_missing": "O envio de fotos e vídeos está desativado devido a um erro de configuração do servidor",
+    "privacy_gps_remains": "Seu arquivo contém dados de GPS que o Haven não conseguiu remover. Tente novamente ou remova os dados de GPS manualmente",
+    "privacy_failed": "O Haven não conseguiu processar este arquivo. Tente novamente ou envie outro arquivo.",
     "invalid_json_response": "Resposta inválida do servidor",
     "upload_failed_status": "Falha no envio ({{status}})",
     "upload_connection_failed": "Falha no envio — verifique sua conexão",
@@ -3854,6 +3863,7 @@
     "copy": "Copiar",
     "copied": "Copiado",
     "uploading": "Enviando...",
+    "removing_location": "Removendo dados de localização...",
     "cancel_upload": "Cancelar envio"
   },
   "reactions": {
@@ -4076,6 +4086,7 @@
     "no_messages": "Ainda não há mensagens.",
     "safety_notice": "O Haven não pode verificar a identidade de ninguém. Os nomes não são exclusivos; confirme que você realmente conhece a pessoa antes de compartilhar qualquer informação.",
     "safety_dismiss": "Entendi, não mostrar novamente",
+    "gps_notice": "O Haven remove automaticamente os dados de GPS de fotos e vídeos não criptografados. Aqui isso não é possível, porque as DMs são criptografadas. Tenha cuidado redobrado com as fotos e vídeos que você envia. Desative o GPS da câmera antes de tirar uma foto ou gravar, e remova com atenção os dados de GPS das mídias que você já tem.",
     "blocked_link_tooltip": "Links para {{host}} não são permitidos neste servidor; por isso, este link não pode ser clicado.",
     "blocked_link_badge": "link bloqueado",
     "blocked_image": "⚠ Imagem de um domínio bloqueado — clique para carregar mesmo assim"

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
+const privacyPass = require('../privacyPass');
 const { DATA_DIR } = require('../paths');
 const { verifyToken } = require('../auth');
 const { sanitizeSoundName } = require('../socketHandlers');
@@ -51,7 +52,7 @@ module.exports = function registerMediaLibrary(deps) {
     if (!verifyAdminFromDb(user) && !userHasPermission(user.id, 'manage_soundboard')) return res.status(403).json({ error: 'Requires admin or Manage Soundboard permission' });
 
     createSoundUpload().single('sound')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
       let name = sanitizeSoundName(req.body.name || '');
@@ -181,7 +182,7 @@ module.exports = function registerMediaLibrary(deps) {
     if (!verifyAdminFromDb(user) && !userHasPermission(user.id, 'manage_emojis')) return res.status(403).json({ error: 'Requires admin or Manage Emojis permission' });
 
     createEmojiUpload().single('emoji')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
       let name = (req.body.name || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
@@ -207,7 +208,7 @@ module.exports = function registerMediaLibrary(deps) {
     if (!verifyAdminFromDb(user) && !userHasPermission(user.id, 'manage_emojis')) return res.status(403).json({ error: 'Requires admin or Manage Emojis permission' });
 
     createEmojiUpload().array('emojis', 50)(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
       const { getDb } = require('../database');
@@ -422,7 +423,7 @@ module.exports = function registerMediaLibrary(deps) {
       console.warn('[stickers] Could not seed starter pack:', err?.message || err);
     }
   }
-  const stickerStorage = multer.diskStorage({
+  const stickerStorage = privacyPass.diskStorage({
     destination: STICKERS_DIR,
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
@@ -450,7 +451,7 @@ module.exports = function registerMediaLibrary(deps) {
     if (!verifyAdminFromDb(user) && !userHasPermission(user.id, 'manage_stickers') && !userHasPermission(user.id, 'manage_emojis')) return res.status(403).json({ error: 'Requires admin or Manage Stickers permission' });
 
     createStickerUpload().single('sticker')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
       let name = (req.body.name || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
@@ -478,7 +479,7 @@ module.exports = function registerMediaLibrary(deps) {
     if (!verifyAdminFromDb(user) && !userHasPermission(user.id, 'manage_stickers') && !userHasPermission(user.id, 'manage_emojis')) return res.status(403).json({ error: 'Requires admin or Manage Stickers permission' });
 
     createStickerUpload().array('stickers', 50)(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
       let pack = (req.body.pack_name || '').trim().slice(0, 40);

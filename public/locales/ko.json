@@ -307,6 +307,12 @@
       "temporary_guest": "임시 게스트 계정",
       "guest_badge": "게스트",
       "cannot_play_file": "이 브라우저에서는 {{name}}을(를) 재생할 수 없습니다",
+      "upload_held_processing_this": "이 파일은 아직 처리 중입니다.",
+      "upload_held_processing_one": "파일 1개가 아직 처리 중입니다.",
+      "upload_held_processing_other": "파일 {{count}}개가 아직 처리 중입니다.",
+      "upload_held_failed_this": "이 파일을 처리하지 못했습니다.",
+      "upload_held_failed_one": "파일 1개를 처리하지 못했습니다.",
+      "upload_held_failed_other": "파일 {{count}}개를 처리하지 못했습니다.",
       "link": "링크",
       "embed_full": "크게",
       "embed_medium": "보통",
@@ -389,6 +395,9 @@
     "popup_blocked": "팝업이 차단되었습니다. 브라우저 설정을 확인하세요",
     "upload_failed": "업로드에 실패했습니다",
     "upload_cancelled": "업로드가 취소되었습니다",
+    "privacy_tools_missing": "서버 설정 오류로 사진/동영상 업로드가 비활성화되었습니다",
+    "privacy_gps_remains": "파일에 Haven이 제거하지 못한 GPS 데이터가 있습니다. 다시 시도하거나 GPS 데이터를 직접 제거하세요",
+    "privacy_failed": "Haven이 이 파일을 처리하지 못했습니다. 다시 시도하거나 다른 파일을 업로드하세요.",
     "invalid_json_response": "서버의 응답이 올바르지 않습니다",
     "upload_failed_status": "업로드에 실패했습니다 ({{status}})",
     "upload_connection_failed": "업로드에 실패했습니다. 연결 상태를 확인하세요",
@@ -2572,6 +2581,7 @@
     "copy": "복사",
     "copied": "복사됨",
     "uploading": "업로드하는 중...",
+    "removing_location": "위치 데이터를 제거하는 중...",
     "cancel_upload": "업로드 취소"
   },
   "reactions": {
@@ -2794,6 +2804,7 @@
     "no_messages": "아직 메시지가 없습니다.",
     "safety_notice": "Haven은 누구의 신원도 확인할 수 없습니다. 이름은 고유하지 않으므로, 무언가를 공유하기 전에 대화 상대가 누구인지 확실히 알고 있는지 확인하세요.",
     "safety_dismiss": "확인했습니다. 다시 표시하지 않기",
+    "gps_notice": "Haven은 암호화되지 않은 사진과 동영상에서 GPS 데이터를 자동으로 제거합니다. DM은 암호화되어 있어 여기서는 그럴 수 없습니다. 보내는 사진과 동영상에 각별히 주의하세요. 사진을 찍거나 녹화하기 전에 카메라의 GPS를 끄고, 기존 미디어의 GPS 데이터도 꼼꼼히 지우세요.",
     "blocked_link_tooltip": "이 서버에서는 {{host}} 링크가 허용되지 않아 클릭할 수 없게 했습니다.",
     "blocked_link_badge": "차단된 링크",
     "blocked_image": "⚠ 차단된 도메인의 이미지입니다. 그래도 불러오려면 클릭하세요"

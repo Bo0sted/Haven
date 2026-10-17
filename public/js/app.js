@@ -470,6 +470,7 @@ class HavenApp {
     };
     document.getElementById('messages')?.addEventListener('error', avatarErrorHandler, true);
     document.getElementById('online-users')?.addEventListener('error', avatarErrorHandler, true);
+    this._setupHeldUploadNotes();
 
     this.socket.emit('get-channels');
     this.socket.emit('get-server-settings');

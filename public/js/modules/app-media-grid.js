@@ -264,19 +264,40 @@ _mediaGridHtml(lines, layout = this._mediaGroupLayoutPref()) {
 _relayoutMediaGrids(root = document) {
   const layout = this._mediaGroupLayoutPref();
   root.querySelectorAll('.media-grid[data-count]').forEach((el) => {
-    if (el.dataset.layout === layout) return;
-    const tiles = Array.from(el.children).filter(c => c.classList.contains('media-grid-tile'));
-    const frame = this._mediaGridFrame(tiles.length, layout);
-    if (!frame) return;
-    el.classList.toggle('is-stacked', frame.stacked);
-    el.dataset.layout = layout;
-    el.style.cssText = frame.style;
-    el.querySelectorAll('.media-grid-more').forEach(m => m.remove());
-    tiles.forEach((tile, i) => {
-      tile.style.cssText = frame.tiles[i].style;
-      tile.classList.toggle('mg-hidden', frame.tiles[i].hidden);
-      if (frame.more && i === frame.more.index) tile.insertAdjacentHTML('beforeend', this._mediaGridMoreHtml(frame.more.count));
-    });
+    if (el.dataset.layout !== layout) this._reflowMediaGrid(el, layout);
+  });
+},
+
+// Lay one group out again for the tiles it has now, e.g. after a tile was
+// taken out because its file is held back (_showHeldUploadNote).
+_reflowMediaGrid(el, layout = this._mediaGroupLayoutPref()) {
+  const tiles = Array.from(el.children).filter(c => c.classList.contains('media-grid-tile'));
+  if (!tiles.length) { el.remove(); return; }
+  el.dataset.count = String(tiles.length);
+  const frame = this._mediaGridFrame(tiles.length, layout);
+  el.querySelectorAll('.media-grid-more').forEach(m => m.remove());
+  if (!frame && tiles[0].dataset.videoSrc) {
+    // A lone video keeps its tile, which is what plays it when clicked.
+    el.style.cssText = 'grid-template-columns:1fr';
+    tiles[0].style.cssText = '';
+    return;
+  }
+  if (!frame) {
+    // One picture left is no longer a group: it shows like a single
+    // picture, the way _mediaGridHtml renders a lone line.
+    const part = document.createElement('div');
+    part.className = 'content-media-part';
+    part.append(...tiles[0].childNodes);
+    el.replaceWith(part);
+    return;
+  }
+  el.classList.toggle('is-stacked', frame.stacked);
+  el.dataset.layout = layout;
+  el.style.cssText = frame.style;
+  tiles.forEach((tile, i) => {
+    tile.style.cssText = frame.tiles[i].style;
+    tile.classList.toggle('mg-hidden', frame.tiles[i].hidden);
+    if (frame.more && i === frame.more.index) tile.insertAdjacentHTML('beforeend', this._mediaGridMoreHtml(frame.more.count));
   });
 },
 

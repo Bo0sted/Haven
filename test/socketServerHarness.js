@@ -8,7 +8,7 @@ const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { io } = require('socket.io-client');
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -31,7 +31,7 @@ function createHarness(port, name) {
     fs.mkdirSync(DATA, { recursive: true });
     server = spawn(process.execPath, ['server.js'], {
       cwd: path.join(__dirname, '..'),
-      env: { ...process.env, PORT: String(port), HAVEN_DATA_DIR: DATA, ADMIN_USERNAME: 'admin', FORCE_HTTP: 'true' },
+      env: { HAVEN_NO_TOOL_DOWNLOAD: '1', ...process.env, PORT: String(port), HAVEN_DATA_DIR: DATA, ADMIN_USERNAME: 'admin', FORCE_HTTP: 'true' },
       stdio: 'ignore',
     });
     for (let i = 0; i < 60; i++) {
@@ -93,4 +93,12 @@ function createHarness(port, name) {
   return { start, stop, register, connect, next, ask, channels, post, dataDir: DATA };
 }
 
-module.exports = { createHarness, wait };
+// Whether the test servers can clean photos and videos (exiftool and ffmpeg
+// installed). Without them photo and video uploads are refused by design, and
+// the test servers never download them.
+function privacyToolsAvailable() {
+  const ok = (bin, args) => { const r = spawnSync(bin, args, { timeout: 15000 }); return !r.error && r.status === 0; };
+  return ok(process.env.HAVEN_EXIFTOOL_PATH || 'exiftool', ['-ver']) && ok(process.env.HAVEN_FFMPEG_PATH || 'ffmpeg', ['-version']);
+}
+
+module.exports = { createHarness, wait, privacyToolsAvailable };

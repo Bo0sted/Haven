@@ -307,6 +307,12 @@
       "temporary_guest": "一時的なゲストアカウント",
       "guest_badge": "ゲスト",
       "cannot_play_file": "{{name}} はこのブラウザでは再生できません",
+      "upload_held_processing_this": "このファイルはまだ処理中です。",
+      "upload_held_processing_one": "1件のファイルはまだ処理中です。",
+      "upload_held_processing_other": "{{count}}件のファイルはまだ処理中です。",
+      "upload_held_failed_this": "このファイルは処理できませんでした。",
+      "upload_held_failed_one": "1件のファイルは処理できませんでした。",
+      "upload_held_failed_other": "{{count}}件のファイルは処理できませんでした。",
       "link": "リンク",
       "embed_full": "大",
       "embed_medium": "中",
@@ -389,6 +395,9 @@
     "popup_blocked": "ポップアップがブロックされました。ブラウザの設定を確認してください",
     "upload_failed": "アップロードに失敗しました",
     "upload_cancelled": "アップロードをキャンセルしました",
+    "privacy_tools_missing": "サーバーの設定に問題があるため、写真と動画のアップロードは無効になっています",
+    "privacy_gps_remains": "ファイルにHavenが削除できなかったGPSデータが含まれています。もう一度試すか、GPSデータを手動で削除してください",
+    "privacy_failed": "Havenはこのファイルを処理できませんでした。もう一度試すか、別のファイルをアップロードしてください。",
     "invalid_json_response": "サーバーからの応答が無効です",
     "upload_failed_status": "アップロードに失敗しました（{{status}}）",
     "upload_connection_failed": "アップロードに失敗しました。接続を確認してください",
@@ -2572,6 +2581,7 @@
     "copy": "コピー",
     "copied": "コピーしました",
     "uploading": "アップロード中...",
+    "removing_location": "位置情報を削除しています...",
     "cancel_upload": "アップロードをキャンセル"
   },
   "reactions": {
@@ -2794,6 +2804,7 @@
     "no_messages": "まだメッセージはありません。",
     "safety_notice": "Havenは相手の身元を確認できません。名前は一意ではないため、何かを共有する前に、話している相手が本当に知っている人か確かめてください。",
     "safety_dismiss": "わかりました、今後表示しない",
+    "gps_notice": "Havenは暗号化されていない写真と動画からGPSデータを自動的に削除します。DMは暗号化されているため、ここではそれができません。送る写真や動画には特に注意してください。撮影や録画の前にカメラのGPSをオフにし、手元のメディアのGPSデータもきちんと削除してください。",
     "blocked_link_tooltip": "このサーバーでは {{host}} へのリンクが許可されていないため、クリックできないようにしています。",
     "blocked_link_badge": "ブロックされたリンク",
     "blocked_image": "⚠ ブロックされたドメインの画像です。クリックすると読み込みます"

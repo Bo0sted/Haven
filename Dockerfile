@@ -17,8 +17,11 @@ FROM node:22-bookworm-slim
 # gosu     → drop root to 'node' user after entrypoint setup
 # wget     → the container health check
 # make, g++, python3 → compile native modules (better-sqlite3) if no prebuilt fits
+# ffmpeg, exiftool → remove location data from uploaded photos and videos
+#                    (src/privacyPass.js); uploads of either are refused without them
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl tini gosu wget ca-certificates \
+    ffmpeg libimage-exiftool-perl \
     make g++ python3 \
     && rm -rf /var/lib/apt/lists/*
 

@@ -542,6 +542,16 @@ _listenMessageChanges() {
     this._updateMessageTagsFooter?.(data.messageId, data.tags || []);
   });
 
+  // ── Privacy pass ─────────────────────────────────
+  // Whether photo and video uploads are open (the server has the tools to
+  // remove their location data), and how far a video's cleaning has got.
+  this.socket.on('privacy-status', (data) => {
+    this._privacyToolsMissing = !data?.ready;
+  });
+  this.socket.on('upload-processing', (data) => {
+    this._uploadProcessing?.get(data?.uploadId)?.(Math.max(0, Math.min(100, Number(data.percent) || 0)));
+  });
+
   // ── Low disk warning (admins only, #5505) ────────
   // The server only sends this to admins, and only when the state changes, so
   // there is nothing to filter here beyond reflecting whatever it last said.

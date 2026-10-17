@@ -297,6 +297,12 @@
       "temporary_guest": "Temporäres Gastkonto",
       "guest_badge": "GAST",
       "cannot_play_file": "{{name}} – kann in diesem Browser nicht abgespielt werden",
+      "upload_held_processing_this": "Diese Datei wird noch verarbeitet.",
+      "upload_held_processing_one": "1 Datei wird noch verarbeitet.",
+      "upload_held_processing_other": "{{count}} Dateien werden noch verarbeitet.",
+      "upload_held_failed_this": "Diese Datei konnte nicht verarbeitet werden.",
+      "upload_held_failed_one": "1 Datei konnte nicht verarbeitet werden.",
+      "upload_held_failed_other": "{{count}} Dateien konnten nicht verarbeitet werden.",
       "link": "Link",
       "embed_full": "Voll",
       "embed_medium": "Mittel",
@@ -401,6 +407,9 @@
     "channel_link_unavailable": "Kanal auf diesem Server nicht verfügbar",
     "popup_blocked": "Popup blockiert – prüfe deine Browsereinstellungen",
     "upload_cancelled": "Upload abgebrochen",
+    "privacy_tools_missing": "Foto- und Video-Uploads sind wegen einer Fehlkonfiguration des Servers deaktiviert",
+    "privacy_gps_remains": "Deine Datei enthält GPS-Daten, die Haven nicht entfernen konnte. Bitte versuche es erneut oder entferne die GPS-Daten selbst",
+    "privacy_failed": "Haven konnte diese Datei nicht verarbeiten. Bitte versuche es erneut oder lade eine andere Datei hoch.",
     "invalid_json_response": "Ungültige Antwort vom Server",
     "upload_failed_status": "Upload fehlgeschlagen ({{status}})",
     "upload_connection_failed": "Upload fehlgeschlagen – prüfe deine Verbindung",
@@ -3448,6 +3457,7 @@
     "copy": "Kopieren",
     "copied": "Kopiert",
     "uploading": "Wird hochgeladen...",
+    "removing_location": "Standortdaten werden entfernt...",
     "cancel_upload": "Upload abbrechen"
   },
   "reactions": {
@@ -4030,6 +4040,7 @@
     "no_messages": "Noch keine Nachrichten.",
     "safety_notice": "Haven kann die Identität anderer Personen nicht bestätigen. Benutzernamen sind nicht eindeutig. Vergewissere dich daher, dass du die Person wirklich kennst, bevor du etwas teilst.",
     "safety_dismiss": "Verstanden, nicht erneut anzeigen",
+    "gps_notice": "Haven entfernt GPS-Daten automatisch aus unverschlüsselten Fotos und Videos. Hier ist das nicht möglich, weil DMs verschlüsselt sind. Sei besonders vorsichtig mit den Fotos und Videos, die du verschickst. Schalte GPS in deiner Kamera aus, bevor du ein Foto machst oder ein Video aufnimmst, und entferne GPS-Daten gewissenhaft aus vorhandenen Medien.",
     "blocked_link_tooltip": "Links zu {{host}} sind auf diesem Server nicht erlaubt und wurden daher nicht anklickbar gemacht.",
     "blocked_link_badge": "blockierter Link",
     "blocked_image": "⚠ Bild von einer blockierten Domain – zum Laden trotzdem klicken"

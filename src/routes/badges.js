@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
+const privacyPass = require('../privacyPass');
 const { imageKey } = require('../badges');
 
 const MAX_BYTES = 256 * 1024;
@@ -34,7 +35,7 @@ module.exports = function registerBadgeRoutes(deps) {
   }
 
   const upload = multer({
-    storage: multer.diskStorage({
+    storage: privacyPass.diskStorage({
       destination: BADGE_DIR,
       filename: (req, file, cb) => cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${EXT[file.mimetype]}`),
     }),

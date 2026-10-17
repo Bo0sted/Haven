@@ -489,6 +489,18 @@
 }
 .dm-safety-dismiss:hover { border-color: var(--accent); color: var(--accent); }
 
+/* Stands in for an older upload the privacy pass is holding back. */
+.upload-held-note {
+  display: inline-block;
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 /* Spoiler toggle on a queued image thumbnail */
 .image-queue-spoiler {
   position: absolute;

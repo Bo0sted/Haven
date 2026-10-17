@@ -1700,6 +1700,7 @@
   "common": {
     "copy": "Copier",
     "copied": "Copié",
-    "uploading": "Envoi en cours..."
+    "uploading": "Envoi en cours...",
+    "removing_location": "Suppression des données de localisation..."
   }
 }

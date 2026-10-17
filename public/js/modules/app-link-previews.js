@@ -190,7 +190,9 @@ _generateVideoThumbnail(video) {
     }
   }, { once: true });
 
-  helper.addEventListener('error', cleanup, { once: true });
+  // A video the privacy pass is holding back fails here first, before anyone
+  // presses play, so its note can replace the player straight away.
+  helper.addEventListener('error', () => { cleanup(); this._showHeldUploadNote?.(video); }, { once: true });
 
   // Safety timeout: don't hang forever if the video can't be loaded
   setTimeout(() => { if (!_thumbCache.has(src)) cleanup(); }, 8000);

@@ -27,7 +27,7 @@ module.exports = function registerProfile(deps) {
     if (ban) return res.status(403).json({ error: 'Banned users cannot upload' });
 
     upload.single('avatar')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       const maxMb = avatarMaxMb();
       if (req.file.size > maxMb * 1024 * 1024) {
@@ -119,7 +119,7 @@ module.exports = function registerProfile(deps) {
     }
 
     upload.single('border')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       const maxMb = avatarMaxMb();
       if (req.file.size > maxMb * 1024 * 1024) {
@@ -261,7 +261,7 @@ module.exports = function registerProfile(deps) {
     }
 
     upload.single('avatar')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
       // Validate file magic bytes
@@ -454,7 +454,7 @@ module.exports = function registerProfile(deps) {
     if (ban) return res.status(403).json({ error: 'Banned users cannot upload' });
 
     upload.single('avatar')(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) return res.status(400).json({ error: err.message, code: err.code });
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
       const maxMb = avatarMaxMb();
       if (req.file.size > maxMb * 1024 * 1024) {

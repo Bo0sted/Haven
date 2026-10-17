@@ -13,7 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 const Database = require('better-sqlite3');
-const { createHarness, wait } = require('./socketServerHarness');
+const { createHarness, wait, privacyToolsAvailable } = require('./socketServerHarness');
 const { sniffImage } = require('../src/routes/badges');
 const { earns, daysSince } = require('../src/badges');
 
@@ -265,6 +265,13 @@ test('profile badges', async (t) => {
     const big = await uploadIcon(admin.token, Buffer.concat([PNG, Buffer.alloc(300 * 1024)]), 'image/png');
     assert.strictEqual(big.status, 400, 'too large');
     assert.match(big.body.error || '', /256 KB/);
+
+    if (!privacyToolsAvailable()) {
+      const refused = await uploadIcon(mod.token, PNG, 'image/png');
+      assert.strictEqual(refused.status, 400, 'pictures are refused while their location data cannot be removed');
+      assert.match(refused.body.error || '', /misconfiguration/);
+      return;
+    }
 
     const ok = await uploadIcon(mod.token, PNG, 'image/png');
     assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));

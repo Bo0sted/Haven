@@ -1641,7 +1641,8 @@
   "common": {
     "copy": "Copiar",
     "copied": "Copiado",
-    "uploading": "Subiendo..."
+    "uploading": "Subiendo...",
+    "removing_location": "Eliminando datos de ubicación..."
   },
   "reactions": {
     "search_placeholder": "Buscar emojis..."

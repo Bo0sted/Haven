@@ -1700,7 +1700,8 @@
   "common": {
     "copy": "Kopiuj",
     "copied": "Skopiowano",
-    "uploading": "Przesyłanie..."
+    "uploading": "Przesyłanie...",
+    "removing_location": "Usuwanie danych o lokalizacji..."
   },
   "reactions": {
     "search_placeholder": "Szukaj emoji..."

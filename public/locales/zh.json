@@ -311,6 +311,12 @@
       "temporary_guest": "临时访客账号",
       "guest_badge": "访客",
       "cannot_play_file": "{{name}} 无法在此浏览器中播放",
+      "upload_held_processing_this": "此文件仍在处理中。",
+      "upload_held_processing_one": "1 个文件仍在处理中。",
+      "upload_held_processing_other": "{{count}} 个文件仍在处理中。",
+      "upload_held_failed_this": "此文件无法处理。",
+      "upload_held_failed_one": "1 个文件无法处理。",
+      "upload_held_failed_other": "{{count}} 个文件无法处理。",
       "link": "链接",
       "embed_full": "完整",
       "embed_medium": "中等",
@@ -398,6 +404,9 @@
     "popup_blocked": "弹窗被拦截。请检查浏览器设置",
     "upload_failed": "上传失败",
     "upload_cancelled": "上传已取消",
+    "privacy_tools_missing": "由于服务器配置错误，照片和视频上传已被停用",
+    "privacy_gps_remains": "你的文件包含 Haven 无法删除的 GPS 数据。请重试，或手动删除 GPS 数据",
+    "privacy_failed": "Haven 无法处理此文件。请重试或上传其他文件。",
     "invalid_json_response": "服务器返回无效响应",
     "upload_failed_status": "上传失败（{{status}}）",
     "upload_connection_failed": "上传失败。请检查网络连接",
@@ -4116,6 +4125,7 @@
     "copy": "复制",
     "copied": "已复制",
     "uploading": "上传中…",
+    "removing_location": "正在删除位置信息...",
     "cancel_upload": "取消上传"
   },
   "reactions": {
@@ -4338,6 +4348,7 @@
     "no_messages": "暂无消息。",
     "safety_notice": "Haven 无法验证任何人的身份。用户名不唯一，分享任何内容前请确认你确实认识对方。",
     "safety_dismiss": "知道了，不再显示",
+    "gps_notice": "Haven 会自动删除未加密照片和视频中的 GPS 数据。由于私信是加密的，这里无法做到。发送照片和视频时请格外小心。拍照或录像前请关闭相机的 GPS，并认真清除已有媒体中的 GPS 数据。",
     "blocked_link_tooltip": "本服务器不允许链接到 {{host}}，因此未将其转为可点击链接。",
     "blocked_link_badge": "被屏蔽的链接",
     "blocked_image": "⚠ 来自被屏蔽域名的图片。点击仍可加载"

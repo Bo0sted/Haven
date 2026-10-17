@@ -339,6 +339,12 @@
       "temporary_guest": "Temporary guest account",
       "guest_badge": "GUEST",
       "cannot_play_file": "{{name}} cannot be played in this browser",
+      "upload_held_processing_this": "This file is still being processed.",
+      "upload_held_processing_one": "1 file is still being processed.",
+      "upload_held_processing_other": "{{count}} files are still being processed.",
+      "upload_held_failed_this": "This file couldn't be processed.",
+      "upload_held_failed_one": "1 file couldn't be processed.",
+      "upload_held_failed_other": "{{count}} files couldn't be processed.",
       "link": "Link",
       "embed_full": "Full",
       "embed_medium": "Medium",
@@ -433,6 +439,9 @@
     "popup_blocked": "Popup blocked. Check your browser settings",
     "upload_failed": "Upload failed",
     "upload_cancelled": "Upload cancelled",
+    "privacy_tools_missing": "Photo/Videos uploads are disabled due to a misconfiguration of the server",
+    "privacy_gps_remains": "Your file contains GPS data that Haven failed to remove. Please try again or remove the GPS data manually",
+    "privacy_failed": "Haven couldn't process this file. Please try again or upload a different file.",
     "invalid_json_response": "Invalid response from the server",
     "upload_failed_status": "Upload failed ({{status}})",
     "upload_connection_failed": "Upload failed. Check your connection",
@@ -4257,6 +4266,7 @@
     "copy": "Copy",
     "copied": "Copied",
     "uploading": "Uploading...",
+    "removing_location": "Removing location data...",
     "cancel_upload": "Cancel upload"
   },
   "reactions": {
@@ -4488,6 +4498,7 @@
     "no_messages": "No messages yet.",
     "safety_notice": "Haven can't verify anyone's identity. Names aren't unique, so make sure you actually know who you're talking to before sharing anything.",
     "safety_dismiss": "Got it, don't show again",
+    "gps_notice": "Haven automatically wipes GPS data from unencrypted photos and videos. This is not possible in here due to the encrypted nature of DMs. Please be extra cautious about the photos and videos you send to people. Ensure GPS data is turned off in your camera before taking a photo or recording, and be diligent about wiping GPS data on existing media.",
     "blocked_link_tooltip": "Links to {{host}} are not allowed on this server, so this was not made clickable.",
     "blocked_link_badge": "blocked link",
     "blocked_image": "⚠ Image from a blocked domain. Click to load anyway"

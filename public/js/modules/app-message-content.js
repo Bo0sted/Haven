@@ -1205,27 +1205,89 @@ _dmLinkBlocked(text) {
   return this._checkLinkPolicy(text);
 },
 
+// An older upload the privacy pass could not clean is held back on the
+// server, so its picture or video fails to load. Ask why, and when that is
+// the reason, take it out of the message and say so in one note per
+// message, counting the files still waiting and the ones given up on. The
+// rest of the message, its text and other files, stays as it is.
+_setupHeldUploadNotes() {
+  document.addEventListener('error', (e) => {
+    const el = e.target;
+    if ((el instanceof HTMLImageElement || el instanceof HTMLVideoElement) && el.matches('.chat-image, .file-video, .media-grid-video')) {
+      this._showHeldUploadNote(el);
+    }
+  }, true);
+},
+
+async _showHeldUploadNote(el) {
+  let url;
+  try { url = new URL(el.currentSrc || el.src, location.href); } catch { return; }
+  if (url.origin !== location.origin || !url.pathname.startsWith('/uploads/')) return;
+  const rel = decodeURIComponent(url.pathname.slice('/uploads/'.length));
+  if (!this._heldUploadStates) this._heldUploadStates = new Map();
+  if (!this._heldUploadStates.has(rel)) {
+    this._heldUploadStates.set(rel, fetch(`/api/upload-status?path=${encodeURIComponent(rel)}`, { headers: { Authorization: `Bearer ${this.token}` } })
+      .then(r => (r.ok ? r.json() : null)).then(d => d?.state || null).catch(() => null));
+  }
+  const tile = el.closest('.media-grid-tile');
+  const piece = tile || el.closest('.file-attachment') || el;
+  const content = piece.closest('.message-content') || piece.parentElement;
+  const state = await this._heldUploadStates.get(rel);
+  if (!state || !piece.isConnected || !content) return;
+
+  const grid = tile?.closest('.media-grid');
+  piece.remove();
+  if (grid) this._reflowMediaGrid(grid);
+
+  if (!content._heldUploads) content._heldUploads = { processing: new Set(), failed: new Set() };
+  content._heldUploads[state === 'failed' ? 'failed' : 'processing'].add(rel);
+  let note = content.querySelector(':scope > .upload-held-note');
+  if (!note) {
+    note = document.createElement('div');
+    note.className = 'upload-held-note';
+    content.appendChild(note);
+  }
+  // "This file" when it is the only one held; counts once there are more,
+  // so a mixed note says which is which.
+  const total = content._heldUploads.processing.size + content._heldUploads.failed.size;
+  const line = (kind) => {
+    const n = content._heldUploads[kind].size;
+    if (!n) return '';
+    return t(`app.messages.upload_held_${kind}_${total === 1 ? 'this' : n === 1 ? 'one' : 'other'}`, { count: n });
+  };
+  note.textContent = '🔒 ' + [line('processing'), line('failed')].filter(Boolean).join(' ');
+},
+
 // One-time identity disclosure on DMs. Haven does not verify who anyone is,
 // and on an open server someone can register a display name that matches a
 // person you trust (the owner, a mod) and DM you as them. This is a nudge to
 // check, not a control. Dismissed globally, remembered in localStorage.
 _maybeShowDmSafetyNotice(container) {
+  // The server wipes location data from photos and videos, but a DM's files
+  // reach it already encrypted, so in here that is up to the sender.
+  this._maybeShowDmNotice(container, 'gps', '📍', 'dm_runtime.gps_notice');
+  this._maybeShowDmNotice(container, 'safety', '🛡️', 'dm_runtime.safety_notice');
+},
+
+_maybeShowDmNotice(container, kind, icon, textKey) {
   if (!container) return;
-  try { if (localStorage.getItem('haven_dm_safety_dismissed') === '1') return; } catch { /* storage blocked (private mode): show the notice */ }
+  const storageKey = `haven_dm_${kind}_dismissed`;
+  try { if (localStorage.getItem(storageKey) === '1') return; } catch { /* storage blocked (private mode): show the notice */ }
   // Already present in this container, so don't stack copies on re-render.
-  if (container.querySelector(':scope > .dm-safety-notice')) return;
+  if (container.querySelector(`:scope > .dm-safety-notice[data-kind="${kind}"]`)) return;
 
   const notice = document.createElement('div');
   notice.className = 'dm-safety-notice';
+  notice.dataset.kind = kind;
   notice.innerHTML =
-    '<span class="dm-safety-icon" aria-hidden="true">🛡️</span>' +
-    `<span class="dm-safety-text">${t('dm_runtime.safety_notice')}</span>` +
+    `<span class="dm-safety-icon" aria-hidden="true">${icon}</span>` +
+    `<span class="dm-safety-text">${t(textKey)}</span>` +
     `<button type="button" class="dm-safety-dismiss">${t('dm_runtime.safety_dismiss')}</button>`;
 
   notice.querySelector('.dm-safety-dismiss').addEventListener('click', () => {
-    try { localStorage.setItem('haven_dm_safety_dismissed', '1'); } catch { /* storage blocked (private mode): nothing is remembered, nothing else breaks */ }
+    try { localStorage.setItem(storageKey, '1'); } catch { /* storage blocked (private mode): nothing is remembered, nothing else breaks */ }
     // Clear it everywhere it might be showing (main pane + any open PiP).
-    document.querySelectorAll('.dm-safety-notice').forEach(n => n.remove());
+    document.querySelectorAll(`.dm-safety-notice[data-kind="${kind}"]`).forEach(n => n.remove());
   });
 
   container.insertBefore(notice, container.firstChild);
