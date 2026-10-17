@@ -382,7 +382,7 @@ module.exports = function register(socket, ctx) {
       }
     }
     if (key === 'default_locale') {
-      const validLocales = ['', 'en', 'fr', 'de', 'es', 'pl', 'ru', 'zh', 'pt', 'fa', 'ja', 'ko'];
+      const validLocales = ['', 'en', 'fr', 'de', 'es', 'pl', 'ru', 'uk', 'zh', 'pt', 'fa', 'ja', 'ko'];
       if (!validLocales.includes(value)) return;
     }
     if (key === 'published_themes') {
