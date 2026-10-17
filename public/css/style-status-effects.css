@@ -149,6 +149,28 @@
   color: var(--text-primary);
   white-space: nowrap;
 }
+/* The GIF button is a bordered "GIF" chip in the toolbar. As a menu row the
+   border goes on the letters only, so it reads as an icon like the others
+   rather than an outline around the whole row. */
+[data-compact-composer] .input-actions-box > .btn-gif {
+  height: auto;
+  border-color: transparent;
+  font-size: inherit;
+  letter-spacing: normal;
+}
+[data-compact-composer] .input-actions-box > .btn-gif > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 0.95rem;
+  border: 1.5px solid currentColor;
+  border-radius: 0.2rem;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+[data-compact-composer] .input-actions-box > .btn-gif:hover { border-color: transparent; }
 
 /* Voice messages (#5665) */
 .btn-voice-msg.recording { color: #e74c5f; animation: voice-rec-pulse 1s ease-in-out infinite; }

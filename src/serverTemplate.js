@@ -678,3 +678,4 @@ function applyTemplate(db, tpl, opts = {}) {
   return r;
 }
 module.exports = { FORMAT, VERSION, LIMITS, SETTINGS, checkSetting, exportTemplate, validateTemplate, summarizeTemplate, applyTemplate };
+

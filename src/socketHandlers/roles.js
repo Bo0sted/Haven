@@ -6,6 +6,7 @@ const { isString, isInt, VALID_ROLE_PERMS, ROLE_MENU_EMOJI_RE, roleMenuContent }
 const { seedDefaultRoles, createAdminRole, grantAdminRole } = require('../roleDefaults');
 const createRoleRefresh = require('./roleRefresh');
 const { reachableChannel } = require('./channelAccess');
+const picks = require('../roleMenuPicks');
 
 module.exports = function register(socket, ctx) {
   const {
@@ -122,8 +123,28 @@ module.exports = function register(socket, ctx) {
     const roles = readRoleMenu(row);
     if (!roles.length) return null;
     const held = db.prepare('SELECT role_id FROM user_roles WHERE user_id = ? AND channel_id IS NULL').all(viewerId).map(r => r.role_id);
-    return { title: row.title || '', roles, held: roles.filter(r => held.includes(r.id)).map(r => r.id) };
+    const maxPicks = picks.maxPicksOf(row);
+    return { title: row.title || '', roles, held: roles.filter(r => held.includes(r.id)).map(r => r.id), ...(maxPicks ? { maxPicks } : {}) };
   };
+
+  // Taking a role from a menu with a pick limit (#5800, src/roleMenuPicks.js):
+  // drops what the limit says goes, chips included, or returns the refusal.
+  function applyPickLimit(user, row, roleId) {
+    const maxPicks = picks.maxPicksOf(row);
+    if (!maxPicks) return null;
+    const entries = readRoleMenu(row);
+    const mine = new Set(db.prepare('SELECT role_id FROM user_roles WHERE user_id = ? AND channel_id IS NULL').all(user.id).map(r => r.role_id));
+    const plan = picks.planPick({ held: entries.filter(e => mine.has(e.id)).map(e => e.id), roleId, maxPicks });
+    if (plan.error) return plan.error;
+    for (const dropId of plan.drop) {
+      if (!setSelfRole(user.id, dropId, false, row.created_by)) continue;
+      const entry = entries.find(e => e.id === dropId);
+      if (entry) db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(row.message_id, user.id, entry.emoji);
+      notifySelfRole(user.id, row.message_id, dropId, false);
+      auditSelfRole(user, dropId, false, row.message_id);
+    }
+    return null;
+  }
   function setSelfRole(userId, roleId, held, grantedBy) {
     const has = db.prepare('SELECT 1 FROM user_roles WHERE user_id = ? AND role_id = ? AND channel_id IS NULL').get(userId, roleId);
     if (held && !has) {
@@ -152,6 +173,17 @@ module.exports = function register(socket, ctx) {
     // of one is always allowed.
     if (held && roleGrantRefusal(entry.id, row.created_by)) return;
     if (held && row.created_by === sock.user.id && !sock.user.isAdmin) return;
+    if (held) {
+      const refusal = applyPickLimit(sock.user, row, entry.id);
+      if (refusal) {
+        // The reaction just added stays only if it gives the role.
+        db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(messageId, sock.user.id, emoji);
+        const ch = db.prepare('SELECT code FROM channels WHERE id = ?').get(row.channel_id);
+        if (ch) io.to(`channel:${ch.code}`).emit('reactions-updated', { channelCode: ch.code, messageId, reactions: messageReactions(messageId) });
+        sock.emit('error-msg', refusal);
+        return;
+      }
+    }
     if (setSelfRole(sock.user.id, entry.id, held, row.created_by)) {
       notifySelfRole(sock.user.id, messageId, entry.id, held);
       auditSelfRole(sock.user, entry.id, held, messageId);
@@ -250,6 +282,11 @@ module.exports = function register(socket, ctx) {
     return row && row.top != null ? row.top : -1;
   }
 
+  // What a menu stores: its roles, and its pick limit when it has one.
+  function menuData(entries, maxPicks) {
+    const limit = picks.cleanMaxPicks(maxPicks, entries.length);
+    return { roles: entries.map(e => ({ roleId: e.roleId, emoji: e.emoji })), ...(limit ? { maxPicks: limit } : {}) };
+  }
   function roleMenuEntries(raw) {
     const emojiOk = ROLE_MENU_EMOJI_RE;
     const wanted = Array.isArray(raw) ? raw.slice(0, 20) : [];
@@ -327,7 +364,8 @@ module.exports = function register(socket, ctx) {
     try { roles = JSON.parse(row.data || '{}').roles || []; } catch { /* malformed row: start empty */ }
     cb({
       messageId: row.message_id, channelCode: row.code, title: row.title || '', content: row.content || '',
-      roles: roles.filter(r => r && isInt(r.roleId)).map(r => ({ roleId: r.roleId, emoji: String(r.emoji || '') }))
+      roles: roles.filter(r => r && isInt(r.roleId)).map(r => ({ roleId: r.roleId, emoji: String(r.emoji || '') })),
+      maxPicks: picks.maxPicksOf(row),
     });
   });
 
@@ -356,7 +394,7 @@ module.exports = function register(socket, ctx) {
     try {
       db.transaction(() => {
         db.prepare('UPDATE role_menus SET data = ? WHERE message_id = ?')
-          .run(JSON.stringify({ roles: parsed.entries.map(e => ({ roleId: e.roleId, emoji: e.emoji })) }), row.message_id);
+          .run(JSON.stringify(menuData(parsed.entries, data.maxPicks)), row.message_id);
         db.prepare("UPDATE messages SET content = ?, edited_at = datetime('now') WHERE id = ?").run(content, row.message_id);
         // A chip for an emoji that left the menu was only ever a role toggle,
         // so it goes; a new emoji gets a seed chip so there is one to click.
@@ -404,7 +442,7 @@ module.exports = function register(socket, ctx) {
       const result = db.prepare('INSERT INTO messages (channel_id, user_id, content) VALUES (?, ?, ?)').run(channel.id, socket.user.id, content);
       const messageId = result.lastInsertRowid;
       db.prepare('INSERT INTO role_menus (message_id, channel_id, created_by, title, data) VALUES (?, ?, ?, ?, ?)')
-        .run(messageId, channel.id, socket.user.id, title, JSON.stringify({ roles: entries.map(e => ({ roleId: e.roleId, emoji: e.emoji })) }));
+        .run(messageId, channel.id, socket.user.id, title, JSON.stringify(menuData(entries, data.maxPicks)));
       // Seed one reaction per emoji so the chips are there to click; the
       // poster's own click does not hand them the role (see applySelfRoleReaction
       // needing a real socket event for that).
@@ -461,6 +499,10 @@ module.exports = function register(socket, ctx) {
     // Nobody hands themselves a role from their own menu, as assign-role
     // refuses changing your own roles.
     if (held && row.created_by === socket.user.id && !socket.user.isAdmin) return cb({ error: 'You can\'t take a role from your own menu' });
+    if (held && !has) {
+      const refusal = applyPickLimit(socket.user, row, roleId);
+      if (refusal) return cb({ error: refusal });
+    }
     if (setSelfRole(socket.user.id, roleId, held, row.created_by)) auditSelfRole(socket.user, roleId, held, messageId);
     // Mirror the state onto the reaction chip so both paths agree.
     if (held) db.prepare('INSERT OR IGNORE INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(messageId, socket.user.id, entry.emoji);

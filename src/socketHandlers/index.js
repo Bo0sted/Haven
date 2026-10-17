@@ -1928,7 +1928,12 @@ function setupSocketHandlers(io, db, opts = {}) {
           if (lastActive && lastActive < cutoff) {
             const userSocket = io.sockets.sockets.get(user.socketId);
             if (!userSocket) continue;
-            userSocket.emit('voice-afk-move', { channelCode: afkConfig.afkSubCode });
+            if (afkConfig.afkSubCode === '__leave__') {
+              // Disconnect rather than move (#5801).
+              userSocket.emit('voice-afk-leave', { channelCode: code, minutes: afkConfig.timeout });
+            } else {
+              userSocket.emit('voice-afk-move', { channelCode: afkConfig.afkSubCode });
+            }
             handleVoiceLeave(userSocket, code);
             voiceLastActivity.set(userId, Date.now());
           }

@@ -519,6 +519,11 @@ _bindChannelMenu() {
       const noneOpt = document.createElement('option');
       noneOpt.value = ''; noneOpt.textContent = t('channel_functions.none_disabled');
       select.appendChild(noneOpt);
+      // Disconnecting needs no sub-channel (#5801).
+      const leaveOpt = document.createElement('option');
+      leaveOpt.value = '__leave__'; leaveOpt.textContent = t('channel_functions.afk_leave');
+      if (ch?.afk_sub_code === '__leave__') leaveOpt.selected = true;
+      select.appendChild(leaveOpt);
       for (const sub of subs) {
         const opt = document.createElement('option');
         opt.value = sub.code;

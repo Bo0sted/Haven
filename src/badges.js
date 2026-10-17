@@ -317,6 +317,10 @@ function statsFor(db, userId, now = Date.now()) {
  * The badges a member shows on their card, in the admin's order. Their own
  * card (viewerId === userId) also lists the ones they hid, marked hidden, so
  * they can show them again.
+ *
+ * Earned badges of one kind are tiers (#5800): five years on the server says
+ * one year too, so only the highest of each kind shows. Badges given by a
+ * role or by hand always show.
  */
 function badgesForProfile(db, userId, viewerId, now = Date.now()) {
   const defs = db.prepare(`SELECT b.*, r.name AS role_name FROM badges b LEFT JOIN roles r ON r.id = b.role_id
@@ -327,9 +331,15 @@ function badgesForProfile(db, userId, viewerId, now = Date.now()) {
   const given = new Set(db.prepare('SELECT badge_id FROM user_badges WHERE user_id = ?').all(userId).map(r => r.badge_id));
   const hidden = new Set(db.prepare('SELECT badge_id FROM badge_hidden WHERE user_id = ?').all(userId).map(r => r.badge_id));
   const self = viewerId === userId;
+  // The highest tier earned of each kind, worked out before anything hidden
+  // is left out: hiding the top one does not bring a lower one back.
+  const top = new Map();
+  for (const b of defs) {
+    if (EARNED_KINDS.has(b.kind) && earns(b, stats) && !(top.get(b.kind) >= b.threshold)) top.set(b.kind, b.threshold);
+  }
   const out = [];
   for (const b of defs) {
-    const has = EARNED_KINDS.has(b.kind) ? earns(b, stats)
+    const has = EARNED_KINDS.has(b.kind) ? earns(b, stats) && b.threshold === top.get(b.kind)
       : b.kind === 'role' ? (b.role_id != null && roleIds.has(b.role_id))
       : given.has(b.id);
     if (!has) continue;

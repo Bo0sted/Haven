@@ -575,6 +575,9 @@ _bindVoiceControls() {
   };
 
   // Wire up AFK auto-move
+  this.voice.onAfkLeave = (minutes) => {
+    this._showToast(t('voice.left_for_afk', { minutes }), 'info');
+  };
   this.voice.onAfkMove = (channelCode) => {
     this._showToast(t('voice.moved_to_afk'), 'info');
     this._updateVoiceButtons(false);

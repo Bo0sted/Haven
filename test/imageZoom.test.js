@@ -62,3 +62,11 @@ test('wheel steps: one notch is a modest step either way, lines count as pixels'
   // A runaway delta is capped.
   near(M._izWheelFactor(-100000, 0, false, 800), M._izWheelFactor(-200, 0, false, 800));
 });
+
+test('a sideways swipe steps through the pictures; short or steep ones do not', () => {
+  assert.equal(M._izSwipeDir(-120, 10), 1);
+  assert.equal(M._izSwipeDir(120, -20), -1);
+  assert.equal(M._izSwipeDir(-40, 0), 0);
+  assert.equal(M._izSwipeDir(-100, 90), 0);
+  assert.equal(M._izSwipeDir(0, 300), 0);
+});

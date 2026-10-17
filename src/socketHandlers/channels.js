@@ -1520,7 +1520,9 @@ module.exports = function register(socket, ctx) {
     if (!_canManageSettingsOf(channel.id)) {
       return socket.emit('error-msg', 'You don\'t have permission to change AFK settings');
     }
-    if (subCode) {
+    // '__leave__' disconnects idle people from voice instead of moving them
+    // (#5801): it needs no sub-channel, and it frees the connection.
+    if (subCode && subCode !== '__leave__') {
       if (!/^[a-f0-9]{8}$/i.test(subCode)) return;
       const sub = db.prepare('SELECT id FROM channels WHERE code = ? AND parent_channel_id = ?').get(subCode, channel.id);
       if (!sub) return socket.emit('error-msg', 'Sub-channel not found or does not belong to this channel');
@@ -1529,7 +1531,9 @@ module.exports = function register(socket, ctx) {
       db.prepare('UPDATE channels SET afk_sub_code = ?, afk_timeout_minutes = ? WHERE id = ?')
         .run(subCode || null, timeout, channel.id);
       broadcastChannelLists();
-      if (subCode && timeout > 0) {
+      if (subCode === '__leave__' && timeout > 0) {
+        socket.emit('toast', { message: `💤 Idle people leave voice after ${timeout} min`, type: 'success' });
+      } else if (subCode && timeout > 0) {
         socket.emit('toast', { message: `💤 AFK sub-channel set (${timeout}min timeout)`, type: 'success' });
       } else {
         socket.emit('toast', { message: '💤 AFK sub-channel disabled', type: 'success' });

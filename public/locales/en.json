@@ -610,6 +610,7 @@
     "joined_notification": "{{name}} joined voice",
     "left_notification": "{{name}} left voice",
     "moved_to_afk": "Moved to the AFK sub-channel due to inactivity",
+    "left_for_afk": "You left voice after {{minutes}} minutes without speaking",
     "disconnected_other_client": "Voice disconnected: joined from another client",
     "mute": "Mute",
     "unmute": "Unmute",
@@ -1874,6 +1875,7 @@
       "msg_sent": "Msg Sent",
       "master_voice": "Voice volume (everyone)",
       "master_notifications": "Notification volume (all sounds)",
+      "master_soundboard": "Soundboard volume (what you play)",
       "master_hint": "Applied on top of each person's own volume and each sound's own volume below.",
       "show_db": "Show volumes in dB",
       "volume_off": "Off",
@@ -3085,7 +3087,9 @@
         "content_label": "Message text",
         "content_hint": "Reword the message as you like. The list below is what people can pick: untick a role to take it off the menu, along with its chip.",
         "updated": "Role menu updated",
-        "gone": "That role menu is gone"
+        "gone": "That role menu is gone",
+        "max_picks_label": "How many each person can pick",
+        "max_picks_hint": "0 lets people take any number. With 1, picking another role swaps it for the one they had."
       }
     },
     "nsfw": {
@@ -3626,6 +3630,9 @@
       "group_builtin": "Built-in",
       "group_custom": "Custom",
       "preview_btn": "Preview",
+      "volume_label": "Volume for {{name}}",
+      "volume_hint": "How loud this sound plays on the soundboard, for everyone in the call.",
+      "volume_failed": "Could not save the volume",
       "builtin_locked_title": "Built-in sound (cannot be removed)",
       "rename_btn": "Rename",
       "delete_btn": "Delete",
@@ -4048,9 +4055,11 @@
     "bitrate_placeholder": "32-512 (blank=auto)",
     "self_destruct_placeholder": "1-720h (0=off)",
     "afk_sub": "AFK Sub",
-    "afk_sub_hint": "Designate a sub-channel as the AFK voice room: idle users are moved here",
+    "afk_sub_hint": "What happens to people idle in voice: moved to a sub-channel, or disconnected",
+    "afk_leave": "Disconnect from voice",
+    "afk_leave_short": "Disconnect",
     "afk_timeout": "AFK Timeout",
-    "afk_timeout_hint": "Minutes of voice inactivity before moving to AFK sub (0 = disabled)",
+    "afk_timeout_hint": "Minutes without speaking or unmuting before it happens (0 = off)",
     "read_only": "Read Only",
     "read_only_hint": "Only members with permission can send messages",
     "forum": "Forum",
@@ -4514,6 +4523,8 @@
     "unavailable_in_dm": "Threads are not available in DMs"
   },
   "role_menu": {
+    "pick_one_only": "Pick one",
+    "pick_up_to": "Pick up to {{count}}",
     "join": "Get the {{name}} role",
     "leave": "Drop the {{name}} role"
   },

@@ -1053,6 +1053,13 @@ class VoiceManager {
       if (this.onAfkMove) this.onAfkMove(data.channelCode);
     });
 
+    // AFK disconnect (#5801): left voice after a channel's idle time.
+    this.socket.on('voice-afk-leave', (data) => {
+      if (!data || data.channelCode !== this.currentChannel) return;
+      this.leave();
+      if (this.onAfkLeave) this.onAfkLeave(data.minutes);
+    });
+
     // Kicked from voice because user joined from another client/tab
     this.socket.on('voice-kicked', (data) => {
       if (!data || !data.channelCode) return;
@@ -1937,7 +1944,9 @@ class VoiceManager {
   }
 
   // Play a soundboard audio file and mix it into the VC stream so other users hear it
-  playSoundToVC(url, localVolume = 0.5) {
+  // level (0 to 1) is the sound's soundboard volume (#5804): it scales what
+  // the call hears, not only the local preview.
+  playSoundToVC(url, localVolume = 0.5, level = 1) {
     if (!this.inVoice || !this.audioCtx || !this._vcDest) return false;
     // Use fetch + decodeAudioData for reliable mixing into VC destination
     fetch(url).then(r => r.arrayBuffer()).then(buf => {
@@ -1947,7 +1956,7 @@ class VoiceManager {
       bufferSource.buffer = audioBuffer;
       // Mix into the VC destination so peers hear it
       const vcGain = this.audioCtx.createGain();
-      vcGain.gain.value = 0.7;
+      vcGain.gain.value = 0.7 * Math.max(0, Math.min(1, level));
       bufferSource.connect(vcGain);
       vcGain.connect(this._vcDest);
       // Also play locally for the user's own preview

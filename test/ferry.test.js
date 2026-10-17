@@ -226,6 +226,34 @@ test('a stream announcement bot relays its link and thumbnail next to the text',
   );
 });
 
+test('a stream bot\'s channel link on the author line or a button comes through', () => {
+  // CouchBot edits its live post into an offline notice: the embed's url is
+  // its own site, and the Twitch channel is linked only from the author line
+  // and a Watch button.
+  const offline = buildHavenContent({
+    content: '',
+    embeds: [{
+      type: 'rich',
+      title: 'This stream is now offline.',
+      url: 'https://couch.bot',
+      author: { name: 'mikaumbralfangvt', url: 'https://www.twitch.tv/mikaumbralfangvt' },
+      image: { url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_mikaumbralfangvt-1280x720.jpg' },
+    }],
+    components: [{ type: 1, components: [
+      { type: 2, style: 5, label: 'Watch VODs', url: 'https://www.twitch.tv/mikaumbralfangvt/videos' },
+      { type: 2, style: 1, label: 'Not a link', custom_id: 'x' },
+    ] }],
+  });
+  assert.ok(offline.includes('https://www.twitch.tv/mikaumbralfangvt'), offline);
+  assert.ok(offline.includes('https://www.twitch.tv/mikaumbralfangvt/videos'), offline);
+  assert.ok(offline.includes('https://couch.bot'));
+  // The same link twice comes through once.
+  const once = buildHavenContent({
+    embeds: [{ type: 'rich', title: 'Live', url: 'https://www.twitch.tv/x', author: { name: 'x', url: 'https://www.twitch.tv/x' } }],
+  });
+  assert.equal(once.split('https://www.twitch.tv/x').length - 1, 1, once);
+});
+
 test('Discord custom emotes keep their id so clients can draw them', () => {
   // Clients render <:name:id> as the emote through the server's emote cache.
   // Folding it to :name: left a bare shortcode on any server without a

@@ -718,6 +718,16 @@ function initDatabase() {
     );
   `);
 
+  // ── Migration: sound_volumes (#5804) ──
+  // How loud each soundboard sound plays, in percent, for built-in and
+  // uploaded sounds alike. No row means full volume.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sound_volumes (
+      sound_name TEXT PRIMARY KEY NOT NULL,
+      volume INTEGER NOT NULL DEFAULT 100
+    );
+  `);
+
   // ── Migration: custom_emojis table (admin-uploaded server emojis) ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS custom_emojis (

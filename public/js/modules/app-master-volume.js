@@ -17,6 +17,18 @@ _setupMasterVolume() {
     notif.addEventListener('input', () => this.notifications.setMasterVolume(notif.value / 100));
   }
 
+  // The soundboard, for what this person plays (#5804). It scales what the
+  // call hears too, so it is a "how loud am I" level, not a local one.
+  const board = document.getElementById('soundboard-master-volume');
+  if (board) {
+    let saved = 100;
+    try { saved = parseInt(localStorage.getItem('haven_soundboard_volume') || '100', 10); } catch { /* storage blocked: full volume */ }
+    board.value = String(Number.isFinite(saved) ? Math.max(0, Math.min(100, saved)) : 100);
+    board.addEventListener('input', () => {
+      try { localStorage.setItem('haven_soundboard_volume', board.value); } catch { /* storage blocked: lasts until reload */ }
+    });
+  }
+
   let showDb = false;
   try { showDb = localStorage.getItem('haven_volume_show_db') === '1'; } catch { /* storage blocked: show percent */ }
   // Notification sounds play at the slider's value squared (a gentler curve),

@@ -1,0 +1,62 @@
+name: Community server status
+
+# Checks the community server every ten minutes and keeps the result in
+# status.json on the site-status branch, which the homepage's status line
+# reads (docs/index.html). The branch holds that one file in a single
+# commit, replaced each run, so main's history stays clean and nothing that
+# builds or publishes runs on it. scripts/community-status.js does the check
+# and sends a phone alert through ntfy when the status changes (the topic is
+# the NTFY_TOPIC repository secret). Run it by hand with "send a test alert"
+# ticked to check the alerts reach the phone.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: Send a test alert
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: community-status
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Get the checker
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/community-status.js
+          sparse-checkout-cone-mode: false
+
+      - name: Get the last result
+        run: |
+          if git fetch --depth=1 origin site-status 2>/dev/null; then
+            git show FETCH_HEAD:status.json > previous.json 2>/dev/null || true
+          fi
+
+      - name: Check the community server
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          ALERT_TEST: ${{ inputs.test_alert && 'true' || 'false' }}
+        run: node scripts/community-status.js status.json "$( [ -s previous.json ] && echo previous.json )"
+
+      - name: Publish the result
+        run: |
+          mkdir publish
+          cp status.json publish/status.json
+          cd publish
+          git init -q -b site-status
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status.json
+          git commit -q -m "Community server status"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site-status

@@ -1256,9 +1256,27 @@ function buildHavenContent(msg) {
       // unfurled, so it is dropped and the readable parts are kept for context.
       link = '';
     }
+    // Stream bots also link the channel from the embed's author line (the
+    // streamer's name) or a "Watch" button under the message. CouchBot's
+    // offline notice keeps the Twitch link only there, with its own site in
+    // url, so Haven got "This stream is now offline" and couch.bot. Each extra
+    // link is held to the link policy on its own, like the main one.
+    const extra = [];
+    if (e.type === 'rich') {
+      const found = [];
+      if (e.author && typeof e.author.url === 'string') found.push(e.author.url);
+      collectComponentLinks(msg.components, found);
+      for (const url of found) {
+        if (!/^https?:\/\//i.test(url) || url === link || extra.includes(url) || extra.length >= 3) continue;
+        try {
+          if (automod.checkText(url, { surface: 'message' }).ok === false) continue;
+        } catch (err) { noteAutomodFault(err); continue; }
+        extra.push(url);
+      }
+    }
     // A bot that already typed the title or the link gets it once, not twice.
     const typed = authored.join('\n');
-    const parts = [e.title, link, e.description]
+    const parts = [e.title, link, ...extra, e.description]
       .filter(p => typeof p === 'string' && p.trim() && !typed.includes(p.trim()));
     const summary = parts.join(' ');
     if (summary) authored.push(summary.slice(0, 500));
@@ -1307,6 +1325,19 @@ function collectComponentMedia(node, into, depth = 0) {
   collectComponentMedia(node.items, into, depth + 1);
   collectComponentMedia(node.components, into, depth + 1);
   collectComponentMedia(node.accessory, into, depth + 1);
+}
+
+// The links on a message's link buttons (type 2, style 5), at any depth.
+function collectComponentLinks(node, into, depth = 0) {
+  if (!node || depth > 8) return;
+  if (Array.isArray(node)) {
+    for (const child of node) collectComponentLinks(child, into, depth + 1);
+    return;
+  }
+  if (typeof node !== 'object') return;
+  if (node.type === 2 && node.style === 5 && typeof node.url === 'string') into.push(node.url);
+  collectComponentLinks(node.components, into, depth + 1);
+  collectComponentLinks(node.accessory, into, depth + 1);
 }
 
 /**

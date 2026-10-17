@@ -80,7 +80,10 @@ module.exports = function registerMediaLibrary(deps) {
       const enabledBuiltins = BUILTIN_SOUNDS.filter(s => !disabledSet.has(s.name));
       const custom = getDb().prepare('SELECT name, filename FROM custom_sounds ORDER BY name').all();
       const customList = custom.map(s => ({ name: s.name, url: `/uploads/${s.filename}` }));
-      res.json({ sounds: [...enabledBuiltins, ...customList] });
+      // Each sound's soundboard volume (#5804), sent only where it is not 100.
+      const volumes = new Map(getDb().prepare('SELECT sound_name, volume FROM sound_volumes').all().map(r => [r.sound_name, r.volume]));
+      const withVolume = (s) => (volumes.has(s.name) && volumes.get(s.name) !== 100 ? { ...s, volume: volumes.get(s.name) } : s);
+      res.json({ sounds: [...enabledBuiltins, ...customList].map(withVolume) });
     } catch { res.json({ sounds: [...BUILTIN_SOUNDS] }); }
   });
 
@@ -104,6 +107,7 @@ module.exports = function registerMediaLibrary(deps) {
           if (err.code !== 'ENOENT') console.warn(`[sounds] Could not delete file for sound "${name}":`, err.message);
         }
         getDb().prepare('DELETE FROM custom_sounds WHERE name = ?').run(name);
+        getDb().prepare('DELETE FROM sound_volumes WHERE sound_name = ?').run(name);
       }
       broadcastLibraryUpdate(req, 'sounds');
       res.json({ ok: true });
@@ -126,9 +130,35 @@ module.exports = function registerMediaLibrary(deps) {
       const existing = getDb().prepare('SELECT id FROM custom_sounds WHERE name = ? AND name != ?').get(newName, oldName);
       if (existing) return res.status(409).json({ error: 'Name already taken' });
       getDb().prepare('UPDATE custom_sounds SET name = ? WHERE name = ?').run(newName, oldName);
+      getDb().prepare('UPDATE sound_volumes SET sound_name = ? WHERE sound_name = ?').run(newName, oldName);
       broadcastLibraryUpdate(req, 'sounds');
       res.json({ ok: true, name: newName });
     } catch { res.status(500).json({ error: 'Failed to rename sound' }); }
+  });
+
+  // How loud one sound plays on the soundboard, for everyone (#5804): the
+  // person playing it sends it at this level, so turning a loud sound down
+  // here quiets it in every call. 0 to 100 percent; 100 removes the row.
+  app.put('/api/sounds/:name/volume', (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    const user = token ? verifyToken(token) : null;
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    if (!verifyAdminFromDb(user) && !userHasPermission(user.id, 'manage_soundboard')) return res.status(403).json({ error: 'Requires admin or Manage Soundboard permission' });
+    const name = req.params.name;
+    const volume = Number(req.body && req.body.volume);
+    if (!Number.isInteger(volume) || volume < 0 || volume > 100) return res.status(400).json({ error: 'Volume must be a whole number from 0 to 100' });
+    const { getDb } = require('../database');
+    try {
+      const known = BUILTIN_SOUNDS.some(s => s.name === name) || !!getDb().prepare('SELECT 1 FROM custom_sounds WHERE name = ?').get(name);
+      if (!known) return res.status(404).json({ error: 'Sound not found' });
+      if (volume === 100) getDb().prepare('DELETE FROM sound_volumes WHERE sound_name = ?').run(name);
+      else getDb().prepare('INSERT INTO sound_volumes (sound_name, volume) VALUES (?, ?) ON CONFLICT(sound_name) DO UPDATE SET volume = excluded.volume').run(name, volume);
+      broadcastLibraryUpdate(req, 'sounds');
+      res.json({ ok: true, name, volume });
+    } catch (err) {
+      console.error('[sounds] could not save a sound volume:', err.message);
+      res.status(500).json({ error: 'Failed to save the volume' });
+    }
   });
 
   // -- User sound preferences ---------------------------------------------------

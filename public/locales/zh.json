@@ -251,7 +251,24 @@
       "cross_light": "十字光",
       "stained_glass": "彩绘玻璃",
       "divine_radiance": "神圣光辉",
-      "light_mode": "浅色模式"
+      "light_mode": "浅色模式",
+      "picker": {
+        "available_hint": "只有管理服务器的人能看到这些。打开开关可将该主题加入所有人的选择器。",
+        "card_by": "{{name}}，作者 {{author}}",
+        "no_match": "没有匹配你搜索的主题。",
+        "publish": "发布",
+        "publish_label": "向所有人发布 {{name}}",
+        "published": "已发布",
+        "published_hint": "已发布：所有人都可以选用",
+        "published_toast": "{{name}} 现已出现在所有人的主题选择器中",
+        "results": "找到主题：{{count}}",
+        "search": "搜索主题",
+        "section_available": "可发布",
+        "section_builtin": "Haven",
+        "section_community": "社区",
+        "unpublished_hint": "未发布：只有管理服务器的人能看到",
+        "unpublished_toast": "{{name}} 已从所有人的主题选择器中移除"
+      }
     },
     "actions": {
       "logout": "退出登录",
@@ -322,7 +339,11 @@
       "embed_medium": "中等",
       "embed_small": "小",
       "embed_size_hint": "嵌入尺寸（可用 设置 ▸ 链接预览 关闭）",
-      "collapse": "折叠"
+      "collapse": "折叠",
+      "embed_volume": "音量",
+      "protected_no_delete": "该消息受保护。请先取消保护。",
+      "protected_no_edit": "该消息受保护，无法编辑。请先取消保护。",
+      "silent_hint": "已静默发送：没有人收到声音、弹窗或推送"
     },
     "input_bar": {
       "emoji_btn": "表情",
@@ -340,7 +361,9 @@
       "highlight_btn_armed": "下一条消息将标记为官方",
       "highlight_btn_mode_on": "官方模式开启：此消息将以你的身份组发出。点击则本条以普通方式发送",
       "highlight_btn_mode_skip": "官方模式开启，但本条将普通发出。点击则以你的身份组发布",
-      "self_destruct_btn_armed": "自毁已开启：你的下一条消息将自行删除"
+      "self_destruct_btn_armed": "自毁已开启：你的下一条消息将自行删除",
+      "silent_btn": "静默消息：不向任何人发出声音、弹窗或推送（也可用 @silent 开启）",
+      "silent_btn_armed": "静默已开启：你的下一条消息不会通知任何人"
     },
     "profile": {
       "login_username": "你的登录用户名",
@@ -439,7 +462,10 @@
     "backup_started": "正在准备备份…",
     "backup_pick_one": "请至少选择一个要备份的部分",
     "backup_no_file": "请先选择备份 .zip 文件",
-    "backup_restore_failed": "恢复失败："
+    "backup_restore_failed": "恢复失败：",
+    "birthday_hidden": "生日已从你的资料中隐藏",
+    "birthday_shown": "生日已在你的资料中显示",
+    "birthday_updated": "生日已更新"
   },
   "automod": {
     "new_account_wait_one": "新账号 1 分钟后可以发言。",
@@ -472,7 +498,10 @@
     "burn_reveal_hint": "（查看后 {{seconds}} 秒）",
     "new_messages": "新消息",
     "self_destructing": "{{time}} 自毁",
-    "self_destruct_no_reply": "自毁消息无法回复或引用"
+    "self_destruct_no_reply": "自毁消息无法回复或引用",
+    "preview_file": "文件",
+    "preview_picture": "图片",
+    "preview_pictures": "{{count}} 张图片"
   },
   "utils": {
     "today_at": "今天 {{time}}",
@@ -546,7 +575,10 @@
     "pin": "置顶",
     "unpin": "取消置顶",
     "edit": "编辑",
-    "delete": "删除"
+    "delete": "删除",
+    "mark_nsfw": "标记为 NSFW",
+    "nsfw_hidden": "🔞 NSFW：点击显示",
+    "unmark_nsfw": "移除 NSFW 标记"
   },
   "pinned_panel": {
     "count_one": "{{count}} 条置顶消息",
@@ -612,7 +644,10 @@
       "soundboard": "音效板",
       "listen_together": "一起听",
       "settings": "语音设置"
-    }
+    },
+    "push_to_mute_held": "按住静音已生效。松开前你的麦克风保持静音。",
+    "sharing_ended": "{{who}} 已不再共享屏幕",
+    "status_push_to_mute": "已静音（按住静音）"
   },
   "calls": {
     "incoming": "来电",
@@ -858,7 +893,8 @@
     "read_only_override": "只读覆盖",
     "view_audit_log": "查看审计日志",
     "manage_display_names": "管理显示名称",
-    "use_ferry": "发送到 Discord（Ferry）"
+    "use_ferry": "发送到 Discord（Ferry）",
+    "manage_badges": "管理徽章"
   },
   "slowmode": {
     "wait": "慢速模式：请等待 {{seconds}} 秒后再发送下一条消息",
@@ -1150,7 +1186,14 @@
       "link_success": "{{provider}} 已关联",
       "link_failed": "无法关联 {{provider}}。请重试",
       "allow_popups": "请允许此网站弹出窗口以关联账号"
-    }
+    },
+    "birthday_age_one": "（{{count}} 岁）",
+    "birthday_age_other": "（{{count}} 岁）",
+    "birthday_in_days_one": "{{date}}（{{count}} 天后）",
+    "birthday_in_days_other": "{{date}}（{{count}} 天后）",
+    "birthday_today": "{{date}}（今天）",
+    "typing_many": "多人正在输入…",
+    "typing_two": "{{first}} 和 {{second}} 正在输入…"
   },
   "personas": {
     "load_failed": "加载人设失败",
@@ -1325,7 +1368,10 @@
       "brave_subscription": "Brave 拦截了推送订阅。请检查其推送消息和 Shields 设置，重启 Brave 并重新加载 Haven。技术详情：{{error}}",
       "browser_service": "浏览器推送服务返回错误。若持续出现，请尝试 Google Chrome 或 Microsoft Edge。",
       "unknown": "未知错误",
-      "key_fetch_failed": "服务器在获取推送密钥时出错"
+      "key_fetch_failed": "服务器在获取推送密钥时出错",
+      "ssl_chain": "推送通知需要浏览器可验证的证书链，而本服务器发送证书时未包含中间证书。\n\n证书本身可能有效（例如 Let's Encrypt）。服务器管理员应将 SSL_CERT_PATH 设为 fullchain.pem 而不是 cert.pem，然后重启 Haven。",
+      "ssl_expired": "推送通知不可用，因为本服务器的 SSL 证书已过期。服务器管理员需要续期证书并重启 Haven。",
+      "ssl_untrusted": "推送通知需要浏览器信任的证书，而本服务器的证书无法追溯到受信任的证书颁发机构。通常它是由私有或自建机构签发的，或证书文件中的证书顺序不对。\n\n服务器管理员应使用来自公共机构（如 Let's Encrypt，其 fullchain.pem 已是正确顺序）的证书，然后重启 Haven。"
     },
     "flash_not_installed": "Flash 游戏未安装（约 37 MB 下载）",
     "flash_download_btn": "下载 Flash 游戏",
@@ -1526,7 +1572,8 @@
       "debug": "调试",
       "backup": "备份",
       "template": "服务器模板",
-      "audit_log": "审计日志"
+      "audit_log": "审计日志",
+      "badges": "徽章"
     },
     "localization_section": {
       "title": "本地化"
@@ -1723,6 +1770,16 @@
         "hover_hint": "悬停时：仅在指向图片时播放",
         "never_hint": "从不：仅显示第一帧",
         "hint": "仅对你生效，适用于消息中发布的 GIF 和其他动态图片。不影响他人视图。"
+      },
+      "media_layout": {
+        "default": "服务器默认",
+        "default_hint": "服务器默认：{{layout}}",
+        "grid": "网格",
+        "grid_hint": "网格：拼成一个区块，每张图裁剪填满其格子",
+        "hint": "一条消息中的多张图片如何对你显示。网格会把每张图裁剪填满格子；原图则在上方“图片显示模式”的尺寸下完整显示每一张。保存在你的账号上，因此会跟随你到每台设备。",
+        "stacked": "原图、逐张",
+        "stacked_hint": "原图：每张图完整显示，上下排列",
+        "title": "同条消息多图"
       }
     },
     "embed_display": {
@@ -1734,7 +1791,9 @@
       "medium": "中",
       "medium_hint": "中：带中等媒体的均衡卡片",
       "full": "完整",
-      "full_hint": "完整：大媒体、作者和帖子统计"
+      "full_hint": "完整：大媒体、作者和帖子统计",
+      "pause_offscreen": "滚出视野时暂停视频和音频",
+      "pause_offscreen_hint": "聊天中的视频、音频或 YouTube 卡片在你滚过时会暂停。"
     },
     "banner_display": {
       "title": "横幅显示",
@@ -1890,7 +1949,10 @@
       "suppressed_safe_mode": "已在安全模式中禁用",
       "incompatible_theme": "不兼容的主题",
       "incompatible_theme_hint": "此主题声明了无效或不受支持的 Theme API 版本。",
-      "theme_fallback": "所选主题缺失或不兼容。已恢复 Haven。"
+      "theme_fallback": "所选主题缺失或不兼容。已恢复 Haven。",
+      "no_published_themes": "本服务器尚未发布任何主题文件。",
+      "not_published": "未发布",
+      "theme_not_published": "该主题未在此服务器上发布，因此已换回 Haven。"
     },
     "password_section": {
       "title": "密码",
@@ -1970,7 +2032,8 @@
       "disable_prompt": "输入密码",
       "failed": "失败",
       "regen_prompt": "输入密码",
-      "qr_alt": "二维码"
+      "qr_alt": "二维码",
+      "password_placeholder": "你的密码"
     },
     "recovery_section": {
       "title": "账号恢复",
@@ -2022,7 +2085,9 @@
       "binding_hint": "此处可绑定单独修饰键（Alt / Ctrl / Shift）和额外鼠标键（Mouse4 / Mouse5）。某些绑定需要较新的 Haven 桌面版才能在系统级别注册。",
       "ptt_hold": "按住",
       "ptt_toggle_mode": "切换",
-      "ptt_mode_title": "PTT 键行为"
+      "ptt_mode_title": "PTT 键行为",
+      "ptm": "按住静音",
+      "ptm_hint": "按住可静音麦克风。适合和游戏的按键说话绑在同一键上。"
     },
     "desktop_app_section": {
       "title": "桌面应用",
@@ -2987,7 +3052,19 @@
         "content_hint": "随意改写消息。下方列表是人们可选的内容：取消勾选身份组会将其从菜单中移除，包括其徽章。",
         "updated": "身份组菜单已更新",
         "gone": "该身份组菜单已不存在"
-      }
+      },
+      "import_write_partial": "中断前已写入 {{count}} 条消息。请再次运行导入以完成；已在 Haven 中的消息会被跳过。",
+      "import_write_progress": "正在写入消息：{{done}} / {{total}}",
+      "media_group_layout": "同条消息多图",
+      "media_group_layout_grid": "网格",
+      "media_group_layout_hint": "一条消息中的多张图片如何对所有人显示。网格将它们拼成一个区块，并把每张图裁剪填满格子。原图则在每位成员在“图片显示”中选择的尺寸下完整显示每一张，适合美术作品。成员可在“设置 → 图片显示”中为自己单独选择。",
+      "media_group_layout_stacked": "原图、逐张",
+      "tags_role_anyone": "任何人",
+      "tags_role_cleared": "现在任何人都可以使用“{{name}}”",
+      "tags_role_label": "谁可以使用“{{name}}”",
+      "tags_role_missing": "仅已删除的身份组（仅管理员）",
+      "tags_role_only": "仅 {{role}}",
+      "tags_role_set": "现在仅 {{role}} 可以使用“{{name}}”"
     },
     "nsfw": {
       "hide": "隐藏 NSFW 频道",
@@ -3216,7 +3293,12 @@
       "group_channels_granted": "已授予频道",
       "personas_title": "👥 人设",
       "add_persona": "+ 添加人设",
-      "personas_hint": "在聊天中输入 <code>::名称 你的消息</code> 以该人设发送（或在以 <code>::</code> 开头时从自动完成中选择）。你的真实账号仍会关联以便管理。"
+      "personas_hint": "在聊天中输入 <code>::名称 你的消息</code> 以该人设发送（或在以 <code>::</code> 开头时从自动完成中选择）。你的真实账号仍会关联以便管理。",
+      "birthday_hide": "隐藏我的生日",
+      "birthday_hide_year": "隐藏出生年份",
+      "birthday_hint": "生日只能设置一次，请仔细确认。",
+      "birthday_label": "生日",
+      "birthday_set_note": "你的生日已设置，无法更改。"
     },
     "border_crop": {
       "title": "编辑",
@@ -3394,7 +3476,8 @@
       "hours": "小时",
       "hours_placeholder": "小时",
       "admin_note": "管理员始终可访问所有频道，包括私密频道。",
-      "create_btn": "创建"
+      "create_btn": "创建",
+      "tag_label": "标签（可选）"
     },
     "webhook": {
       "title": "Webhook",
@@ -3698,7 +3781,11 @@
       "add_line_hint": "在 { } 内任意位置添加此行：",
       "restart_hint": "重启 Discord，然后按上述步骤操作。",
       "token_warning": "你的令牌就像密码。Haven 仅在此导入中使用它，且从不存储。",
-      "connected_as": "已连接为"
+      "connected_as": "已连接为",
+      "channel_hidden": "Ferry 看不到此频道。请在 Discord 中为它给机器人角色添加权限。",
+      "channels_hidden_one": "{{count}} 个频道因 Ferry 看不到而变灰。请在 Discord 中为它给机器人角色添加“查看频道”和“读取消息历史”权限，然后重新选择服务器。",
+      "channels_hidden_other": "{{count}} 个频道因 Ferry 看不到而变灰。请在 Discord 中为每个频道给机器人角色添加“查看频道”和“读取消息历史”权限，然后重新选择服务器。",
+      "skipped_channels_ferry": "已跳过，因为 Ferry 看不到它们：{{names}}。请在 Discord 中为这些频道给机器人角色添加“查看频道”和“读取消息历史”权限。"
     },
     "move_messages": {
       "selected": "已选择 {{n}} 条",
@@ -3717,7 +3804,23 @@
       "max_messages": "一次最多可移动 {{max}} 条消息",
       "no_channels": "没有其他可用频道",
       "moved_one": "已将 {{n}} 条消息移动到 #{{name}}",
-      "moved_many": "已将 {{n}} 条消息移动到 #{{name}}"
+      "moved_many": "已将 {{n}} 条消息移动到 #{{name}}",
+      "deselect": "取消选择",
+      "here_as_thread": "移至此处并作为话题",
+      "here_as_thread_title": "将所选消息放入此消息下的话题",
+      "open_thread_moved": "你打开的话题已被移到其他频道",
+      "pick_base": "已选 {{n}} 条：在 #{{name}} 中选择一条消息作为话题起点",
+      "pick_in_channel": "移入话题…",
+      "pick_in_channel_title": "前往 #{{name}} 并选择一条消息作为话题起点",
+      "select": "选择",
+      "thread_base_selected": "该消息已被选中。请另选一条。",
+      "thread_confirm_btn": "移动",
+      "thread_confirm_hint": "它们会保留作者、时间、回应和置顶，并按原顺序排在话题中。所选消息下的回复也会一并跟来。",
+      "thread_confirm_many": "将 {{n}} 条消息移入 {{name}} 的消息下的话题？",
+      "thread_confirm_one": "将 {{n}} 条消息移入 {{name}} 的消息下的话题？",
+      "thread_failed": "无法移动这些消息",
+      "threaded_many": "已将 {{n}} 条消息移入话题",
+      "threaded_one": "已将 {{n}} 条消息移入话题"
     },
     "hidden_channels": {
       "title": "隐藏频道",
@@ -3752,7 +3855,16 @@
         "user_unban": "解封了",
         "user_mute": "禁言了",
         "user_unmute": "解除了以下用户的禁言",
-        "user_rename": "重命名了"
+        "user_rename": "重命名了",
+        "badge_create": "创建了徽章",
+        "badge_delete": "删除了徽章",
+        "badge_grant": "授予了徽章给",
+        "badge_revoke": "收回了徽章，对象是",
+        "badge_update": "更新了徽章",
+        "message_nsfw_off": "在其中移除了一条消息的 NSFW 标记，频道",
+        "message_nsfw_on": "在其中标记了一条消息为 NSFW，频道",
+        "messages_move": "将消息移动到",
+        "messages_move_to_thread": "将消息移入话题，在"
       }
     },
     "ip_bans": {
@@ -3840,7 +3952,10 @@
       "forum_pair_hint": "论坛配对：每个新帖子在另一侧成为话题，携带其标题和两个论坛共享的标签，回复跟随它。仅配对后发布的帖子会传输。",
       "forum_mirrors": "每个帖子和回复",
       "no_matching_forum": "机器人在此服务器看不到任何论坛频道",
-      "no_matching_chat": "机器人在此服务器看不到任何文字频道"
+      "no_matching_chat": "机器人在此服务器看不到任何文字频道",
+      "hidden_confirm": "Ferry 看不到该 Discord 频道，在你在 Discord 中为它添加机器人角色之前消息不会互通。仍要配对吗？",
+      "hidden_mark": "（Ferry 看不到它）",
+      "hidden_warning": "Ferry 看不到此 Discord 频道，因此消息不会互通。请在 Discord 中为它给机器人角色添加“查看频道”和“读取消息历史”权限。"
     }
   },
   "context_menu": {
@@ -4016,7 +4131,11 @@
     "tags_update_failed": "更新标签失败",
     "confirm_clear_title": "移除全部标签？",
     "confirm_clear_body": "这将从所选 {{count}} 项中移除所有标签。此操作无法撤销。",
-    "confirm_clear_ok": "移除全部标签"
+    "confirm_clear_ok": "移除全部标签",
+    "zoom_controls": "缩放",
+    "zoom_in": "放大（+）",
+    "zoom_out": "缩小（-）",
+    "zoom_reset": "适应屏幕（0）"
   },
   "platform": {
     "welcome": {
@@ -4336,7 +4455,16 @@
     "forum_full": "全宽",
     "forum_side": "侧面板",
     "forum_full_title": "在整个聊天区域打开话题",
-    "forum_side_title": "在论坛旁的面板中打开话题"
+    "forum_side_title": "在论坛旁的面板中打开话题",
+    "jump_latest": "跳到最新回复",
+    "new_one": "{{count}} 条新内容",
+    "new_other": "{{count}} 条新内容",
+    "new_replies_one": "{{count}} 条新回复",
+    "new_replies_other": "{{count}} 条新回复",
+    "read_only_no_replies": "此频道为只读。只有获准在此发帖的成员才能回复或发起话题。",
+    "sidebar_unread": "你参与的话题有新回复",
+    "threads_new_one": "{{count}} 个话题有新回复",
+    "threads_new_other": "{{count}} 个话题有新回复"
   },
   "dm_runtime": {
     "title": "私信",
@@ -4457,7 +4585,9 @@
     "hours_ago": "{{n}} 小时前",
     "days_ago": "{{n}} 天前",
     "tags_editor_title": "论坛标签",
-    "tags_editor_hint": "每行一个标签。若需要可在前面加表情，例如“🎨 艺术”。最多 20 个。"
+    "tags_editor_hint": "每行一个标签。若需要可在前面加表情，例如“🎨 艺术”。最多 20 个。",
+    "thumb_badge": "缩略图",
+    "thumb_none": "还没有图片：你添加的第一张图片会成为话题缩略图。"
   },
   "mod_cases": {
     "warn": "警告",
@@ -4510,5 +4640,119 @@
     "unmute_member": "对我取消静音",
     "muted_member": "{{name}} 已对你静音",
     "unmuted_member": "{{name}} 已不再对你静音"
+  },
+  "admin_reauth": {
+    "code": "双重验证码（若你使用）",
+    "continue": "继续",
+    "failed": "无法开始下载",
+    "hint": "备份和恢复会再次要求输入你的密码，若你启用了双重验证还会要求验证码。",
+    "need_password": "请输入你的密码",
+    "password": "你的密码",
+    "title": "确认是你本人"
+  },
+  "badges": {
+    "admin": {
+      "delete": "删除",
+      "delete_body": "它会从所有资料上移除，获得过它的人也会失去。此操作无法撤销。",
+      "delete_title": "删除“{{name}}”？",
+      "deleted": "徽章已删除",
+      "edit": "编辑",
+      "enabled": "显示此徽章",
+      "given_by": "由 {{name}} 授予",
+      "group_earned": "成就",
+      "group_manual": "手动授予",
+      "group_role": "随身份组",
+      "hint": "资料卡片上的小图标，展示某人在这里的经历。成就类会自动出现，身份组类随身份组附带，手动类从成员的右键菜单授予。成员可以隐藏自己的徽章。",
+      "holders": "持有者（{{n}}）",
+      "load_failed": "无法加载徽章",
+      "loading": "加载中…",
+      "new": "新建徽章",
+      "no_holders": "还没有人获得此徽章。",
+      "none": "暂无徽章。",
+      "off": "关",
+      "on": "开",
+      "role_above_you": "此徽章随一个等级不低于你的身份组附带",
+      "saved": "徽章已保存",
+      "title": "徽章"
+    },
+    "editor": {
+      "after": "达到",
+      "bad_type": "仅支持 PNG、GIF、WebP 或 JPG 图片",
+      "count": "数量",
+      "description": "描述",
+      "description_placeholder": "用几句话说明它的含义",
+      "edit_title": "编辑徽章",
+      "emoji_hint": "输入或粘贴一个表情。",
+      "enabled": "显示此徽章",
+      "icon": "图标",
+      "icon_builtin": "内置",
+      "icon_emoji": "表情",
+      "icon_image": "图片",
+      "icon_in_use": "另一个徽章已使用此图标（{{name}}）。请另选一个。",
+      "icon_used": "已被 {{name}} 使用",
+      "kind": "成员如何获得",
+      "name": "名称",
+      "new_title": "新建徽章",
+      "no_roles": "没有你可使用的身份组",
+      "role": "身份组",
+      "save": "保存",
+      "too_large": "图片过大（最大 256 KB）",
+      "unit_days": "天",
+      "unit_months": "个月",
+      "unit_years": "年",
+      "upload": "上传图片",
+      "upload_failed": "上传失败",
+      "upload_hint": "PNG、GIF、WebP 或 JPG。会缩放到 64×64。"
+    },
+    "given": "徽章已授予",
+    "hidden_note": "已隐藏：只有你能看到。",
+    "hide_on_profile": "在我的资料上隐藏",
+    "how": {
+      "account_age": "加入满 {{span}} 获得",
+      "forum_likes": "论坛帖子获得 {{count}} 个赞获得",
+      "manual": "手动授予",
+      "messages": "发布 {{count}} 条消息获得",
+      "role": "随 {{role}} 身份组附带",
+      "role_missing": "随一个已不存在的身份组附带"
+    },
+    "kind": {
+      "account_age": "在服务器上的时间",
+      "forum_likes": "获得的论坛赞数",
+      "manual": "手动授予",
+      "messages": "已发消息数",
+      "role": "随身份组附带"
+    },
+    "kind_hint": {
+      "account_age": "账号达到此年限的人都会显示它。",
+      "forum_likes": "统计其他人对论坛话题和图片的点赞。",
+      "manual": "在成员的右键菜单“徽章”下授予。",
+      "messages": "统计服务器频道中的消息。私信、机器人和已删除消息不计。",
+      "role": "持有该身份组的人都会显示它，身份组消失时一并失去。"
+    },
+    "member": {
+      "intro": "勾选徽章以授予，取消勾选以收回。",
+      "none": "还没有手动授予的徽章。可在“设置 → 管理 → 徽章”中创建。",
+      "switched_off": "已关闭",
+      "title": "{{name}} 的徽章"
+    },
+    "menu": "徽章",
+    "profile_label": "徽章",
+    "save_failed": "无法保存",
+    "show_on_profile": "在我的资料上显示",
+    "span": {
+      "days": "{{n}} 天",
+      "days_one": "1 天",
+      "months": "{{n}} 个月",
+      "months_one": "1 个月",
+      "years": "{{n}} 年",
+      "years_one": "1 年"
+    },
+    "take_back": "收回",
+    "taken_back": "徽章已收回"
+  },
+  "media_grid": {
+    "label": "{{count}} 个附件",
+    "more": "还有 {{count}} 个",
+    "play_video": "播放视频"
   }
 }

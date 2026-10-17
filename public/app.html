@@ -10,7 +10,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <title>Haven</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cG9seWdvbiBwb2ludHM9IjUwLDMgOTMsMjggOTMsNzIgNTAsOTcgNyw3MiA3LDI4IiBmaWxsPSJub25lIiBzdHJva2U9IiM2YjRmZGIiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjx0ZXh0IHg9IjUwIiB5PSI2MyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iYm9sZCIgZm9udC1zaXplPSIzOCIgZmlsbD0iIzZiNGZkYiIgb3BhY2l0eT0iMC45NSI+SDwvdGV4dD48L3N2Zz4=">
-  <link rel="stylesheet" href="/css/style.css?v=4.25.17">
+  <link rel="stylesheet" href="/css/style.css?v=4.25.23">
   <script src="/js/theme-compat.js?v=4.24.18"></script>
   <script src="/js/theme-init.js?v=4.24.18"></script>
 </head>
@@ -2053,6 +2053,10 @@
           <label class="volume-row">
             <span data-i18n="settings.sounds_section.master_notifications">Notification volume (all sounds)</span>
             <input type="range" id="notif-master-volume" min="0" max="100" value="100" class="slider-sm">
+          </label>
+          <label class="volume-row">
+            <span data-i18n="settings.sounds_section.master_soundboard">Soundboard volume (what you play)</span>
+            <input type="range" id="soundboard-master-volume" min="0" max="100" value="100" class="slider-sm" data-curve="linear">
           </label>
           <small class="settings-hint" style="display:block;margin-bottom:6px" data-i18n="settings.sounds_section.master_hint">Applied on top of each person's own volume and each sound's own volume below.</small>
           <label class="toggle-row">
@@ -4628,11 +4632,11 @@
         <span class="cfn-badge cfn-off" data-i18n="channel_functions.none">None</span>
       </div>
       <div class="cfn-divider cfn-afk-divider" style="display:none"></div>
-      <div class="cfn-row cfn-afk-row" data-fn="afk-sub" style="display:none" data-i18n-title="channel_functions.afk_sub_hint" title="Designate a sub-channel as the AFK voice room: idle users are moved here">
+      <div class="cfn-row cfn-afk-row" data-fn="afk-sub" style="display:none" data-i18n-title="channel_functions.afk_sub_hint" title="What happens to people idle in voice: moved to a sub-channel, or disconnected">
         <span class="cfn-label">💤 <span data-i18n="channel_functions.afk_sub">AFK Sub</span></span>
         <span class="cfn-badge cfn-off" data-i18n="channel_functions.off">OFF</span>
       </div>
-      <div class="cfn-row cfn-afk-row" data-fn="afk-timeout" style="display:none" data-i18n-title="channel_functions.afk_timeout_hint" title="Minutes of voice inactivity before moving to AFK sub (0 = disabled)">
+      <div class="cfn-row cfn-afk-row" data-fn="afk-timeout" style="display:none" data-i18n-title="channel_functions.afk_timeout_hint" title="Minutes without speaking or unmuting before it happens (0 = off)">
         <span class="cfn-label">⏱️ <span data-i18n="channel_functions.afk_timeout">AFK Timeout</span></span>
         <span class="cfn-badge cfn-off" data-i18n="channel_functions.off">OFF</span>
       </div>
@@ -5337,14 +5341,14 @@
   <script src="/js/notifications.js?v=4.23.6"></script>
   <script src="/js/servers.js?v=4.23.9"></script>
   <script src="/js/voice-relay.js?v=4.14.2"></script>
-  <script src="/js/voice.js?v=4.24.20"></script>
+  <script src="/js/voice.js?v=4.25.22"></script>
   <script src="/js/modmode.js?v=4.21.0"></script>
   <script src="/js/e2e-group.js?v=4.21.0"></script>
   <script src="/js/e2e.js?v=4.21.0"></script>
   <!-- Shared with the server (src/automod.js requires the same file) so both
        sides reach identical verdicts on a link. Must load before app.js. -->
   <script src="/js/automod-rules.js?v=4.21.0"></script>
-  <script type="module" src="/js/app.js?v=4.25.18"></script>
+  <script type="module" src="/js/app.js?v=4.25.23"></script>
   <script src="/js/plugin-loader.js?v=4.24.18"></script>
   <script src="/js/modules/stream-debug.js?v=4.21.0"></script>
   <script src="/js/password-eye.js?v=4.21.0"></script>

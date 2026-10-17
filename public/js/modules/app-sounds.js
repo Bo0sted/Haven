@@ -604,9 +604,25 @@ _popInSoundboard(reopen = false) {
   if (reopen) this._openSoundModal('soundboard');
 },
 
+// How loud a soundboard sound plays, 0 to 1 (#5804): the level an admin set
+// for that sound in the sound manager, times this person's own Soundboard
+// volume in Settings > Sounds. The person playing it sends it at this level,
+// so a sound turned down there is quieter for the whole call.
+_soundboardLevel(url) {
+  const sound = (this.customSounds || []).find(s => s.url === url);
+  const own = Number.isFinite(sound && sound.volume) ? sound.volume / 100 : 1;
+  let mine = 1;
+  try {
+    const saved = parseInt(localStorage.getItem('haven_soundboard_volume') || '', 10);
+    if (Number.isFinite(saved)) mine = Math.max(0, Math.min(100, saved)) / 100;
+  } catch { /* private mode: no saved level, play at full */ }
+  return own * mine;
+},
+
 _playSoundFile(url) {
   try {
-    const vol = Math.max(0, Math.min(1, this.notifications.volume * this.notifications.volume));
+    const level = this._soundboardLevel(url);
+    const vol = Math.max(0, Math.min(1, this.notifications.volume * this.notifications.volume)) * level;
     // If in voice chat, route through VC so other users hear the sound too
     if (this.voice && this.voice.inVoice) {
       // Respect the per-channel soundboard toggle for the voice channel the
@@ -617,13 +633,32 @@ _playSoundFile(url) {
       if (vcCh && vcCh.soundboard_enabled === 0) {
         return this._showToast(t('media.soundboard_disabled'), 'error');
       }
-      if (this.voice.playSoundToVC(url, vol)) return;
+      if (this.voice.playSoundToVC(url, vol, level)) return;
     }
     // Fallback: play locally only
     const audio = new Audio(url);
     audio.volume = vol;
     audio.play().catch(() => { /* autoplay blocked until the next click; nothing to recover */ });
   } catch { /* audio not available */ }
+},
+
+async _saveSoundVolume(name, volume) {
+  const sound = (this.customSounds || []).find(s => s.name === name);
+  const before = sound ? sound.volume : undefined;
+  if (sound) sound.volume = volume;
+  try {
+    const res = await fetch(`/api/sounds/${encodeURIComponent(name)}/volume`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ volume }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `status ${res.status}`);
+  } catch (err) {
+    if (sound) sound.volume = before;
+    this._showToast(err.message || t('modals.sound_manager.volume_failed'), 'error');
+    this._renderSoundList(this.customSounds || []);
+  }
 },
 
 async _loadCustomSounds() {
@@ -752,6 +787,7 @@ _renderSoundList(sounds) {
       ${builtins.map(s => `
         <div class="custom-sound-item" data-name="${this._escapeHtml(s.name)}">
           <span class="custom-sound-name">${this._escapeHtml(s.name)}</span>
+          <label class="sound-volume" title="${t('modals.sound_manager.volume_hint')}">🔉<input type="range" class="sound-volume-input" min="0" max="100" step="5" value="${Number.isFinite(s.volume) ? s.volume : 100}" data-name="${this._escapeHtml(s.name)}" aria-label="${t('modals.sound_manager.volume_label', { name: s.name })}"><output>${Number.isFinite(s.volume) ? s.volume : 100}%</output></label>
           <button class="btn-xs sound-preview-btn" data-url="${this._escapeHtml(s.url)}" title="${t('modals.sound_manager.preview_btn')}">&#x25B6;</button>
           <button class="btn-xs sound-delete-btn" data-name="${this._escapeHtml(s.name)}" title="${t('modals.sound_manager.delete_btn')}">&#x1F5D1;</button>
         </div>
@@ -765,6 +801,7 @@ _renderSoundList(sounds) {
       ${custom.map(s => `
         <div class="custom-sound-item" data-name="${this._escapeHtml(s.name)}">
           <span class="custom-sound-name">${this._escapeHtml(s.name)}</span>
+          <label class="sound-volume" title="${t('modals.sound_manager.volume_hint')}">🔉<input type="range" class="sound-volume-input" min="0" max="100" step="5" value="${Number.isFinite(s.volume) ? s.volume : 100}" data-name="${this._escapeHtml(s.name)}" aria-label="${t('modals.sound_manager.volume_label', { name: s.name })}"><output>${Number.isFinite(s.volume) ? s.volume : 100}%</output></label>
           <button class="btn-xs sound-preview-btn" data-url="${this._escapeHtml(s.url)}" title="${t('modals.sound_manager.preview_btn')}">&#x25B6;</button>
           <button class="btn-xs sound-rename-btn" data-name="${this._escapeHtml(s.name)}" title="${t('modals.sound_manager.rename_btn')}">&#x270F;</button>
           <button class="btn-xs sound-delete-btn" data-name="${this._escapeHtml(s.name)}" title="${t('modals.sound_manager.delete_btn')}">&#x1F5D1;</button>
@@ -780,6 +817,14 @@ _renderSoundList(sounds) {
   // Preview buttons
   list.querySelectorAll('.sound-preview-btn').forEach(btn => {
     btn.addEventListener('click', () => this._playSoundFile(btn.dataset.url));
+  });
+
+  // Each sound's volume (#5804). Saved when the slider is let go; the list
+  // here is updated at once so a preview plays at the new level.
+  list.querySelectorAll('.sound-volume-input').forEach(input => {
+    const out = input.nextElementSibling;
+    input.addEventListener('input', () => { if (out) out.textContent = `${input.value}%`; });
+    input.addEventListener('change', () => this._saveSoundVolume(input.dataset.name, parseInt(input.value, 10)));
   });
 
   // Rename buttons

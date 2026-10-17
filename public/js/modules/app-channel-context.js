@@ -451,14 +451,16 @@ _updateChannelFunctionsPanel(ch) {
   }
   // AFK sub-channel (only for parent channels)
   const isParent = !ch.parent_channel_id && !ch.is_dm;
-  const hasSubs = isParent && (this.channels || []).some(c => c.parent_channel_id === ch.id);
+  // Any top channel: disconnecting idle people needs no sub-channel (#5801).
   document.querySelectorAll('.cfn-afk-row, .cfn-afk-divider').forEach(el => {
-    el.style.display = (isParent && hasSubs) ? '' : 'none';
+    el.style.display = isParent ? '' : 'none';
   });
-  if (isParent && hasSubs) {
+  if (isParent) {
     const afkSubCode = ch.afk_sub_code || '';
     const afkTimeout = ch.afk_timeout_minutes || 0;
-    if (afkSubCode) {
+    if (afkSubCode === '__leave__') {
+      this._setCfnBadge('afk-sub', true, t('channel_functions.afk_leave_short'));
+    } else if (afkSubCode) {
       const sub = (this.channels || []).find(c => c.code === afkSubCode);
       this._setCfnBadge('afk-sub', true, sub ? sub.name : afkSubCode.slice(0, 6));
     } else {

@@ -286,8 +286,13 @@ export default {
         <select id="rm-channel" class="settings-text-input">${chans.map(c => `<option value="${c.code}" ${c.code === this.currentChannel ? 'selected' : ''}># ${this._escapeHtml(c.name)}</option>`).join('')}</select>
         <label class="settings-label" style="margin-top:8px">${t('settings.admin.role_menu.title_label')}</label>
         <input id="rm-title" class="settings-text-input" maxlength="120" placeholder="${this._escapeHtml(t('settings.admin.role_menu.title_placeholder'))}">`;
+      // How many each person may pick (#5800): 0 means any number.
+      const limit = menu && Number.isInteger(menu.maxPicks) ? menu.maxPicks : 0;
       const body = `<p class="settings-hint">${t('settings.admin.role_menu.hint')}</p>
         ${head}
+        <label class="settings-label" style="margin-top:8px">${t('settings.admin.role_menu.max_picks_label')}</label>
+        <input id="rm-max-picks" class="settings-text-input" type="number" min="0" max="20" value="${limit}" style="max-width:6rem">
+        <small class="settings-hint">${t('settings.admin.role_menu.max_picks_hint')}</small>
         <div class="rm-roles">${roles.map((r, i) => `
           <div class="rm-row">
             <label class="toggle-row"><span><span class="role-color-dot" style="background:${this._roleFill(r, '#aaa')}"></span> ${this._escapeHtml(r.name)} <span class="muted-text">Lv.${r.level}</span></span><input type="checkbox" class="rm-role" value="${r.id}"${saved.has(r.id) ? ' checked' : ''}></label>
@@ -301,14 +306,15 @@ export default {
             .filter(row => row.querySelector('.rm-role').checked)
             .map(row => ({ roleId: parseInt(row.querySelector('.rm-role').value, 10), emoji: row.querySelector('.rm-emoji').value.trim() }));
           if (!entries.length) { this._showToast(t('settings.admin.role_menu.pick_one'), 'error'); return false; }
+          const maxPicks = Math.max(0, parseInt(ov.querySelector('#rm-max-picks').value, 10) || 0);
           if (menu) {
-            this.socket.emit('update-role-menu', { messageId: menu.messageId, roles: entries, content: ov.querySelector('#rm-content').value.trim() }, (r) => {
+            this.socket.emit('update-role-menu', { messageId: menu.messageId, roles: entries, content: ov.querySelector('#rm-content').value.trim(), maxPicks }, (r) => {
               if (r?.error) return this._showToast(r.error, 'error');
               this._showToast(t('settings.admin.role_menu.updated'), 'success');
             });
             return;
           }
-          this.socket.emit('create-role-menu', { code: ov.querySelector('#rm-channel').value, title: ov.querySelector('#rm-title').value.trim(), roles: entries }, (r) => {
+          this.socket.emit('create-role-menu', { code: ov.querySelector('#rm-channel').value, title: ov.querySelector('#rm-title').value.trim(), roles: entries, maxPicks }, (r) => {
             if (r?.error) return this._showToast(r.error, 'error');
             this._showToast(t('settings.admin.role_menu.posted'), 'success');
           });
@@ -328,7 +334,10 @@ export default {
   _renderRoleMenu(msgId, menu) {
     if (!menu || !Array.isArray(menu.roles) || !menu.roles.length) return '';
     const held = new Set((menu.held || []).map(Number));
-    return `<div class="role-menu-widget" data-msg-id="${msgId}">${menu.roles.map(r => `
+    // A menu with a pick limit says so above its buttons (#5800).
+    const limit = Number.isInteger(menu.maxPicks) && menu.maxPicks > 0 ? menu.maxPicks : 0;
+    const note = limit ? `<div class="role-menu-limit">${this._escapeHtml(limit === 1 ? t('role_menu.pick_one_only') : t('role_menu.pick_up_to', { count: limit }))}</div>` : '';
+    return `<div class="role-menu-widget" data-msg-id="${msgId}">${note}${menu.roles.map(r => `
       <button class="role-menu-btn${held.has(r.id) ? ' held' : ''}" type="button" data-msg-id="${msgId}" data-role-id="${r.id}" style="--role-c:${this._safeColor(r.color, '#aaa')};--role-fill:${this._roleFill(r, this._safeColor(r.color, '#aaa'))}" title="${this._escapeHtml(t(held.has(r.id) ? 'role_menu.leave' : 'role_menu.join', { name: r.name }))}">
         <span class="rm-emoji">${this._escapeHtml(r.emoji)}</span><span class="rm-name">${this._escapeHtml(r.name)}</span><span class="rm-state">${held.has(r.id) ? '✓' : '+'}</span>
       </button>`).join('')}</div>`;

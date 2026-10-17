@@ -1,6 +1,7 @@
 // Zoom and pan for the image lightbox. The mouse wheel and a pinch zoom
 // toward the pointer, a drag pans, a double-click or double-tap toggles
-// between fit and 2.5x, and + - 0 work from the keyboard. Every way of
+// between fit and 2.5x, + - 0 work from the keyboard, and on a touch screen
+// a sideways swipe at fit steps to the next or previous picture. Every way of
 // opening a picture (chat, threads, the DM pop-out, search, the media
 // gallery, profile avatars) shares #image-lightbox, so this one file covers
 // them all. app-media.js calls _imageZoomReset whenever the picture changes
@@ -13,6 +14,7 @@ const STEP = 1.5;          // one button or key press
 const DRAG_SLOP = 4;       // px a press may wander and still count as a click
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 30;
+const SWIPE_PX = 70;
 
 export default {
 
@@ -49,6 +51,14 @@ _izClamp(st, g) {
     tx: axis(st.tx, g.cx, g.w, g.vw),
     ty: axis(st.ty, g.cy, g.h, g.vh),
   };
+},
+
+// Pure: which way a finger swipe at fit steps through the pictures: 1 for
+// the next one, -1 for the previous one, 0 when it was too short or too
+// steep to count.
+_izSwipeDir(dx, dy) {
+  if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < 1.5 * Math.abs(dy)) return 0;
+  return dx < 0 ? 1 : -1;
 },
 
 // Pure: the zoom factor for one wheel event. Lines and pages become pixels;
@@ -113,6 +123,7 @@ _setupImageZoom() {
       iz.gesture = {
         x0: e.clientX, y0: e.clientY, tx0: iz.st.tx, ty0: iz.st.ty,
         moved: false, panning: false, onImage: e.target === img,
+        canSwipe: e.pointerType !== 'mouse' && iz.st.scale === 1 && (this._getLightboxImages?.().length || 0) > 1,
       };
     } else if (iz.pointers.size === 2) {
       const [p, q] = [...iz.pointers.values()];
@@ -160,6 +171,10 @@ _setupImageZoom() {
     if (g.panning) {
       iz.st = this._izClamp({ scale: iz.st.scale, tx: g.tx0 + dx, ty: g.ty0 + dy }, geom());
       this._izApply(false);
+    } else if (g.moved && g.canSwipe) {
+      g.swiping = true;
+      img.classList.remove('lightbox-img-animate');
+      img.style.transform = `translateX(${dx}px)`;
     }
   });
 
@@ -181,6 +196,12 @@ _setupImageZoom() {
       // The click that follows a drag or pinch is not a backdrop click.
       iz.eatClickUntil = performance.now() + 400;
       iz.lastTap = null;
+      if (g.swiping) {
+        const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+        const dir = !cancelled && this._izSwipeDir(dx, dy);
+        if (dir) this._lightboxNavigate(dir);
+        else this._izApply(true);
+      }
       return;
     }
     if (cancelled || !g.onImage) { iz.lastTap = null; return; }
